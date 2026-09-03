@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "node scripts/fetch-migration-assets.mjs && node scripts/generate-pwa-icons.mjs && vite build",
+        "build": "node scripts/generate-pwa-icons.mjs && vite build",
         "preview": "vite preview"
     },
     "dependencies": {
