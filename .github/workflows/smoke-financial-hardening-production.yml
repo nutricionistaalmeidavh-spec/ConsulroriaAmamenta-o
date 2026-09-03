@@ -1,0 +1,49 @@
+name: Smoke financial hardening production
+
+on:
+  push:
+    branches: [hardening/financial-integrity]
+    paths: ['.github/workflows/smoke-financial-hardening-production.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Cloudflare and validate production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev'
+          ok=0
+          for i in $(seq 1 36); do
+            code="$(curl -L -sS -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$code" = '200' ]; then
+              curl -fsSL "$URL/sw.js" -o /tmp/sw.js || true
+              curl -fsSL "$URL/billing-v2.js" -o /tmp/billing.js || true
+              for n in 1 2 3 4; do curl -fsSL "$URL/release-1.12.0-agenda-$n.txt" -o "/tmp/a$n.txt" || true; done
+              if grep -q "VERSION='1.12.2'" /tmp/sw.js \
+                && grep -q 'add_care_package_item_v2' /tmp/billing.js \
+                && grep -q 'consume_care_package_item_v2' /tmp/billing.js; then
+                python3 - <<'PY' && ok=1 || true
+import base64,io,zipfile
+raw=''.join(open(f'/tmp/a{i}.txt').read().strip() for i in range(1,5))
+z=zipfile.ZipFile(io.BytesIO(base64.b64decode(raw)))
+shell=z.read('core/app-shell.js').decode()
+assert 'pagamento recebido' in shell
+assert 'open-finance-patient' in shell
+assert 'Forma de pagamento: Pix' in shell
+assert 'Vencido' in shell
+print('Agenda production archive validated')
+PY
+              fi
+            fi
+            [ "$ok" = '1' ] && break
+            echo "Tentativa $i/36; aguardando Cloudflare..."
+            sleep 10
+          done
+          test "$ok" = '1'
+          echo 'Financial hardening is live on Cloudflare'
