@@ -1,0 +1,75 @@
+name: Validate improvements v2
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - 'public/release-1.12.0-agenda-*.txt'
+      - 'public/improvements-v2.css'
+      - 'src/bootstrap.js'
+      - 'package.json'
+      - '.github/workflows/validate-improvements-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout improvements branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct agenda patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
+          unzip -t /tmp/agenda.zip
+          rm -rf /tmp/agenda
+          mkdir -p /tmp/agenda
+          unzip -q /tmp/agenda.zip -d /tmp/agenda
+          test -s /tmp/agenda/core/app-shell.js
+          test -s /tmp/agenda/core/lib/app-data.js
+
+      - name: Check agenda uses scheduled encounter flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -q "start_clinical_encounter_from_appointment" /tmp/agenda
+
+      - name: Check payment can be reversed
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -q "set_financial_payment_state" /tmp/agenda
+          grep -R -q "Desfazer pagamento" /tmp/agenda
+
+      - name: Check follow-up consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -q "create_or_supersede_followup" /tmp/agenda
+
+      - name: Check dashboard counts finalized encounters
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -q "clinical_encounters" /tmp/agenda
+          grep -R -q "finalized" /tmp/agenda
+
+      - name: Check mobile stylesheet is loaded
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "improvements-v2.css" src/bootstrap.js
+          grep -q "overflow-x: hidden" public/improvements-v2.css
+          grep -q "\[data-date-strip-live\]" public/improvements-v2.css
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build application
+        run: npm run build
