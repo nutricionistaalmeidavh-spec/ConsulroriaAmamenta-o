@@ -468,15 +468,19 @@ function renderAgendaCard(appointment, { compact = false } = {}) {
   return `<article class="agenda-card" data-appointment-id="${escapeHTML(appointment.id)}" data-agenda-date="${escapeHTML(clinicDayKey(appointment.starts_at))}"><time>${escapeHTML(timeLabel(appointment.starts_at))}</time><div class="agenda-main"><strong>${escapeHTML(appointmentPatientLabel(appointment))}</strong><span>${escapeHTML(`${appointment.appointment_type || 'Atendimento'} · ${appointment.format || ''}`)}</span></div><span class="pill ${appointmentStatusClass(appointment.status)}">${escapeHTML(appointment.status || 'Agendado')}</span><div class="agenda-actions">${actions.join('')}</div></article>`;
 }
 function renderHomeHeader(now = new Date()) {
-  const dateText = new Intl.DateTimeFormat('pt-BR', { timeZone: CLINIC_TIME_ZONE, weekday: 'long', day: '2-digit', month: 'long' }).format(now).toUpperCase();
-  setText('[data-home-date]', dateText);
+  const dateText = new Intl.DateTimeFormat('pt-BR', { timeZone: CLINIC_TIME_ZONE, weekday: 'long', day: '2-digit', month: 'long' }).format(now);
   const hour = Number(clinicParts(now)?.hour || 12);
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
-  setText('[data-home-greeting]', `${greeting}, Débora`);
+  setText('[data-home-date]', `${greeting}, Débora ♥`);
+  const greetingEl = document.querySelector('[data-home-greeting]');
+  if (greetingEl) {
+    greetingEl.innerHTML = 'Que bom <em>te ver por aqui!</em>';
+    greetingEl.setAttribute('aria-label', 'Que bom te ver por aqui!');
+  }
   const todayKey = clinicDayKey(now);
   const todayCount = state.appointments.filter((a) => a.status !== 'Cancelado' && clinicDayKey(a.starts_at) === todayKey).length;
   const pendingCount = state.followups.filter((f) => f.status === 'Pendente').length;
-  setText('[data-home-summary]', `${todayCount} ${todayCount === 1 ? 'atendimento' : 'atendimentos'} hoje · ${pendingCount} ${pendingCount === 1 ? 'acompanhamento pendente' : 'acompanhamentos pendentes'}`);
+  setText('[data-home-summary]', `Aqui está um resumo do seu dia · ${dateText}`);
   const monthCount = state.encounters.filter((encounter) => String(encounter.status || '').toLocaleLowerCase('pt-BR') === 'finalized' && sameMonth(encounter.occurred_at || encounter.created_at, now)).length;
   setText('[data-kpi-month]', String(monthCount));
   const monthName = new Intl.DateTimeFormat('pt-BR', { timeZone: CLINIC_TIME_ZONE, month: 'long' }).format(now);
