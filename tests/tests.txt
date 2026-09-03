@@ -1,0 +1,192 @@
+# Tests
+
+## Test 1 - Entrar na conta demo e validar a ficha sem sobreposição [sanity]
+Viewport: desktop
+Covers: login da conta demo fictícia, bootstrap isolado por owner_id, paciente e bebê demo, histórico de peso com altura dinâmica, cabeçalho responsivo e painel OMS
+Description: Verifica que a conta demonstrativa possui dados próprios e que a ficha acomoda todas as pesagens sem misturar textos ou títulos.
+
+Steps:
+1. Entre com nutricionistaalmeidavh+demo@gmail.com e a senha da conta demo
+2. Abra Pacientes > Mariana Demo / Lívia Demo
+3. Confira o cabeçalho, as três pesagens, "Variação de peso" e "CRESCIMENTO · OMS"
+
+Expected: A conta entra normalmente; somente o cabeçalho desktop aparece; Lívia Demo está como Feminino; e histórico, variações e curvas aparecem em blocos separados, sem sobreposição.
+
+## Test 2 - Salvar sexo e calcular variação entre pesagens
+Viewport: mobile
+Covers: cadastro/edição do sexo do bebê, persistência, curva OMS e perda/ganho percentual entre acompanhamentos
+Description: Verifica persistência do sexo e cálculo do histórico de peso.
+
+Steps:
+1. Abra uma paciente com bebê, edite o cadastro e selecione o sexo
+2. Salve, reabra a ficha e registre uma nova pesagem; repita o salvamento com os mesmos dados
+3. Reabra o histórico, localize a variação e o painel OMS com a base local versionada
+
+Expected: O sexo permanece salvo; o salvamento repetido não cria outra pesagem; a curva OMS local aparece; e o histórico informa perda ou ganho em percentual e gramas.
+
+## Test 3 - Manter a Biblioteca temporariamente desativada
+Viewport: mobile
+Covers: remoção da Biblioteca da navegação, bloqueio da rota e preservação reversível do módulo
+Description: Verifica que o módulo não pode ser acessado pela interface enquanto permanece desativado.
+
+Steps:
+1. Entre na conta profissional e abra o menu principal
+2. Confirme que Biblioteca não aparece na navegação
+3. Acesse diretamente #/library
+
+Expected: A entrada Biblioteca não é exibida; a rota direta volta ao início e informa que o módulo está temporariamente desativado.
+
+## Test 4 - Liberar arquivo para uma mãe e abrir no portal
+Viewport: mobile
+Covers: compartilhamento individual, Área das Mães, attachment_path e autorização por mãe
+Description: Verifica que um material pode ser liberado e aberto somente pela mãe autorizada.
+
+Setup:
+1. Tenha uma mãe com acesso ao portal e um material disponível na Biblioteca
+
+Steps:
+1. Na Biblioteca, libere o material para a mãe específica
+2. Entre na Área das Mães e abra "Materiais"
+3. Abra o material compartilhado
+
+Expected: O material aparece para a mãe autorizada e o arquivo abre pelo Storage.
+
+## Test 5 - Explorar, filtrar e gerenciar templates no celular
+Viewport: mobile
+Covers: acesso unificado Templates, 48 modelos em 8 temas, filtros recolhíveis, prévia ampliada, PDF local, instalação no Supabase e upload manual
+Description: Verifica a experiência mobile unificada sem remover o catálogo organizado por temas nem a gestão de templates salvos.
+
+Steps:
+1. Abra Mais > Templates
+2. Expanda "Busca e filtros", selecione o tema "Clínico", pesquise "Avaliação Nutricional" e recolha os filtros
+3. Abra a prévia, adicione o modelo ao app e use "Meus templates" para conferir o modelo salvo e o upload manual
+
+Expected: Templates aparece diretamente em Mais; a tela informa 48 templates e 8 temas; os filtros podem ser expandidos e recolhidos; os cards usam uma coluna com prévia maior; e o modelo aparece em Meus templates.
+
+## Test 6 - Criar atendimento e prontuário juntos no SQL
+Viewport: mobile
+Covers: RPC transacional de início, appointment_id, encounter_id, passo Prontuário, autosave SQL e retomada do mesmo registro
+Description: Verifica que o atendimento cria a identidade clínica persistida antes da edição do prontuário e continua usando os mesmos IDs.
+
+Steps:
+1. Entre na conta demo, abra Mariana Demo / Lívia Demo e inicie um novo atendimento
+2. Confirme paciente e bebê e avance do primeiro passo
+3. Preencha a Queixa principal, avance para Prontuário e digite "Registro clínico SQL de teste"
+4. Feche o prontuário, volte à ficha e abra o card do mesmo atendimento
+
+Expected: O atendimento avança somente depois de criar appointment_id e encounter_id; o cabeçalho mostra Mariana Demo e Lívia Demo; o texto reaparece no mesmo prontuário após reabrir; o texto finalizado pode ser editado com revisão auditada; e não existe aviso de rascunho local.
+
+## Test 7 - Abrir prontuário pelo card exato da ficha
+Viewport: mobile
+Covers: lista de prontuários por mother_id/baby_id, abertura por encounter_id, ações rápidas e estado vazio
+Description: Verifica que a ficha não tenta adivinhar o prontuário mais recente e que cada registro possui destino próprio.
+
+Steps:
+1. Abra uma paciente com pelo menos um atendimento e confira o card "Prontuários da paciente" ou "Prontuários do bebê selecionado"
+2. Toque em um registro específico e confira paciente, bebê(s), consulta e prefixo do identificador no cabeçalho
+3. Feche e abra outro registro da lista; depois use Registrar peso
+
+Expected: Cada botão abre exatamente seu encounter_id e nunca outro registro; o cabeçalho acompanha o registro escolhido; e Registrar peso abre o formulário de medida sem alterar o prontuário selecionado.
+
+## Test 8 - Isolar identidade entre pacientes e suportar gêmeos
+Viewport: desktop
+Covers: mother_id persistido, múltiplos baby_ids, bloqueio de identidade após início, proteção contra contexto cruzado e navegação entre rotas
+Description: Verifica que paciente e bebê(s) não são herdados de telas anteriores e que um atendimento conjunto mantém os vínculos corretos.
+
+Steps:
+1. Abra uma paciente e inicie Novo atendimento; selecione explicitamente o(s) bebê(s) e avance do primeiro passo
+2. Confirme que paciente/bebê ficam bloqueados após o início e abra Prontuário
+3. Navegue para outra paciente e abra um prontuário existente dela
+4. Em uma paciente com dois bebês, inicie atendimento conjunto e abra o prontuário
+
+Expected: O primeiro atendimento mantém somente sua mãe e bebê(s); a segunda paciente nunca recebe dados da primeira; o atendimento conjunto mostra os dois bebês vinculados ao mesmo encounter_id; e Novo atendimento aberto fora da ficha começa sem paciente ou bebê selecionado.
+
+## Test 9 - Usar curva única e pacote de sessões
+Viewport: desktop
+Covers: peso ao nascer no histórico, card único de curvas com seletor, valor responsivo, pacote total e saldo de sessões
+Description: Verifica que crescimento e cobrança de pacote usam os dados corretos e mantêm saldo entre atendimentos.
+
+Steps:
+1. Abra uma paciente com peso ao nascer e confira Histórico de peso
+2. No único card de curvas, alterne entre Peso por idade e Comprimento por idade
+3. Crie Novo atendimento, escolha Novo pacote, informe valor total e quantidade de sessões; inicie o atendimento e depois abra outro atendimento da mesma paciente
+
+Expected: Peso ao nascer aparece como primeiro registro e ponto da curva; existe somente um card de curvas com seletor; o campo Valor ocupa a largura adequada; o seletor permanece aberto e mantém Avulso ou Novo pacote após o clique; o novo atendimento mostra a quantidade correta de sessões restantes; e um atendimento Avulso não reduz o saldo do pacote ativo.
+
+## Test 10 - Proteger exclusão de atendimento e ocultar exclusão de paciente
+Viewport: desktop
+Covers: ausência da exclusão de paciente na interface, exclusão de atendimento/prontuário, confirmação EXCLUIR, foco acessível e persistência no Supabase
+Description: Verifica que a ficha não oferece exclusão de paciente e que a exclusão de atendimento permanece protegida.
+
+Setup:
+1. Cadastre um atendimento de teste para uma paciente de teste
+
+Steps:
+1. Abra a ficha da paciente e confirme que não existe ação Excluir paciente
+2. Abra o prontuário do atendimento de teste, escolha Excluir atendimento e tente concluir sem digitar EXCLUIR
+3. Digite EXCLUIR, confirme a exclusão e atualize a página
+
+Expected: A ficha não mostra exclusão de paciente; o botão destrutivo do atendimento só é liberado com EXCLUIR; a confirmação remove somente o atendimento selecionado; e ele não reaparece após atualizar.
+
+## Test 11 - Filtrar Agenda e navegar entre semanas
+Viewport: desktop
+Covers: filtro por data com uma única fonte state.appointments, appointment_id por card, navegação semanal e pesquisa global
+Description: Verifica que a Agenda usa os próprios registros carregados do Supabase, sem uma segunda associação posicional de cards.
+
+Steps:
+1. Abra Agenda, selecione um dia e avance para a próxima semana
+2. Volte para um dia que possua agendamento e confira os cartões
+3. Use o botão Pesquisar no cabeçalho e digite o nome de uma mãe ou bebê
+
+Expected: A Agenda mostra somente appointments da data escolhida; cada card mantém seu appointment_id; a semana muda sem misturar cartões; e Pesquisar abre Pacientes com o campo de busca focado.
+
+## Test 12 - Contar somente atendimentos realizados no dashboard
+Viewport: desktop
+Covers: KPI mensal baseado em appointments.status Realizado, exclusão de agendados e rascunhos da contagem
+Description: Verifica que o indicador mensal representa atendimentos concluídos, não todos os registros do mês.
+
+Steps:
+1. Tenha no mês um atendimento Realizado, um Agendado e um Em atendimento
+2. Abra o dashboard
+3. Confira o número e a descrição de Atendimentos no mês
+
+Expected: O KPI conta apenas o registro com status Realizado e informa que se trata de atendimento realizado no mês.
+
+## Test 13 - Reutilizar o agendamento ao iniciar e excluir somente agendamento pendente
+Viewport: mobile
+Covers: appointment_id único do agendamento ao prontuário, status Agendado → Em atendimento → Realizado, exclusão segura de agendamento sem encounter
+Description: Verifica que iniciar pela Agenda não cria um segundo appointment e que somente agendamentos ainda sem prontuário podem ser removidos.
+
+Setup:
+1. Crie um agendamento futuro de teste para uma paciente de teste
+
+Steps:
+1. Na Agenda, toque em Iniciar no agendamento e avance da etapa de Identificação
+2. Conclua o atendimento e volte à Agenda; crie um segundo agendamento futuro de teste
+3. No segundo agendamento, toque em Excluir, tente confirmar sem EXCLUIR e depois confirme digitando EXCLUIR
+
+Expected: O primeiro registro mantém o mesmo appointment_id ao criar o encounter, passa a Em atendimento e somente na finalização vira Realizado; o segundo agendamento é removido sem criar/excluir prontuário; e a exclusão fica bloqueada até a confirmação exata.
+
+## Test 14 - Manter o PWA carregando após a troca de ícone
+Viewport: mobile
+Covers: manifest PWA, ícones 192/512, Apple Touch Icon e atualização do cache do service worker
+Description: Verifica que a atualização visual do ícone não interrompe o carregamento e que os novos metadados PWA são entregues junto do app.
+
+Steps:
+1. Abra o aplicativo em viewport mobile
+2. Atualize a página para receber a nova versão do service worker
+3. Aguarde o login carregar novamente
+
+Expected: O aplicativo continua carregando normalmente após a atualização, mantém o título Débora Lactação e não exibe erro de recurso PWA ausente.
+
+## Test 14 - Manter o PWA carregando após a troca de ícone
+Viewport: mobile
+Covers: manifest PWA, ícones 192/512, Apple Touch Icon e atualização do cache do service worker
+Description: Verifica que a atualização visual do ícone não interrompe o carregamento e que os novos metadados PWA são entregues junto do app.
+
+Steps:
+1. Abra o aplicativo em viewport mobile
+2. Atualize a página para receber a nova versão do service worker
+3. Aguarde o login carregar novamente
+
+Expected: O aplicativo continua carregando normalmente após a atualização, mantém o título Débora Lactação e não exibe erro de recurso PWA ausente.
