@@ -564,30 +564,37 @@ function renderFollowups() {
 function renderFinance() {
   const root = document.querySelector('[data-finance-live]');
   const now = new Date();
-  const pending = state.financial.filter((f) => f.status === 'Pendente');
-  const currentMonth = state.financial.filter((f) => sameMonth(f.created_at || f.due_at || f.paid_at, now) && f.status !== 'Cancelado');
-  const paidThisMonth = state.financial.filter((f) => f.status === 'Pago' && sameMonth(f.paid_at || f.updated_at || f.created_at, now));
+  const todayKey = clinicDayKey(now);
+  const visibleFinancial = state.financial.filter((f) => f.status !== 'Cancelado');
+  const pending = visibleFinancial.filter((f) => f.status === 'Pendente');
+  const paidThisMonth = visibleFinancial.filter((f) => f.status === 'Pago' && sameMonth(f.paid_at || f.updated_at || f.created_at, now));
   const pendingTotal = pending.reduce((sum, f) => sum + Number(f.amount_cents || 0), 0);
   const receivedTotal = paidThisMonth.reduce((sum, f) => sum + Number(f.amount_cents || 0), 0);
-  const ticket = currentMonth.length ? currentMonth.reduce((sum, f) => sum + Number(f.amount_cents || 0), 0) / currentMonth.length : 0;
+  const ticket = paidThisMonth.length ? receivedTotal / paidThisMonth.length : 0;
   setText('[data-kpi-receivable]', currency(pendingTotal));
   setText('[data-finance-received]', currency(receivedTotal));
-  setText('[data-finance-received-meta]', `${paidThisMonth.length} ${paidThisMonth.length === 1 ? 'pagamento' : 'pagamentos'}`);
+  setText('[data-finance-received-meta]', `${paidThisMonth.length} ${paidThisMonth.length === 1 ? 'pagamento recebido' : 'pagamentos recebidos'} no mês`);
   setText('[data-finance-receivable]', currency(pendingTotal));
   setText('[data-finance-receivable-meta]', `${pending.length} ${pending.length === 1 ? 'pendência' : 'pendências'}`);
   setText('[data-finance-ticket]', currency(ticket));
-  setText('[data-finance-ticket-meta]', currentMonth.length ? `${currentMonth.length} ${currentMonth.length === 1 ? 'lançamento' : 'lançamentos'} no mês` : 'sem lançamentos no mês');
+  setText('[data-finance-ticket-meta]', paidThisMonth.length ? `${paidThisMonth.length} ${paidThisMonth.length === 1 ? 'pagamento' : 'pagamentos'} no cálculo` : 'sem pagamentos no mês');
   if (!root) return;
-  root.innerHTML = state.financial.length ? state.financial.map((f) => {
+  root.innerHTML = visibleFinancial.length ? visibleFinancial.map((f) => {
     const p = patientByMotherId(f.mother_id);
+    const dueKey = f.due_at ? String(f.due_at).slice(0, 10) : '';
+    const overdue = f.status === 'Pendente' && dueKey && dueKey < todayKey;
+    const statusLabel = overdue ? 'Vencido' : f.status;
+    const patientAction = f.mother_id ? `<button data-action="open-finance-patient" data-mother-id="${f.mother_id}">Paciente</button>` : '';
     const actions = f.status === 'Pendente'
-      ? `<button data-action="finance-whatsapp" data-finance-id="${f.id}">Cobrar</button><button data-action="mark-paid" data-finance-id="${f.id}">Marcar pago</button>`
+      ? `${patientAction}<button data-action="finance-whatsapp" data-finance-id="${f.id}">Cobrar</button><button data-action="mark-paid" data-finance-id="${f.id}">Marcar pago</button>`
       : f.status === 'Pago'
-        ? `<button data-action="undo-paid" data-finance-id="${f.id}">Desfazer pagamento</button>`
-        : '';
-    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span></div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(f.status)}</span><div class="agenda-actions">${actions}</div></article>`;
-  }).join('') : '<div class="empty-live">Nenhum lançamento financeiro.</div>';
+        ? `${patientAction}<button data-action="undo-paid" data-finance-id="${f.id}">Desfazer pagamento</button>`
+        : patientAction;
+    const due = f.due_at ? `<small>${overdue ? 'Venceu' : 'Vencimento'}: ${escapeHTML(dateLabel(f.due_at))}</small>` : '';
+    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span>${due}</div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(statusLabel)}</span><div class="agenda-actions">${actions}</div></article>`;
+  }).join('') : '<div class="empty-live">Nenhum lançamento financeiro ativo.</div>';
 }
+
 async function refreshData() {
   const [patients, appointments, encounters, followups, financial] = await Promise.all([
     appData.listPatients(), appData.listAppointments(), appData.listFinalizedEncounters(), appData.listFollowups(), appData.listFinancialEntries()
@@ -1193,7 +1200,20 @@ document.addEventListener('click', async (event) => {
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
     else if (action === 'followup-whatsapp') { const f = state.followups.find((x) => x.id === actionEl.dataset.followupId); await openWhatsApp(patientByMotherId(f?.mother_id), f?.notes || 'Olá! Como vocês estão hoje?'); }
     else if (action === 'new-finance') await createFinancialEntry();
-    else if (action === 'mark-paid') { await appData.markFinancialPaid(actionEl.dataset.financeId, 'Pix'); await refreshData(); toast('Pagamento confirmado.', 'success'); }
+    else if (action === 'mark-paid') {
+      const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
+      if (!finance) throw new Error('Lançamento financeiro não encontrado.');
+      const allowed = ['Pix', 'Dinheiro', 'Cartão', 'Transferência', 'Outro'];
+      const suggested = allowed.includes(finance.payment_method) ? finance.payment_method : 'Pix';
+      const entered = window.prompt('Forma de pagamento: Pix, Dinheiro, Cartão, Transferência ou Outro', suggested);
+      if (entered == null) return;
+      const method = allowed.find((item) => item.toLocaleLowerCase('pt-BR') === String(entered).trim().toLocaleLowerCase('pt-BR'));
+      if (!method) throw new Error('Forma de pagamento inválida. Use Pix, Dinheiro, Cartão, Transferência ou Outro.');
+      if (!window.confirm(`Confirmar o recebimento de ${currency(finance.amount_cents)} via ${method}?`)) return;
+      await appData.markFinancialPaid(finance.id, method);
+      await refreshData();
+      toast('Pagamento confirmado.', 'success');
+    }
     else if (action === 'undo-paid') {
       const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
       if (!finance) throw new Error('Lançamento financeiro não encontrado.');
@@ -1202,6 +1222,7 @@ document.addEventListener('click', async (event) => {
       await refreshData();
       toast('Pagamento desfeito. O lançamento voltou para Pendente.', 'success');
     }
+    else if (action === 'open-finance-patient') { const id = actionEl.dataset.motherId; if (id) navigate('patient', id); }
     else if (action === 'finance-whatsapp') { const f = state.financial.find((x) => x.id === actionEl.dataset.financeId); await openWhatsApp(patientByMotherId(f?.mother_id), `Olá! Passando para lembrar do pagamento de ${currency(f?.amount_cents)} referente a ${f?.description || 'atendimento'}.`); }
     else if (action === 'print-plan') await printPlan();
     else if (action === 'share-whatsapp') await openWhatsApp(selectedWizardPatient(), currentPlanText());

@@ -18,6 +18,7 @@ function bvReadDraft(){try{return JSON.parse(sessionStorage.getItem(BV_DRAFT)||'
 function bvWriteDraft(v){try{sessionStorage.setItem(BV_DRAFT,JSON.stringify(v))}catch{}}
 function bvClearDraft(){try{sessionStorage.removeItem(BV_DRAFT);sessionStorage.removeItem('debora-billing-draft-v4')}catch{}}
 function bvCents(v){const n=Number(String(v??'').replace(',','.'));return Number.isFinite(n)?Math.max(0,Math.round(n*100)):0}
+function bvUuid(){if(globalThis.crypto?.randomUUID)return globalThis.crypto.randomUUID();return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&3|8);return v.toString(16)})}
 function bvAppointmentScreen(){return document.querySelector('[data-screen="appointment"]')}
 function bvMode(){return document.querySelector('[data-bv-mode]')?.value||'individual'}
 function bvService(){return document.querySelector('[data-bv-service]')?.value?.trim()||bvAppointmentType()}
@@ -238,16 +239,26 @@ function bvOpenPlanDialog(packageId){
 }
 async function bvSubmitPlanItem(form){
   const wrap=form.closest('[data-bv-plan-dialog]'),packageId=wrap?.dataset.packageId;if(!packageId)return;
+  if(form.dataset.bvBusy==='1')return;
   const label=form.querySelector('[data-bv-item-label]')?.value?.trim(),qty=Math.max(1,Math.floor(Number(form.querySelector('[data-bv-item-qty]')?.value||1))),pricing=form.querySelector('[data-bv-item-pricing]')?.value||'included',amount=pricing==='additional'?bvCents(form.querySelector('[data-bv-item-amount]')?.value||0):0,notes=form.querySelector('[data-bv-item-notes]')?.value?.trim()||'';
   if(!label)throw new Error('Informe o serviço.');
   if(pricing==='additional'&&amount<=0)throw new Error('Informe o valor adicional.');
-  await bvRpc('add_care_package_item',{p_package_id:packageId,p_label:label,p_quantity:qty,p_category:'service',p_pricing_mode:pricing,p_amount_cents:amount,p_notes:notes});
-  bvClosePlanDialog();await bvMountPatientPlan(true);bvToast('Serviço adicionado ao plano.','success');
+  const requestKey=form.dataset.bvRequestKey||(form.dataset.bvRequestKey=bvUuid()),submit=form.querySelector('[type="submit"]');
+  form.dataset.bvBusy='1';if(submit)submit.disabled=true;
+  try{
+    await bvRpc('add_care_package_item_v2',{p_package_id:packageId,p_label:label,p_quantity:qty,p_category:'service',p_pricing_mode:pricing,p_amount_cents:amount,p_notes:notes,p_request_key:requestKey});
+    bvClosePlanDialog();await bvMountPatientPlan(true);bvToast('Serviço adicionado ao plano.','success');
+  }catch(error){form.dataset.bvBusy='';if(submit)submit.disabled=false;throw error}
 }
-async function bvUsePlanItem(itemId){
+async function bvUsePlanItem(itemId,button){
+  if(button?.disabled)return;
   if(!window.confirm('Registrar uma utilização deste serviço no plano?'))return;
-  await bvRpc('consume_care_package_item',{p_item_id:itemId,p_appointment_id:null,p_encounter_id:null,p_notes:''});
-  await bvMountPatientPlan(true);bvToast('Uso registrado no plano.','success');
+  const requestKey=button?.dataset.bvRequestKey||(button?button.dataset.bvRequestKey=bvUuid():bvUuid());
+  if(button)button.disabled=true;
+  try{
+    await bvRpc('consume_care_package_item_v2',{p_item_id:itemId,p_appointment_id:null,p_encounter_id:null,p_notes:'',p_request_key:requestKey});
+    await bvMountPatientPlan(true);bvToast('Uso registrado no plano.','success');
+  }catch(error){if(button)button.disabled=false;throw error}
 }
 function bvSchedule(){clearTimeout(bvTimer);bvTimer=setTimeout(()=>{bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}
 try{sessionStorage.removeItem('debora-billing-draft-v4')}catch{}
@@ -256,6 +267,6 @@ new MutationObserver(bvSchedule).observe(document.documentElement,{subtree:true,
 window.addEventListener('hashchange',bvSchedule);
 window.addEventListener('focus',bvSchedule);
 document.addEventListener('change',e=>{if(e.target.matches('[data-appointment-patient]'))setTimeout(()=>bvMount(true).catch(()=>{}),0)});
-document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),close=e.target.closest('[data-bv-close-dialog]');if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
+document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),close=e.target.closest('[data-bv-close-dialog]');if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem,use).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
 document.addEventListener('submit',e=>{if(e.target.matches('[data-bv-plan-form]')){e.preventDefault();bvSubmitPlanItem(e.target).catch(err=>bvToast(err.message||String(err),'error'))}});
 bvSchedule();
