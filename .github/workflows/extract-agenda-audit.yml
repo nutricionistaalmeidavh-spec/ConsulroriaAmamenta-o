@@ -1,4 +1,4 @@
-name: Extract agenda audit source
+name: Pack agenda improvements source
 
 on:
   push:
@@ -11,27 +11,66 @@ permissions:
   contents: write
 
 jobs:
-  extract:
+  pack:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Reconstruct stable agenda patch
         shell: bash
         run: |
           set -euo pipefail
-          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
-          unzip -t /tmp/agenda.zip
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | tr -d '\r\n' | base64 --decode > /tmp/base.zip
+          unzip -t /tmp/base.zip
           rm -rf /tmp/agenda
-          mkdir -p /tmp/agenda .audit-source
-          unzip -q /tmp/agenda.zip -d /tmp/agenda
-          cp /tmp/agenda/core/app-shell.js .audit-source/app-shell.js
-          cp /tmp/agenda/core/lib/app-data.js .audit-source/app-data.js
-      - name: Commit extracted audit source
+          mkdir -p /tmp/agenda
+          unzip -q /tmp/base.zip -d /tmp/agenda
+
+      - name: Apply versioned source
         shell: bash
         run: |
           set -euo pipefail
-          git add .audit-source
+          cp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
+          cp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
+
+      - name: Pack and split
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/agenda
+          zip -qr /tmp/new.zip .
+          cd "$GITHUB_WORKSPACE"
+          base64 -w0 /tmp/new.zip > /tmp/new.b64
+          python3 - <<'PY'
+from pathlib import Path
+s = Path('/tmp/new.b64').read_text()
+n = len(s)
+cuts = [0, n//4, n//2, (3*n)//4, n]
+for i in range(4):
+    Path(f'public/release-1.12.0-agenda-{i+1}.txt').write_text(s[cuts[i]:cuts[i+1]])
+PY
+
+      - name: Verify packed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | base64 --decode > /tmp/verify.zip
+          unzip -t /tmp/verify.zip
+          rm -rf /tmp/verify
+          mkdir -p /tmp/verify
+          unzip -q /tmp/verify.zip -d /tmp/verify
+          cmp patch-source/agenda/app-shell.js /tmp/verify/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/verify/core/lib/app-data.js
+          grep -q "Desfazer pagamento" /tmp/verify/core/app-shell.js
+          grep -q "createOrSupersedeFollowup" /tmp/verify/core/app-shell.js
+          grep -q "listFinalizedEncounters" /tmp/verify/core/app-shell.js
+
+      - name: Commit packed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: extract agenda source for phase validation"
+          git commit -m "feat: pack improvements phases 1-5 into agenda release"
           git push
