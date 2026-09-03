@@ -48,7 +48,7 @@ let encounterAutosaveTimer = null;
 let encounterAutosaveBusy = false;
 let pendingMediaFile = null;
 let appStarted = false;
-const state = { patients: [], appointments: [], followups: [], financial: [] };
+const state = { patients: [], appointments: [], encounters: [], followups: [], financial: [] };
 const PDF_LAYOUT_KEY = 'debora-pdf-layout';
 const CLINIC_TIME_ZONE = 'America/Sao_Paulo';
 const CLINIC_OFFSET = '-03:00';
@@ -465,7 +465,7 @@ function renderHomeHeader(now = new Date()) {
   const todayCount = state.appointments.filter((a) => a.status !== 'Cancelado' && clinicDayKey(a.starts_at) === todayKey).length;
   const pendingCount = state.followups.filter((f) => f.status === 'Pendente').length;
   setText('[data-home-summary]', `${todayCount} ${todayCount === 1 ? 'atendimento' : 'atendimentos'} hoje · ${pendingCount} ${pendingCount === 1 ? 'acompanhamento pendente' : 'acompanhamentos pendentes'}`);
-  const monthCount = state.appointments.filter((a) => sameMonth(a.starts_at, now) && String(a.status || '').toLocaleLowerCase('pt-BR') === 'realizado').length;
+  const monthCount = state.encounters.filter((encounter) => String(encounter.status || '').toLocaleLowerCase('pt-BR') === 'finalized' && sameMonth(encounter.occurred_at || encounter.created_at, now)).length;
   setText('[data-kpi-month]', String(monthCount));
   const monthName = new Intl.DateTimeFormat('pt-BR', { timeZone: CLINIC_TIME_ZONE, month: 'long' }).format(now);
   setText('[data-kpi-month-meta]', monthCount === 1 ? `1 atendimento realizado em ${monthName}` : `${monthCount} atendimentos realizados em ${monthName}`);
@@ -524,12 +524,22 @@ function renderAgenda() {
 function followupMarkup(f) {
   const p = patientByMotherId(f.mother_id);
   const overdue = new Date(f.due_at) < new Date();
-  return `<article class="followup-card ${overdue ? 'urgent' : ''}"><div class="followup-icon">↻</div><div><strong>${escapeHTML(p ? patientTargetLabel(p, f.baby_id) : 'Paciente')}</strong><span>${escapeHTML(f.notes || 'Acompanhamento')}</span><small>${escapeHTML(dateTimeLabel(f.due_at))}</small></div><div class="followup-actions"><button data-action="followup-whatsapp" data-followup-id="${f.id}">WhatsApp</button><button data-action="complete-followup" data-followup-id="${f.id}">Concluir</button></div></article>`;
+  const grouped = Number(f._groupedCount || 1);
+  const history = grouped > 1 ? ` · ${grouped} pendências agrupadas` : '';
+  return `<article class="followup-card ${overdue ? 'urgent' : ''}"><div class="followup-icon">↻</div><div><strong>${escapeHTML(p ? patientTargetLabel(p, f.baby_id) : 'Paciente')}</strong><span>${escapeHTML(f.notes || 'Acompanhamento')}</span><small>${escapeHTML(dateTimeLabel(f.due_at))}${escapeHTML(history)}</small></div><div class="followup-actions"><button data-action="followup-whatsapp" data-followup-id="${f.id}">WhatsApp</button><button data-action="complete-followup" data-followup-id="${f.id}">Concluir</button></div></article>`;
 }
 function renderFollowups() {
   const root = document.querySelector('[data-followups-live]');
   const homeRoot = document.querySelector('[data-home-followups-live]');
-  const pending = state.followups.filter((f) => f.status === 'Pendente').sort((a,b) => new Date(a.due_at)-new Date(b.due_at));
+  const rawPending = state.followups.filter((f) => f.status === 'Pendente').sort((a,b) => new Date(a.due_at)-new Date(b.due_at));
+  const groupedByPatient = new Map();
+  for (const followup of rawPending) {
+    const key = `${followup.mother_id || ''}|${followup.baby_id || ''}`;
+    const current = groupedByPatient.get(key);
+    if (!current) groupedByPatient.set(key, { ...followup, _groupedCount: 1 });
+    else current._groupedCount += 1;
+  }
+  const pending = [...groupedByPatient.values()];
   setText('[data-kpi-followups]', String(pending.length));
   const markup = pending.length ? pending.map(followupMarkup).join('') : '<div class="empty-live">Nenhum follow-up pendente.</div>';
   if (root) root.innerHTML = markup;
@@ -554,14 +564,19 @@ function renderFinance() {
   if (!root) return;
   root.innerHTML = state.financial.length ? state.financial.map((f) => {
     const p = patientByMotherId(f.mother_id);
-    return `<article class="agenda-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span></div><strong>${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(f.status)}</span><div class="agenda-actions">${f.status === 'Pendente' ? `<button data-action="finance-whatsapp" data-finance-id="${f.id}">Cobrar</button><button data-action="mark-paid" data-finance-id="${f.id}">Marcar pago</button>` : '<button type="button">Pago</button>'}</div></article>`;
+    const actions = f.status === 'Pendente'
+      ? `<button data-action="finance-whatsapp" data-finance-id="${f.id}">Cobrar</button><button data-action="mark-paid" data-finance-id="${f.id}">Marcar pago</button>`
+      : f.status === 'Pago'
+        ? `<button data-action="undo-paid" data-finance-id="${f.id}">Desfazer pagamento</button>`
+        : '';
+    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span></div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(f.status)}</span><div class="agenda-actions">${actions}</div></article>`;
   }).join('') : '<div class="empty-live">Nenhum lançamento financeiro.</div>';
 }
 async function refreshData() {
-  const [patients, appointments, followups, financial] = await Promise.all([
-    appData.listPatients(), appData.listAppointments(), appData.listFollowups(), appData.listFinancialEntries()
+  const [patients, appointments, encounters, followups, financial] = await Promise.all([
+    appData.listPatients(), appData.listAppointments(), appData.listFinalizedEncounters(), appData.listFollowups(), appData.listFinancialEntries()
   ]);
-  state.patients = patients; state.appointments = appointments; state.followups = followups; state.financial = financial;
+  state.patients = patients; state.appointments = appointments; state.encounters = encounters; state.followups = followups; state.financial = financial;
   renderPatientList(); renderPatientSelect(currentPatientId); renderAgenda(); renderFollowups(); renderFinance();
 }
 
@@ -775,8 +790,8 @@ async function finalizeEncounter() {
     }
   }
   const dueAt = followupDue(clinicalState.care_plan?.followup, new Date(startsAt));
-  if (dueAt) await appData.createFollowup({ mother_id: patient.mother.id, baby_id: singleBabyId, encounter_id: encounter.id, due_at: dueAt, notes: selectedBabies.length > 1 ? `Acompanhamento de ${selectedBabies.map((baby) => baby.name).join(' e ')}` : 'Acompanhamento após atendimento' });
-  if (valueCents > 0) await appData.createFinancialEntry({ mother_id: patient.mother.id, appointment_id: currentAppointmentId, encounter_id: encounter.id, description: ident.appointmentType || 'Atendimento', amount_cents: valueCents, status: 'Pendente', due_at: startsAt.slice(0,10) });
+  if (dueAt) await appData.createOrSupersedeFollowup({ mother_id: patient.mother.id, baby_id: singleBabyId, encounter_id: encounter.id, due_at: dueAt, notes: selectedBabies.length > 1 ? `Acompanhamento de ${selectedBabies.map((baby) => baby.name).join(' e ')}` : 'Acompanhamento após atendimento' });
+  if (valueCents > 0) await appData.ensureFinancialEntryForEncounter({ mother_id: patient.mother.id, appointment_id: currentAppointmentId, encounter_id: encounter.id, description: ident.appointmentType || 'Atendimento', amount_cents: valueCents, due_at: startsAt.slice(0,10) });
   if (pendingMediaFile) {
     const consents = await appData.listConsents(patient.mother.id);
     await mediaService.upload({ file: pendingMediaFile, ownerId: authService.getSession()?.user?.id, motherId: patient.mother.id, babyId: singleBabyId, encounterId: encounter.id, consents });
@@ -1158,7 +1173,15 @@ document.addEventListener('click', async (event) => {
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
     else if (action === 'followup-whatsapp') { const f = state.followups.find((x) => x.id === actionEl.dataset.followupId); await openWhatsApp(patientByMotherId(f?.mother_id), f?.notes || 'Olá! Como vocês estão hoje?'); }
     else if (action === 'new-finance') await createFinancialEntry();
-    else if (action === 'mark-paid') { await appData.markFinancialPaid(actionEl.dataset.financeId, 'Pix'); await refreshData(); }
+    else if (action === 'mark-paid') { await appData.markFinancialPaid(actionEl.dataset.financeId, 'Pix'); await refreshData(); toast('Pagamento confirmado.', 'success'); }
+    else if (action === 'undo-paid') {
+      const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
+      if (!finance) throw new Error('Lançamento financeiro não encontrado.');
+      if (!window.confirm(`Desfazer a confirmação de pagamento de ${currency(finance.amount_cents)}? O lançamento voltará para Pendente.`)) return;
+      await appData.undoFinancialPaid(finance.id);
+      await refreshData();
+      toast('Pagamento desfeito. O lançamento voltou para Pendente.', 'success');
+    }
     else if (action === 'finance-whatsapp') { const f = state.financial.find((x) => x.id === actionEl.dataset.financeId); await openWhatsApp(patientByMotherId(f?.mother_id), `Olá! Passando para lembrar do pagamento de ${currency(f?.amount_cents)} referente a ${f?.description || 'atendimento'}.`); }
     else if (action === 'print-plan') await printPlan();
     else if (action === 'share-whatsapp') await openWhatsApp(selectedWizardPatient(), currentPlanText());
