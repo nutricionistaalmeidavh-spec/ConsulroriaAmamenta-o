@@ -63,6 +63,7 @@ jobs:
           grep -q "package_active" public/billing-v2.js
           grep -q "package_new" public/billing-v2.js
           grep -q "DeboraBilling?.bindAppointment" /tmp/agenda/core/app-shell.js
+          grep -q "finalBillingSelection" /tmp/agenda/core/app-shell.js
           grep -q "DeboraBilling?.finalize" /tmp/agenda/core/app-shell.js
           ! grep -q "window.DeboraBilling=" public/patient-fixes-v2.js
 
