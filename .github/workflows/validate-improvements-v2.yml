@@ -9,6 +9,9 @@ on:
       - 'public/improvements-v2.css'
       - 'public/billing-v2.js'
       - 'public/billing-v2.css'
+      - 'public/phase8-design.css'
+      - 'public/manifest.webmanifest'
+      - 'index.html'
       - 'public/patient-fixes-v2.js'
       - 'public/growth-feature.js'
       - 'src/bootstrap.js'
@@ -87,8 +90,30 @@ jobs:
           grep -q "\[data-date-strip-live\]" public/improvements-v2.css
           grep -q "min-width: 0" public/improvements-v2.css
 
+      - name: Validate phase 8 editorial premium design
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "phase8-design.css" src/bootstrap.js
+          grep -q 'billing-v2.css"><link rel="stylesheet" href="./phase8-design.css' src/bootstrap.js
+          grep -q -- "--p8-shadow-1" public/phase8-design.css
+          grep -q -- "--p8-shadow-2" public/phase8-design.css
+          grep -q -- "--p8-shadow-3" public/phase8-design.css
+          grep -q -- "--p8-serif" public/phase8-design.css
+          grep -q 'icon-192.png' public/phase8-design.css
+          grep -q "next-appointment-card" public/phase8-design.css
+          grep -q "lactation-bottom-nav" public/phase8-design.css
+          grep -q "lactation-fab" public/phase8-design.css
+          grep -q "Que bom <em>te ver por aqui!</em>" /tmp/agenda/core/app-shell.js
+          grep -q '#fbf7f4' public/manifest.webmanifest
+          grep -q '#fbf7f4' index.html
+          grep -q '#fbf7f4' src/bootstrap.js
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Parse phase 8 stylesheet
+        run: node -e "require('postcss').parse(require('fs').readFileSync('public/phase8-design.css','utf8'))"
 
       - name: Build application
         run: npm run build
