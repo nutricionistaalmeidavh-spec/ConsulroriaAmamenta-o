@@ -1,4 +1,4 @@
-name: Extract base UI source
+name: Extract legacy patch source
 
 on:
   push:
@@ -15,26 +15,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct base archive
+      - name: Extract release patch
         shell: bash
         run: |
           set -euo pipefail
-          python3 -c "from pathlib import Path; import base64,re; parts=[]; [parts.append(base64.b64decode(b.decode('ascii')) if len(b)%4==0 and re.fullmatch(r'[A-Za-z0-9+/]+={0,2}',b.decode('ascii',errors='ignore')) else b) for b in [Path(f'public/debora-app-{i}.bin').read_bytes() for i in range(1,5)]]; Path('/tmp/base.zip').write_bytes(b''.join(parts))"
-          unzip -t /tmp/base.zip
-          rm -rf /tmp/base
-          mkdir -p /tmp/base patch-source/base
-          unzip -q /tmp/base.zip -d /tmp/base
-          cp /tmp/base/index.html patch-source/base/index.html
-          cp /tmp/base/styles.css patch-source/base/styles.css
-          cp /tmp/base/config.js patch-source/base/config.js
-          find /tmp/base -maxdepth 2 -type f | sed 's#/tmp/base/##' | sort > patch-source/base/BASE_FILES.txt
-          grep -RIlE 'DeboraBilling|Individual|Plano|Pacote|package|billing|payment' /tmp/base --include='*.js' --include='*.html' --include='*.css' | sed 's#/tmp/base/##' | sort > patch-source/base/BILLING_MATCHES.txt || true
+          cat public/release-1.11.0-patch-1.txt public/release-1.11.0-patch-2.txt public/release-1.11.0-patch-3.txt public/release-1.11.0-patch-4.txt public/release-1.11.0-patch-5.txt public/release-1.11.0-patch-6.txt public/release-1.11.0-patch-7.txt public/release-1.11.0-patch-8.txt | tr -d '\r\n' | base64 --decode > /tmp/release.zip
+          unzip -t /tmp/release.zip
+          rm -rf /tmp/release
+          mkdir -p /tmp/release patch-source/release
+          unzip -q /tmp/release.zip -d /tmp/release
+          find /tmp/release -type f | sed 's#/tmp/release/##' | sort > patch-source/release/FILES.txt
+          grep -RIlE 'DeboraBilling|Individual|Plano|Pacote|package|billing|payment' /tmp/release --include='*.js' --include='*.html' --include='*.css' | sed 's#/tmp/release/##' | sort > patch-source/release/BILLING_MATCHES.txt || true
+          while IFS= read -r f; do
+            case "$f" in
+              *.js|*.html|*.css) mkdir -p "patch-source/release/$(dirname "$f")"; cp "/tmp/release/$f" "patch-source/release/$f" ;;
+            esac
+          done < patch-source/release/BILLING_MATCHES.txt
       - name: Commit extracted source
         shell: bash
         run: |
           set -euo pipefail
-          git add patch-source/base
+          git add patch-source/release
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: extract base UI source for phases 6-7"
+          git commit -m "chore: extract legacy billing source for phase 6"
           git push
