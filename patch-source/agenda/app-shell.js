@@ -781,6 +781,8 @@ async function finalizeEncounter() {
   clinicalState.identification = ident;
   const startsAt = ident.startsAt ? clinicInputToIso(ident.startsAt) : new Date().toISOString();
   const valueCents = Math.max(0, Math.round(Number(ident.value || 0) * 100));
+  const finalBillingSelection = await window.DeboraBilling?.beforeStart?.(patient.mother.id);
+  await window.DeboraBilling?.bindAppointment?.(patient.mother.id, currentAppointmentId, currentDraftEncounterId, finalBillingSelection);
   await appData.updateAppointment(currentAppointmentId, {
     mother_id: patient.mother.id,
     baby_id: singleBabyId,
