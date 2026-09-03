@@ -69,9 +69,32 @@ export function createAppData(repos) {
     addWeight: (payload) => repos.weights.create(payload),
     listWeights: (babyId) => repos.weights.list({ query: `select=*&baby_id=eq.${encodeURIComponent(babyId)}&order=measured_at.asc` }),
     createFollowup: (payload) => repos.followups.create(payload),
+    createOrSupersedeFollowup: (payload) => repos.client.rpc('create_or_supersede_followup', {
+      p_mother_id: payload.mother_id,
+      p_baby_id: payload.baby_id || null,
+      p_encounter_id: payload.encounter_id,
+      p_due_at: payload.due_at,
+      p_notes: payload.notes || ''
+    }),
     listFollowups: ({ status } = {}) => repos.followups.list({ query: `select=*&order=due_at.asc${status ? `&status=eq.${encodeURIComponent(status)}` : ''}` }),
     completeFollowup: (id, completedAt = new Date().toISOString()) => repos.followups.update(id, { status: 'Concluído', completed_at: completedAt }),
     createFinancialEntry: (payload) => repos.financial.create(payload),
+    ensureFinancialEntryForEncounter: (payload) => repos.client.rpc('ensure_financial_entry_for_encounter', {
+      p_mother_id: payload.mother_id,
+      p_appointment_id: payload.appointment_id || null,
+      p_encounter_id: payload.encounter_id,
+      p_description: payload.description || 'Atendimento',
+      p_amount_cents: Number(payload.amount_cents || 0),
+      p_due_at: payload.due_at
+    }),
+    setFinancialPaymentState: (id, paid, paymentMethod = 'Pix') => repos.client.rpc('set_financial_payment_state', {
+      p_entry_id: id,
+      p_paid: Boolean(paid),
+      p_payment_method: paymentMethod || ''
+    }),
+    listFinalizedEncounters: () => repos.client.rest('clinical_encounters', {
+      query: 'select=id,mother_id,baby_id,appointment_id,status,occurred_at,created_at&status=eq.finalized&order=occurred_at.desc'
+    }),
     listAppointments: async ({ from, to } = {}) => {
       const filters = ['select=*', 'order=starts_at.asc'];
       if (from) filters.push(`starts_at=gte.${encodeURIComponent(from)}`);
@@ -117,6 +140,7 @@ export function createAppData(repos) {
       return repos.client.rest('consents', { method: 'POST', query: 'on_conflict=owner_id,mother_id,consent_type', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: rows });
     },
     listFinancialEntries: () => repos.financial.list({ query: 'select=*&order=created_at.desc' }),
-    markFinancialPaid: (id, paymentMethod, paidAt = new Date().toISOString()) => repos.financial.update(id, { status: 'Pago', payment_method: paymentMethod, paid_at: paidAt })
+    markFinancialPaid: (id, paymentMethod = 'Pix') => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: true, p_payment_method: paymentMethod || 'Pix' }),
+    undoFinancialPaid: (id) => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: false, p_payment_method: '' })
   };
 }
