@@ -1,0 +1,55 @@
+name: Extract base UI source
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - '.github/workflows/extract-base-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct base archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+from pathlib import Path
+import base64,re
+parts=[]
+for i in range(1,5):
+    b=Path(f'public/debora-app-{i}.bin').read_bytes()
+    if len(b)%4==0:
+        try:
+            t=b.decode('ascii')
+            if re.fullmatch(r'[A-Za-z0-9+/]+={0,2}',t):
+                b=base64.b64decode(t)
+        except Exception:
+            pass
+    parts.append(b)
+Path('/tmp/base.zip').write_bytes(b''.join(parts))
+PY
+          unzip -t /tmp/base.zip
+          rm -rf /tmp/base
+          mkdir -p /tmp/base patch-source/base
+          unzip -q /tmp/base.zip -d /tmp/base
+          cp /tmp/base/index.html patch-source/base/index.html
+          cp /tmp/base/styles.css patch-source/base/styles.css
+          cp /tmp/base/config.js patch-source/base/config.js
+          find /tmp/base -maxdepth 2 -type f | sed 's#/tmp/base/##' | sort > patch-source/base/BASE_FILES.txt
+          grep -RIlE 'DeboraBilling|Individual|Plano|Pacote|package|billing|payment' /tmp/base --include='*.js' --include='*.html' --include='*.css' | sed 's#/tmp/base/##' | sort > patch-source/base/BILLING_MATCHES.txt || true
+      - name: Commit extracted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add patch-source/base
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: extract base UI source for phases 6-7"
+          git push
