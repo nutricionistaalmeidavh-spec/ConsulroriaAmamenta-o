@@ -1,0 +1,43 @@
+name: Repack final phases 6-7
+
+on:
+  push:
+    branches: [improvements-v2]
+    paths: ['.github/workflows/repack-final-6-7.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | tr -d '\r\n' | base64 --decode > /tmp/base.zip
+          unzip -t /tmp/base.zip
+          rm -rf /tmp/a && mkdir -p /tmp/a
+          unzip -q /tmp/base.zip -d /tmp/a
+          cp patch-source/agenda/app-shell.js /tmp/a/core/app-shell.js
+          cp patch-source/agenda/app-data.js /tmp/a/core/lib/app-data.js
+          (cd /tmp/a && zip -qr /tmp/new.zip .)
+          base64 -w0 /tmp/new.zip > /tmp/new.b64
+          python3 -c "from pathlib import Path;s=Path('/tmp/new.b64').read_text();n=len(s);c=[0,n//4,n//2,3*n//4,n];[Path(f'public/release-1.12.0-agenda-{i+1}.txt').write_text(s[c[i]:c[i+1]]) for i in range(4)]"
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | base64 --decode > /tmp/check.zip
+          unzip -t /tmp/check.zip
+          rm -rf /tmp/check && mkdir -p /tmp/check
+          unzip -q /tmp/check.zip -d /tmp/check
+          cmp patch-source/agenda/app-shell.js /tmp/check/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/check/core/lib/app-data.js
+          grep -q "finalBillingSelection" /tmp/check/core/app-shell.js
+      - name: Commit packed release
+        shell: bash
+        run: |
+          git add public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: repack final phase 6-7 billing order"
+          git push
