@@ -37,6 +37,8 @@ jobs:
           grep -q 'Auriculoterapia, laser, taping' public/billing-v2.js
           grep -q 'bv-plan-dialog' public/billing-v2.css
           grep -q 'care_package_items' supabase/phase-flexible-package-items.sql
+      - name: Validate JavaScript syntax
+        run: node --check public/billing-v2.js
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Parse styles
