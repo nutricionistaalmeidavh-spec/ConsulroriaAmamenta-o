@@ -8,6 +8,7 @@ on:
       - 'public/release-1.12.0-agenda-*.txt'
       - 'public/improvements-v2.css'
       - 'src/bootstrap.js'
+      - 'patch-source/agenda/**'
       - 'package.json'
       - '.github/workflows/validate-improvements-v2.yml'
   workflow_dispatch:
@@ -22,51 +23,58 @@ jobs:
       - name: Checkout improvements branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct agenda patch
+      - name: Validate packed agenda release
         shell: bash
         run: |
           set -euo pipefail
-          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
           unzip -t /tmp/agenda.zip
           rm -rf /tmp/agenda
           mkdir -p /tmp/agenda
           unzip -q /tmp/agenda.zip -d /tmp/agenda
-          test -s /tmp/agenda/core/app-shell.js
-          test -s /tmp/agenda/core/lib/app-data.js
+          cmp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
 
-      - name: Check agenda uses scheduled encounter flow
+      - name: Validate phase 1 agenda single source
         shell: bash
         run: |
           set -euo pipefail
-          grep -R -q "start_clinical_encounter_from_appointment" /tmp/agenda
+          grep -q "startClinicalEncounterFromAppointment" /tmp/agenda/core/app-shell.js
+          grep -q "start_clinical_encounter_from_appointment" /tmp/agenda/core/lib/app-data.js
+          grep -q "start_clinical_encounter" /tmp/agenda/core/lib/app-data.js
 
-      - name: Check payment can be reversed
+      - name: Validate phase 2 reversible finance
         shell: bash
         run: |
           set -euo pipefail
-          grep -R -q "set_financial_payment_state" /tmp/agenda
-          grep -R -q "Desfazer pagamento" /tmp/agenda
+          grep -q "set_financial_payment_state" /tmp/agenda/core/lib/app-data.js
+          grep -q "undoFinancialPaid" /tmp/agenda/core/lib/app-data.js
+          grep -q "Desfazer pagamento" /tmp/agenda/core/app-shell.js
 
-      - name: Check follow-up consolidation
+      - name: Validate phase 3 follow-up consolidation
         shell: bash
         run: |
           set -euo pipefail
-          grep -R -q "create_or_supersede_followup" /tmp/agenda
+          grep -q "create_or_supersede_followup" /tmp/agenda/core/lib/app-data.js
+          grep -q "createOrSupersedeFollowup" /tmp/agenda/core/app-shell.js
+          grep -q "groupedByPatient" /tmp/agenda/core/app-shell.js
 
-      - name: Check dashboard counts finalized encounters
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -R -q "clinical_encounters" /tmp/agenda
-          grep -R -q "finalized" /tmp/agenda
-
-      - name: Check mobile stylesheet is loaded
+      - name: Validate phase 4 mobile containment
         shell: bash
         run: |
           set -euo pipefail
           grep -q "improvements-v2.css" src/bootstrap.js
           grep -q "overflow-x: hidden" public/improvements-v2.css
           grep -q "\[data-date-strip-live\]" public/improvements-v2.css
+          grep -q "min-width: 0" public/improvements-v2.css
+
+      - name: Validate phase 5 dashboard source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "listFinalizedEncounters" /tmp/agenda/core/app-shell.js
+          grep -q "status=eq.finalized" /tmp/agenda/core/lib/app-data.js
+          grep -q "state.encounters" /tmp/agenda/core/app-shell.js
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
