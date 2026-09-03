@@ -1,0 +1,1 @@
+import sharp from 'sharp';const source='public/icon.svg';await Promise.all([[192,'public/icon-192.png'],[512,'public/icon-512.png']].map(([size,file])=>sharp(source,{density:384}).resize(size,size,{fit:'fill'}).png({compressionLevel:9,palette:true,quality:96}).toFile(file)));console.log('Ícones PWA gerados: 192 e 512 px.');
