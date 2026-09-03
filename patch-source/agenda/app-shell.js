@@ -277,12 +277,17 @@ async function openPatient(motherId, { navigateRoute = true, babyId = null } = {
   renderBabySelector(patient, selectedBaby?.id);
   renderBabyDetails(selectedBaby);
   try {
-    const [weights, encounters] = await Promise.all([
+    const [weights, encounters, encounterIds] = await Promise.all([
       selectedBaby?.id ? appData.listWeights(selectedBaby.id) : Promise.resolve([]),
-      appData.listEncounters(patient.mother.id)
+      appData.listEncounters(patient.mother.id),
+      selectedBaby?.id ? appData.listEncounterIdsForBaby(selectedBaby.id) : Promise.resolve([])
     ]);
+    const allowedEncounterIds = new Set(encounterIds || []);
+    const visibleEncounters = selectedBaby?.id
+      ? encounters.filter((encounter) => encounter.baby_id === selectedBaby.id || allowedEncounterIds.has(encounter.id))
+      : encounters;
     renderPatientWeights(weights, selectedBaby);
-    renderPatientTimeline(encounters);
+    renderPatientTimeline(visibleEncounters);
   } catch (error) { reportError(error); }
   if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');
 }
@@ -309,8 +314,15 @@ function renderPatientWeights(weights = [], baby = null) {
 function renderPatientTimeline(encounters = []) {
   const root = document.querySelector('[data-patient-timeline-live]');
   if (!root) return;
-  if (!encounters.length) { root.innerHTML = '<div class="empty-live">Nenhum atendimento clínico registrado.</div>'; return; }
-  root.innerHTML = encounters.map((e, i) => `<div class="timeline-item ${i === 0 ? 'active' : ''}"><span></span>${e.status === 'draft' ? `<button type="button" class="timeline-entry" data-action="open-encounter" data-encounter-id="${escapeHTML(e.id)}"><strong>Rascunho</strong><small>${escapeHTML(dateTimeLabel(e.occurred_at || e.created_at))}</small><p>${escapeHTML(e.chief_complaint?.notes || (e.chief_complaint?.tags || []).join(', ') || 'Registro clínico')}</p><em>Abrir e continuar ›</em></button>` : `<div><strong>Atendimento</strong><small>${escapeHTML(dateTimeLabel(e.occurred_at || e.created_at))}</small><p>${escapeHTML(e.chief_complaint?.notes || (e.chief_complaint?.tags || []).join(', ') || 'Registro clínico')}</p></div>`}</div>`).join('');
+  if (!encounters.length) { root.innerHTML = '<div class="empty-live">Nenhum atendimento clínico registrado para o bebê selecionado.</div>'; return; }
+  root.innerHTML = encounters.map((e, i) => {
+    const identity = appointmentPatientLabel({ mother_id: e.mother_id, baby_id: e.baby_id, baby_ids: e.identification?.babyIds || [] });
+    const summary = e.chief_complaint?.notes || (e.chief_complaint?.tags || []).join(', ') || 'Registro clínico';
+    const action = e.status === 'draft' ? 'open-encounter' : 'open-clinical-note';
+    const label = e.status === 'draft' ? 'Rascunho' : 'Atendimento finalizado';
+    const cta = e.status === 'draft' ? 'Abrir e continuar ›' : 'Abrir prontuário ›';
+    return `<div class="timeline-item ${i === 0 ? 'active' : ''}"><span></span><button type="button" class="timeline-entry" data-action="${action}" data-encounter-id="${escapeHTML(e.id)}"><strong>${label}</strong><small>${escapeHTML(identity)} · ${escapeHTML(dateTimeLabel(e.occurred_at || e.created_at))}</small><p>${escapeHTML(summary)}</p><em>${cta}</em></button></div>`;
+  }).join('');
 }
 
 async function openEncounter(encounterId) {
@@ -639,7 +651,7 @@ async function ensureEncounterStarted() {
   const draft = collectEncounterDraft(appointmentScreen), ident = draft.identification || {};
   const startsAt = ident.startsAt ? clinicInputToIso(ident.startsAt) : new Date().toISOString();
   const valueCents = Math.max(0, Math.round(Number(ident.value || 0) * 100));
-  await window.DeboraBilling?.beforeStart?.(patient.mother.id);
+  const billingSelection = await window.DeboraBilling?.beforeStart?.(patient.mother.id);
 
   if (currentAppointmentId) {
     await appData.updateAppointment(currentAppointmentId, {
@@ -654,6 +666,7 @@ async function ensureEncounterStarted() {
     const result = await appData.startClinicalEncounterFromAppointment(currentAppointmentId);
     if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id do agendamento.');
     setActiveEncounterIds(result.encounter_id, result.appointment_id);
+    await window.DeboraBilling?.bindAppointment?.(patient.mother.id, result.appointment_id, result.encounter_id, billingSelection);
     return result;
   }
 
@@ -671,6 +684,7 @@ async function ensureEncounterStarted() {
   });
   if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id.');
   setActiveEncounterIds(result.encounter_id, result.appointment_id);
+  await window.DeboraBilling?.bindAppointment?.(patient.mother.id, result.appointment_id, result.encounter_id, billingSelection);
   return result;
 }
 function scheduleEncounterAutosave() {
@@ -791,12 +805,12 @@ async function finalizeEncounter() {
   }
   const dueAt = followupDue(clinicalState.care_plan?.followup, new Date(startsAt));
   if (dueAt) await appData.createOrSupersedeFollowup({ mother_id: patient.mother.id, baby_id: singleBabyId, encounter_id: encounter.id, due_at: dueAt, notes: selectedBabies.length > 1 ? `Acompanhamento de ${selectedBabies.map((baby) => baby.name).join(' e ')}` : 'Acompanhamento após atendimento' });
-  if (valueCents > 0) await appData.ensureFinancialEntryForEncounter({ mother_id: patient.mother.id, appointment_id: currentAppointmentId, encounter_id: encounter.id, description: ident.appointmentType || 'Atendimento', amount_cents: valueCents, due_at: startsAt.slice(0,10) });
+  const billingResult = await window.DeboraBilling?.finalize?.(patient.mother.id, currentAppointmentId, encounter.id);
+  if (!billingResult?.handled && valueCents > 0) await appData.ensureFinancialEntryForEncounter({ mother_id: patient.mother.id, appointment_id: currentAppointmentId, encounter_id: encounter.id, description: ident.appointmentType || 'Atendimento', amount_cents: valueCents, due_at: startsAt.slice(0,10) });
   if (pendingMediaFile) {
     const consents = await appData.listConsents(patient.mother.id);
     await mediaService.upload({ file: pendingMediaFile, ownerId: authService.getSession()?.user?.id, motherId: patient.mother.id, babyId: singleBabyId, encounterId: encounter.id, consents });
   }
-  await window.DeboraBilling?.afterStart?.(patient.mother.id, encounter.id);
   clearTimeout(encounterAutosaveTimer);
   setActiveEncounterIds(null, null);
   pendingMediaFile = null;
