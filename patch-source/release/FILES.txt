@@ -1,0 +1,7 @@
+core/app-shell.js
+core/lib/app-data.js
+core/lib/supabase-client.js
+features/clinical-note-feature.css
+features/clinical-note-feature.js
+features/patient-fixes.css
+features/patient-fixes.js

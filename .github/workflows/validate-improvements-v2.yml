@@ -1,0 +1,119 @@
+name: Validate improvements v2
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - 'public/release-1.12.0-agenda-*.txt'
+      - 'public/improvements-v2.css'
+      - 'public/billing-v2.js'
+      - 'public/billing-v2.css'
+      - 'public/phase8-design.css'
+      - 'public/manifest.webmanifest'
+      - 'index.html'
+      - 'public/patient-fixes-v2.js'
+      - 'public/growth-feature.js'
+      - 'src/bootstrap.js'
+      - 'patch-source/agenda/**'
+      - 'package.json'
+      - '.github/workflows/validate-improvements-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout improvements branch
+        uses: actions/checkout@v4
+
+      - name: Validate packed agenda release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
+          unzip -t /tmp/agenda.zip
+          rm -rf /tmp/agenda
+          mkdir -p /tmp/agenda
+          unzip -q /tmp/agenda.zip -d /tmp/agenda
+          cmp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
+
+      - name: Validate phases 1-5 regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "startClinicalEncounterFromAppointment" /tmp/agenda/core/app-shell.js
+          grep -q "set_financial_payment_state" /tmp/agenda/core/lib/app-data.js
+          grep -q "Desfazer pagamento" /tmp/agenda/core/app-shell.js
+          grep -q "create_or_supersede_followup" /tmp/agenda/core/lib/app-data.js
+          grep -q "groupedByPatient" /tmp/agenda/core/app-shell.js
+          grep -q "improvements-v2.css" src/bootstrap.js
+          grep -q "status=eq.finalized" /tmp/agenda/core/lib/app-data.js
+
+      - name: Validate phase 6 billing and package flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "billing-v2.css" src/bootstrap.js
+          grep -q "billing-v2.js" src/bootstrap.js
+          grep -q "patient-fixes-v2.js" src/bootstrap.js
+          grep -q "set_appointment_billing" public/billing-v2.js
+          grep -q "finalize_encounter_billing" public/billing-v2.js
+          grep -q "package_active" public/billing-v2.js
+          grep -q "package_new" public/billing-v2.js
+          grep -q "DeboraBilling?.bindAppointment" /tmp/agenda/core/app-shell.js
+          grep -q "finalBillingSelection" /tmp/agenda/core/app-shell.js
+          grep -q "DeboraBilling?.finalize" /tmp/agenda/core/app-shell.js
+          ! grep -q "window.DeboraBilling=" public/patient-fixes-v2.js
+
+      - name: Validate phase 7 patient and clinical identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Abrir prontuário" /tmp/agenda/core/app-shell.js
+          grep -q "listEncounterIdsForBaby" /tmp/agenda/core/app-shell.js
+          grep -q "baby-tab.active" public/growth-feature.js
+          grep -q "birth_weight_g" public/growth-feature.js
+          grep -q "gfWeightTimelineV4" public/growth-feature.js
+          grep -q "DeboraGrowth" public/growth-feature.js
+          ! grep -R -i -q "Excluir paciente" patch-source/agenda public/patient-fixes-v2.js
+
+      - name: Validate phase 4 mobile containment
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "overflow-x: hidden" public/improvements-v2.css
+          grep -q "\[data-date-strip-live\]" public/improvements-v2.css
+          grep -q "min-width: 0" public/improvements-v2.css
+
+      - name: Validate phase 8 editorial premium design
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "phase8-design.css" src/bootstrap.js
+          grep -q 'billing-v2.css"><link rel="stylesheet" href="./phase8-design.css' src/bootstrap.js
+          grep -q -- "--p8-shadow-1" public/phase8-design.css
+          grep -q -- "--p8-shadow-2" public/phase8-design.css
+          grep -q -- "--p8-shadow-3" public/phase8-design.css
+          grep -q -- "--p8-serif" public/phase8-design.css
+          grep -q 'icon-192.png' public/phase8-design.css
+          grep -q "next-appointment-card" public/phase8-design.css
+          grep -q "lactation-bottom-nav" public/phase8-design.css
+          grep -q "lactation-fab" public/phase8-design.css
+          grep -q "Que bom <em>te ver por aqui!</em>" /tmp/agenda/core/app-shell.js
+          grep -q '#fbf7f4' public/manifest.webmanifest
+          grep -q '#fbf7f4' index.html
+          grep -q '#fbf7f4' src/bootstrap.js
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Parse phase 8 stylesheet
+        run: node -e "require('postcss').parse(require('fs').readFileSync('public/phase8-design.css','utf8'))"
+
+      - name: Build application
+        run: npm run build

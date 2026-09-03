@@ -1,0 +1,825 @@
+/* Phase 8 — editorial premium design system
+   Direction: same visual family as Débora's landing page, with layered surfaces,
+   warm neutral background, restrained lavender accents and dark plum CTAs.
+*/
+:root{
+  --p8-bg:#fbf7f4;
+  --p8-bg-deep:#f6f0ee;
+  --p8-surface:#fffdfb;
+  --p8-surface-strong:#ffffff;
+  --p8-surface-soft:#f7f1f7;
+  --p8-surface-lilac:#f1e8f3;
+  --p8-ink:#332b34;
+  --p8-ink-soft:#544b55;
+  --p8-muted:#7b727b;
+  --p8-plum:#382d3b;
+  --p8-plum-hover:#2f2532;
+  --p8-lilac:#a779ae;
+  --p8-lilac-deep:#8f6198;
+  --p8-lilac-soft:#eee3f0;
+  --p8-lilac-faint:#f7f1f7;
+  --p8-sage:#788f7c;
+  --p8-sage-deep:#58705d;
+  --p8-sage-soft:#edf3ee;
+  --p8-warm:#9a7f66;
+  --p8-warm-soft:#f6f0e7;
+  --p8-danger:#9b4d52;
+  --p8-danger-soft:#fbefee;
+  --p8-border:#e9e0e5;
+  --p8-border-strong:#dcd0d8;
+  --p8-shadow-1:0 4px 14px rgba(55,38,48,.055),0 1px 3px rgba(55,38,48,.035);
+  --p8-shadow-2:0 12px 32px rgba(55,38,48,.105),0 3px 9px rgba(55,38,48,.05);
+  --p8-shadow-3:0 18px 46px rgba(55,38,48,.16),0 5px 16px rgba(55,38,48,.07);
+  --p8-shadow-up:0 -10px 28px rgba(55,38,48,.07);
+  --p8-serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --p8-sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --p8-radius-card:20px;
+  --p8-radius-hero:24px;
+  --p8-focus:0 0 0 3px rgba(167,121,174,.24);
+
+  /* bridge old application tokens to the approved identity */
+  --lac-rose:var(--p8-lilac);
+  --lac-rose-soft:var(--p8-lilac-soft);
+  --lac-sage:var(--p8-sage);
+  --lac-sage-soft:var(--p8-sage-soft);
+  --lac-ink:var(--p8-ink);
+  --lac-warm:var(--p8-bg);
+  --lac-line:var(--p8-border);
+  --lac-shadow:var(--p8-shadow-1);
+
+  --ui-font:var(--p8-sans);
+  --ui-accent:var(--p8-plum);
+  --ui-accent-hover:var(--p8-plum-hover);
+  --ui-accent-contrast:#fff;
+  --ui-accent-solid:var(--p8-lilac);
+  --ui-active:var(--p8-lilac-faint);
+  --ui-active-text:var(--p8-lilac-deep);
+  --ui-bg:var(--p8-bg);
+  --ui-surface:var(--p8-surface);
+  --ui-surface-elevated:#fff;
+  --ui-border:var(--p8-border);
+  --ui-border-strong:var(--p8-border-strong);
+  --ui-text:var(--p8-ink);
+  --ui-text-secondary:var(--p8-muted);
+  --ui-text-muted:#958b94;
+  --ui-hover:#f8f2f7;
+  --ui-button-bg:#fff;
+  --ui-button-text:var(--p8-ink-soft);
+  --ui-button-hover:#fbf7fa;
+  --ui-border-hover:#d2c3cf;
+  --ui-input-bg:#fff;
+  --ui-shadow:var(--p8-shadow-1);
+  --ui-shadow-elevated:var(--p8-shadow-3);
+  --ui-focus:var(--p8-focus);
+}
+
+html{
+  background:var(--p8-bg)!important;
+  color-scheme:light!important;
+}
+body{
+  font-family:var(--p8-sans)!important;
+  background:
+    radial-gradient(circle at 92% 4%,rgba(180,134,190,.07),transparent 24rem),
+    linear-gradient(180deg,var(--p8-bg) 0%,#fcf9f7 48%,var(--p8-bg) 100%)!important;
+  color:var(--p8-ink)!important;
+}
+::selection{background:rgba(167,121,174,.22);color:var(--p8-ink)}
+:focus-visible{outline:none!important;box-shadow:var(--p8-focus)!important}
+
+/* Official icon asset: never recreate the logo in CSS/text. */
+.lactation-brand-mark,
+.auth-mark{
+  background-image:url("./icon-192.png?v=1.12.1")!important;
+  background-size:cover!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  color:transparent!important;
+  text-shadow:none!important;
+  border:1px solid rgba(167,121,174,.14)!important;
+  box-shadow:0 8px 22px rgba(117,77,125,.14)!important;
+  overflow:hidden;
+}
+.lactation-brand-mark{border-radius:12px!important}
+.auth-mark{border-radius:17px!important}
+
+/* App canvas / chrome */
+.template-shell.lactation-shell,
+.lactation-shell{
+  background:transparent!important;
+}
+.lactation-sidebar{
+  background:rgba(255,253,251,.86)!important;
+  border-right-color:rgba(220,208,216,.7)!important;
+  backdrop-filter:blur(18px);
+}
+.lactation-profile-mini{
+  background:rgba(255,255,255,.72)!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-1);
+}
+.lactation-avatar{
+  background:var(--p8-lilac-soft)!important;
+  color:var(--p8-lilac-deep)!important;
+}
+.lactation-private-note{
+  background:var(--p8-surface-lilac)!important;
+  color:var(--p8-plum)!important;
+}
+.lactation-side-nav a[aria-current="page"],
+.lactation-side-nav a:hover{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-plum)!important;
+}
+
+.lactation-topbar{
+  background:rgba(251,247,244,.84)!important;
+  border-bottom:1px solid rgba(220,208,216,.62)!important;
+  backdrop-filter:blur(20px) saturate(1.08)!important;
+}
+.lactation-mobile-brand strong{
+  font-family:var(--p8-serif)!important;
+  color:var(--p8-ink)!important;
+  font-weight:600!important;
+  letter-spacing:-.02em!important;
+}
+.lactation-mobile-brand small{color:var(--p8-muted)!important}
+
+/* Editorial headings: serif only where it adds hierarchy. */
+.lactation-hello h1,
+.page-heading h1,
+.patient-title-row h1,
+.wizard-header h1,
+.section-heading h2,
+.wizard-card h2,
+.gf-sheet h2,
+.pf-prontuario-card strong{
+  font-family:var(--p8-serif)!important;
+  font-weight:600!important;
+  letter-spacing:-.035em!important;
+  color:var(--p8-ink)!important;
+}
+.lactation-hello h1 em{
+  color:var(--p8-lilac)!important;
+  font-weight:500!important;
+}
+.lactation-kicker,
+.section-kicker,
+.card-eyebrow,
+.bv-head small,
+.gf-sheet header small,
+.gf-inline-head small{
+  color:var(--p8-lilac-deep)!important;
+  letter-spacing:.13em!important;
+  font-weight:800!important;
+}
+.lactation-hello p,
+.page-heading p,
+.patient-title-row p,
+.wizard-header p,
+.wizard-card>p{
+  color:var(--p8-muted)!important;
+}
+
+/* Buttons */
+.ui-button{
+  border-radius:13px!important;
+  border-color:var(--p8-border)!important;
+  background:rgba(255,255,255,.9)!important;
+  color:var(--p8-ink-soft)!important;
+  transition:transform .14s ease,box-shadow .14s ease,background .14s ease,border-color .14s ease!important;
+}
+.ui-button:hover{
+  background:#fff!important;
+  border-color:var(--p8-border-strong)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+.ui-button:active{transform:translateY(1px)!important;box-shadow:none!important}
+.ui-button-primary{
+  background:var(--p8-plum)!important;
+  border-color:var(--p8-plum)!important;
+  color:#fff!important;
+  box-shadow:0 7px 18px rgba(56,45,59,.16)!important;
+}
+.ui-button-primary:hover{
+  background:var(--p8-plum-hover)!important;
+  border-color:var(--p8-plum-hover)!important;
+  box-shadow:0 9px 22px rgba(56,45,59,.2)!important;
+}
+.ui-button-ghost{
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.text-button,.back-link{
+  color:var(--p8-lilac-deep)!important;
+}
+button:disabled{transform:none!important}
+
+/* Surface system
+   elevation 0 = page
+   elevation 1 = regular content
+   elevation 2 = priority
+   elevation 3 = floating/modal
+*/
+.lactation-kpi,
+.agenda-card,
+.followup-card,
+.patient-card,
+.detail-card,
+.soft-card,
+.library-card,
+.settings-list>button,
+.wizard-card,
+.bv-card,
+.gf-summary>div,
+.gf-chart,
+.gf-weight-changes,
+.pf-prontuario-card{
+  border-color:var(--p8-border)!important;
+  background:rgba(255,253,251,.94)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+.lactation-kpi,
+.patient-card,
+.detail-card,
+.soft-card,
+.library-card,
+.settings-list>button,
+.wizard-card,
+.bv-card,
+.pf-prontuario-card{
+  border-radius:var(--p8-radius-card)!important;
+}
+.patient-card:hover,
+.agenda-card:hover,
+.settings-list>button:hover,
+.quick-actions-grid button:hover{
+  transform:translateY(-1px);
+  box-shadow:var(--p8-shadow-2)!important;
+  border-color:var(--p8-border-strong)!important;
+}
+.patient-card,
+.agenda-card,
+.settings-list>button,
+.quick-actions-grid button{
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease,background .16s ease!important;
+}
+
+/* Home — priority card */
+.next-appointment-card{
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(167,121,174,.17)!important;
+  border-radius:var(--p8-radius-hero)!important;
+  background:
+    radial-gradient(circle at 90% 0,rgba(206,174,214,.24),transparent 45%),
+    linear-gradient(145deg,#f5edf6 0%,#efe4f1 100%)!important;
+  color:var(--p8-ink)!important;
+  box-shadow:var(--p8-shadow-2)!important;
+}
+.next-appointment-card:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  border-radius:inherit;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.82);
+}
+.next-appointment-card .card-eyebrow{opacity:1!important}
+.next-appointment-card .status-dot{background:var(--p8-lilac)!important;box-shadow:0 0 0 4px rgba(167,121,174,.12)}
+.next-time{
+  font-family:var(--p8-serif)!important;
+  font-weight:600!important;
+  color:var(--p8-lilac-deep)!important;
+}
+.next-patient strong{color:var(--p8-ink)!important}
+.next-patient span{color:var(--p8-muted)!important;opacity:1!important}
+.next-appointment-card .ui-button{
+  background:rgba(255,255,255,.7)!important;
+  border-color:rgba(143,97,152,.16)!important;
+  color:var(--p8-ink-soft)!important;
+  box-shadow:none!important;
+}
+.next-appointment-card .ui-button-primary{
+  background:var(--p8-plum)!important;
+  color:#fff!important;
+  border-color:var(--p8-plum)!important;
+  box-shadow:0 7px 16px rgba(56,45,59,.14)!important;
+}
+
+/* KPI cards */
+.lactation-kpis{align-items:stretch}
+.lactation-kpi{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(255,253,251,.88))!important;
+}
+.lactation-kpi:before{
+  content:"";
+  position:absolute;
+  width:74px;height:74px;
+  border-radius:999px;
+  right:-34px;top:-34px;
+  background:rgba(167,121,174,.07);
+}
+.lactation-kpi>span{
+  color:var(--p8-muted)!important;
+  font-weight:650!important;
+}
+.lactation-kpi>strong{
+  position:relative;
+  font-family:var(--p8-serif)!important;
+  font-weight:600!important;
+  color:var(--p8-ink)!important;
+}
+.lactation-kpi>small{color:var(--p8-sage-deep)!important}
+.lactation-kpi.attention>small{color:var(--p8-lilac-deep)!important}
+
+/* Quick access */
+.quick-actions-grid button{
+  border-color:var(--p8-border)!important;
+  background:rgba(255,255,255,.9)!important;
+  color:var(--p8-muted)!important;
+  box-shadow:0 2px 8px rgba(55,38,48,.03)!important;
+}
+.quick-actions-grid b{
+  width:34px;height:34px;
+  border-radius:12px;
+  display:grid;place-items:center;
+  background:var(--p8-lilac-faint);
+  color:var(--p8-lilac-deep)!important;
+  font-weight:600!important;
+}
+.quick-actions-grid button:active{transform:translateY(1px)!important}
+
+/* Agenda */
+[data-date-strip-live].date-strip{
+  border:1px solid var(--p8-border)!important;
+  border-radius:18px!important;
+  padding:6px!important;
+  background:rgba(255,253,251,.78)!important;
+  box-shadow:0 3px 12px rgba(55,38,48,.035)!important;
+}
+[data-date-strip-live] .date-pill,
+[data-date-strip-live] .date-week-nav{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--p8-muted)!important;
+  border-radius:13px!important;
+}
+[data-date-strip-live] .date-pill[aria-pressed="true"],
+[data-date-strip-live] .date-pill.selected,
+[data-date-strip-live] .date-pill.active{
+  background:var(--p8-lilac)!important;
+  color:#fff!important;
+  box-shadow:0 7px 18px rgba(143,97,152,.18)!important;
+}
+[data-date-strip-live] .date-week-nav{
+  color:var(--p8-ink-soft)!important;
+  font-size:20px!important;
+}
+.agenda-card{
+  border-radius:18px!important;
+  background:rgba(255,253,251,.96)!important;
+}
+.agenda-card.current{box-shadow:var(--p8-shadow-2)!important;border-color:rgba(167,121,174,.26)!important}
+.agenda-card time{
+  font-family:var(--p8-serif)!important;
+  font-weight:600!important;
+  color:var(--p8-lilac-deep)!important;
+}
+.agenda-main strong{font-family:var(--p8-serif)!important;font-weight:600!important;color:var(--p8-ink)!important}
+.agenda-main span{color:var(--p8-muted)!important}
+.agenda-actions button,
+.followup-actions button,
+.patient-quick button{
+  min-height:42px!important;
+  border-radius:12px!important;
+  border-color:var(--p8-border)!important;
+  background:#fff!important;
+  color:var(--p8-ink-soft)!important;
+}
+.agenda-actions button[data-action="start-scheduled-appointment"],
+.agenda-actions button[data-action="open-encounter"]{
+  background:var(--p8-plum)!important;
+  border-color:var(--p8-plum)!important;
+  color:#fff!important;
+  box-shadow:0 5px 13px rgba(56,45,59,.13)!important;
+}
+.agenda-actions button[data-action="open-clinical-note"]{
+  background:var(--p8-lilac-faint)!important;
+  border-color:rgba(167,121,174,.18)!important;
+  color:var(--p8-lilac-deep)!important;
+}
+.agenda-actions button.danger{
+  background:transparent!important;
+  border-color:rgba(155,77,82,.22)!important;
+  color:var(--p8-danger)!important;
+}
+.pill{border:1px solid transparent!important}
+.pill.completed{background:var(--p8-sage-soft)!important;color:var(--p8-sage-deep)!important}
+.pill.confirmed{background:var(--p8-lilac-faint)!important;color:var(--p8-lilac-deep)!important;border-color:rgba(167,121,174,.1)!important}
+.pill.waiting{background:var(--p8-warm-soft)!important;color:#866844!important}
+.pill.danger{background:var(--p8-danger-soft)!important;color:var(--p8-danger)!important}
+
+/* Patients */
+.search-field{
+  border-color:var(--p8-border)!important;
+  background:rgba(255,255,255,.88)!important;
+  box-shadow:0 3px 12px rgba(55,38,48,.035)!important;
+}
+.patient-avatar{
+  background:linear-gradient(145deg,#f1e5f2,#e8d8eb)!important;
+  color:var(--p8-lilac-deep)!important;
+  border:1px solid rgba(167,121,174,.12)!important;
+}
+.patient-card .pill{box-shadow:none!important}
+.patient-header{
+  padding:4px 0 2px;
+}
+.patient-title-row{align-items:center!important}
+.patient-quick button{
+  background:rgba(255,255,255,.86)!important;
+  box-shadow:0 2px 8px rgba(55,38,48,.025)!important;
+}
+.patient-quick button:hover{box-shadow:var(--p8-shadow-1)!important}
+.baby-selector-wrap{
+  padding:13px 14px;
+  border:1px solid var(--p8-border);
+  border-radius:16px;
+  background:rgba(255,253,251,.78);
+  box-shadow:0 3px 12px rgba(55,38,48,.03);
+}
+.baby-tab{
+  border-color:var(--p8-border)!important;
+  background:#fff!important;
+  color:var(--p8-ink-soft)!important;
+}
+.baby-tab.active{
+  background:var(--p8-plum)!important;
+  border-color:var(--p8-plum)!important;
+  color:#fff!important;
+  box-shadow:0 5px 14px rgba(56,45,59,.14)!important;
+}
+.detail-list>div{border-color:var(--p8-border)!important}
+.detail-list dt{color:var(--p8-muted)!important}
+.detail-list dd{color:var(--p8-ink)!important}
+.timeline-item>span{background:#ddd3da!important}
+.timeline-item:not(:last-child)>span:after{background:#ece3e9!important}
+.timeline-item.active>span{
+  background:var(--p8-lilac)!important;
+  box-shadow:0 0 0 4px rgba(167,121,174,.1);
+}
+.timeline-entry{
+  padding:0 0 14px!important;
+  border-radius:10px!important;
+}
+.timeline-entry:hover{background:linear-gradient(90deg,rgba(167,121,174,.055),transparent 80%)!important}
+.timeline-entry small{color:var(--p8-muted)!important}
+.timeline-entry p{color:var(--p8-muted)!important}
+.timeline-entry em{color:var(--p8-lilac-deep)!important}
+
+/* Follow-ups */
+.followup-card{
+  border-radius:18px!important;
+}
+.followup-card.urgent{
+  border-left:3px solid var(--p8-lilac)!important;
+}
+.followup-icon{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-lilac-deep)!important;
+  border:1px solid rgba(167,121,174,.12);
+}
+
+/* Finance */
+.finance-card .finance-amount{
+  font-family:var(--p8-serif)!important;
+  color:var(--p8-ink)!important;
+  font-weight:600!important;
+}
+.finance-card .agenda-actions button[data-action="mark-paid"]{
+  background:var(--p8-plum)!important;
+  color:#fff!important;
+  border-color:var(--p8-plum)!important;
+}
+.finance-card .agenda-actions button[data-action="undo-paid"]{
+  color:var(--p8-danger)!important;
+  background:var(--p8-danger-soft)!important;
+  border-color:rgba(155,77,82,.18)!important;
+}
+
+/* Billing v2 */
+.bv-card{
+  background:linear-gradient(180deg,#fffdfb,#faf5f8)!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+.bv-head strong{font-family:var(--p8-serif)!important;color:var(--p8-ink)!important}
+.bv-head>span{
+  color:var(--p8-sage-deep)!important;
+  background:var(--p8-sage-soft)!important;
+}
+.bv-package-summary{
+  background:var(--p8-lilac-faint)!important;
+  border-color:rgba(167,121,174,.12)!important;
+}
+.bv-package-summary strong{color:var(--p8-ink)!important}
+.bv-package-summary span,.bv-package-summary small,.bv-hint{color:var(--p8-muted)!important}
+.bv-value-linked input{background:#f7f2f6!important}
+
+/* Forms / clinical wizard */
+.field input,
+.field select,
+.field textarea,
+.unit-input,
+.choice,
+.tag-choice,
+.chip{
+  border-color:var(--p8-border)!important;
+}
+.field input,
+.field select,
+.field textarea{
+  background:#fff!important;
+  color:var(--p8-ink)!important;
+  border-radius:12px!important;
+}
+.field>span{color:var(--p8-ink-soft)!important}
+.choice,.tag-choice,.chip{
+  background:#fff!important;
+  color:var(--p8-ink-soft)!important;
+  border-radius:12px!important;
+}
+.choice.selected,
+.tag-choice.selected,
+.chip.selected,
+.choice[aria-pressed="true"],
+.tag-choice[aria-pressed="true"],
+.chip[aria-pressed="true"]{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-lilac-deep)!important;
+  border-color:rgba(167,121,174,.32)!important;
+  box-shadow:0 3px 10px rgba(143,97,152,.06)!important;
+}
+.wizard-card{
+  background:rgba(255,253,251,.96)!important;
+}
+.wizard-footer,
+.patient-form-actions{
+  background:rgba(251,247,244,.9)!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-2)!important;
+}
+.wizard-progress span.active{background:var(--p8-lilac)!important}
+
+/* Growth / WHO chart: keep semantic sage, align surfaces with brand. */
+.gf-sheet{
+  background:var(--p8-bg)!important;
+  color:var(--p8-ink)!important;
+  box-shadow:var(--p8-shadow-3)!important;
+}
+.gf-sheet>header{
+  background:rgba(251,247,244,.94)!important;
+  border-color:var(--p8-border)!important;
+}
+.gf-close{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-plum)!important;
+}
+.gf-summary>div,.gf-chart,.gf-weight-changes{
+  background:#fff!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+.gf-summary small,.gf-summary span,.gf-lab,.gf-tick,.gf-info{color:var(--p8-muted)!important}
+.gf-summary strong,.gf-inline-head strong,.gf-weight-changes-head strong{color:var(--p8-ink)!important}
+.gf-own{stroke:var(--p8-sage-deep)!important}
+.gf-dot{stroke:var(--p8-sage-deep)!important}
+.gf-dot.now{fill:var(--p8-sage-deep)!important}
+.gf-primary{
+  background:var(--p8-plum)!important;
+  border-radius:13px!important;
+  box-shadow:0 7px 18px rgba(56,45,59,.15)!important;
+}
+.gf-launch,.gf-inline-head button,.gf-sex-prompt button{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-lilac-deep)!important;
+  border-color:rgba(167,121,174,.18)!important;
+}
+
+/* Legacy patient/prontuário surfaces still used by the current release */
+.pf-prontuario-card{
+  background:linear-gradient(145deg,#fffdfb,#f8f1f7)!important;
+  border-color:var(--p8-border)!important;
+}
+.pf-prontuario-card small{color:var(--p8-lilac-deep)!important}
+.pf-prontuario-card span{color:var(--p8-muted)!important}
+.pf-prontuario-card button{
+  background:var(--p8-plum)!important;
+  color:#fff!important;
+  box-shadow:0 6px 16px rgba(56,45,59,.14)!important;
+}
+.pf-prontuario-list>button{
+  background:#fff!important;
+  border-color:var(--p8-border)!important;
+  border-radius:13px!important;
+}
+.pf-prontuario-list>button b{color:var(--p8-lilac-deep)!important}
+
+/* Dialogs, toast, overlays = elevation 3 */
+.dui-dialog,.ui-modal-card,.ui-drawer-panel{
+  border-color:var(--p8-border-strong)!important;
+  box-shadow:var(--p8-shadow-3)!important;
+  background:#fff!important;
+}
+.dui-backdrop,.ui-modal,.ui-drawer{
+  background:rgba(45,36,47,.34)!important;
+  backdrop-filter:blur(7px)!important;
+}
+.dui-dialog-copy h2{font-family:var(--p8-serif)!important;color:var(--p8-ink)!important}
+.dui-button.primary{background:var(--p8-plum)!important;color:#fff!important}
+.dui-toast,.app-toast{
+  background:var(--p8-plum)!important;
+  box-shadow:var(--p8-shadow-2)!important;
+}
+
+/* Bottom navigation = floating material plane */
+.lactation-bottom-nav{
+  background:rgba(255,253,251,.94)!important;
+  border-top:1px solid rgba(220,208,216,.72)!important;
+  box-shadow:var(--p8-shadow-up)!important;
+  backdrop-filter:blur(22px) saturate(1.08)!important;
+}
+.lactation-bottom-nav button{
+  position:relative;
+  color:#968b94!important;
+  transition:color .14s ease,transform .14s ease!important;
+}
+.lactation-bottom-nav button.active{
+  color:var(--p8-lilac-deep)!important;
+}
+.lactation-bottom-nav button.active:after{
+  content:"";
+  position:absolute;
+  left:50%;
+  bottom:2px;
+  width:24px;
+  height:2px;
+  border-radius:999px;
+  background:var(--p8-lilac);
+  transform:translateX(-50%);
+}
+.lactation-bottom-nav button:active{transform:translateY(1px)}
+
+/* FAB = elevation 3 */
+.lactation-fab,
+.patient-title-row>button.ui-button-primary{
+  background:var(--p8-plum)!important;
+  color:#fff!important;
+  border:1px solid rgba(255,255,255,.12)!important;
+  box-shadow:var(--p8-shadow-3)!important;
+  transition:transform .15s ease,box-shadow .15s ease!important;
+}
+.lactation-fab:hover{transform:translateY(-1px)}
+.lactation-fab:active{transform:translateY(1px);box-shadow:var(--p8-shadow-2)!important}
+
+/* Authentication */
+.auth-shell{background:var(--p8-bg)!important}
+.auth-card{
+  background:rgba(255,253,251,.97)!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-2)!important;
+}
+.auth-card h1{font-family:var(--p8-serif)!important;color:var(--p8-ink)!important}
+.auth-submit{background:var(--p8-plum)!important}
+
+/* Desktop refinement */
+@media(min-width:761px){
+  .lactation-page{padding:32px!important}
+  .page-heading h1,.lactation-hello h1{font-size:38px!important}
+  .detail-card,.soft-card,.patient-card,.agenda-card{box-shadow:var(--p8-shadow-1)!important}
+  .next-appointment-card{max-width:760px}
+}
+
+/* Mobile-first polish */
+@media(max-width:760px){
+  body{background:var(--p8-bg)!important}
+  .lactation-topbar{
+    height:68px!important;
+    min-height:68px!important;
+    padding-inline:16px!important;
+    box-shadow:0 4px 18px rgba(55,38,48,.035)!important;
+  }
+  .lactation-mobile-brand .lactation-brand-mark{
+    width:40px!important;
+    height:40px!important;
+  }
+  .lactation-mobile-brand strong{font-size:16px!important}
+  .lactation-mobile-brand small{font-size:10px!important}
+  .lactation-page{padding:18px 16px 30px!important}
+  .lactation-screen{gap:18px!important}
+
+  .lactation-hello{padding:5px 1px 0!important}
+  .lactation-hello h1{
+    font-size:31px!important;
+    line-height:1.02!important;
+    max-width:330px;
+    margin:6px 0 7px!important;
+  }
+  .lactation-hello p{font-size:12px!important;color:var(--p8-muted)!important}
+
+  .next-appointment-card{
+    padding:18px 17px!important;
+    grid-template-columns:68px minmax(0,1fr)!important;
+    gap:6px 13px!important;
+  }
+  .next-time{font-size:31px!important}
+  .next-patient strong{font-family:var(--p8-serif)!important;font-size:15px!important;font-weight:600!important}
+  .quick-row{gap:7px!important;margin-top:11px!important}
+  .next-appointment-card .ui-button{min-height:44px!important}
+
+  .lactation-kpis{
+    gap:9px!important;
+  }
+  .lactation-kpi{
+    padding:14px 12px!important;
+    border-radius:17px!important;
+    min-height:108px;
+  }
+  .lactation-kpi>span{font-size:9px!important;line-height:1.25!important}
+  .lactation-kpi>strong{font-size:22px!important}
+  .lactation-kpi>small{font-size:9px!important}
+
+  .section-heading h2{font-size:20px!important}
+  .soft-card,.detail-card{padding:15px!important}
+  .quick-actions-grid{gap:9px!important}
+  .quick-actions-grid button{
+    min-height:70px!important;
+    border-radius:15px!important;
+  }
+
+  [data-date-strip-live].date-strip{
+    margin-inline:0!important;
+    padding:5px!important;
+    border-radius:17px!important;
+  }
+  [data-date-strip-live] .date-pill,
+  [data-date-strip-live] .date-week-nav{
+    min-height:50px!important;
+  }
+  [data-date-strip-live] .date-pill strong{font-size:16px!important}
+
+  .agenda-card{
+    padding:14px 13px!important;
+    border-radius:17px!important;
+    min-height:82px!important;
+  }
+  .agenda-card time{font-size:15px!important}
+  .agenda-main strong{font-size:14px!important}
+  .agenda-main span{font-size:10px!important}
+  .agenda-actions button,.followup-actions button{min-height:44px!important}
+
+  .patient-card{
+    padding:14px!important;
+    border-radius:18px!important;
+  }
+  .patient-title-row h1{font-size:27px!important}
+  .patient-quick{gap:8px!important}
+  .patient-quick button{min-height:44px!important}
+  .detail-card{border-radius:18px!important}
+  .timeline-item{min-height:90px!important}
+
+  .bv-card{padding:16px!important;border-radius:18px!important}
+  .wizard-card{padding:18px 16px!important;box-shadow:var(--p8-shadow-1)!important}
+  .wizard-card h2{font-size:25px!important}
+
+  .lactation-bottom-nav{
+    height:calc(70px + env(safe-area-inset-bottom))!important;
+    padding:6px 8px env(safe-area-inset-bottom)!important;
+  }
+  .lactation-bottom-nav button{min-height:58px!important}
+  .lactation-bottom-nav button b{font-size:9px!important}
+  .lactation-fab{
+    width:56px!important;
+    height:56px!important;
+    right:max(18px,env(safe-area-inset-right))!important;
+    bottom:calc(88px + env(safe-area-inset-bottom))!important;
+  }
+}
+
+@media(max-width:390px){
+  .lactation-hello h1{font-size:29px!important}
+  .lactation-kpi{min-height:100px}
+  .next-appointment-card{grid-template-columns:62px minmax(0,1fr)!important}
+  .quick-row{grid-template-columns:1fr 1fr!important}
+}
+
+/* Reduced motion keeps hierarchy but removes movement. */
+@media(prefers-reduced-motion:reduce){
+  .patient-card,.agenda-card,.settings-list>button,.quick-actions-grid button,
+  .ui-button,.lactation-fab,.lactation-bottom-nav button{transition:none!important}
+  .patient-card:hover,.agenda-card:hover,.settings-list>button:hover,
+  .quick-actions-grid button:hover,.lactation-fab:hover{transform:none!important}
+}

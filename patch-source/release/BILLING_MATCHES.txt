@@ -1,0 +1,4 @@
+core/app-shell.js
+core/lib/app-data.js
+features/patient-fixes.css
+features/patient-fixes.js

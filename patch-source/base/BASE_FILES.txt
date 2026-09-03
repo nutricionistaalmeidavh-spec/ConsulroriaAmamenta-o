@@ -1,0 +1,12 @@
+app-shell.js
+config.js
+index.html
+lib/app-data.js
+lib/auth-service.js
+lib/backup-service.js
+lib/encounter-form.js
+lib/media-service.js
+lib/pdf-service.js
+lib/repositories.js
+lib/supabase-client.js
+styles.css
