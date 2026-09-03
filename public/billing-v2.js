@@ -180,11 +180,82 @@ async function bvFinalize(mid,appointmentId,encounterId){
   }
   return result||{handled:true};
 }
-function bvSchedule(){clearTimeout(bvTimer);bvTimer=setTimeout(()=>bvMount().catch(e=>console.warn('Billing v2 mount',e)),120)}
+function bvPatientMotherId(){const m=String(location.hash||'').match(/^#\/patient\/([^/]+)/);return m?decodeURIComponent(m[1]):''}
+async function bvPatientPackage(mid){
+  if(!mid)return null;
+  const packages=await bvRest('care_packages?mother_id=eq.'+encodeURIComponent(mid)+'&status=neq.cancelled&select=id,service_label,total_cents,sessions_total,sessions_used,status,payment_method,financial_entry_id,created_at&order=created_at.desc&limit=1');
+  const pkg=packages?.[0];if(!pkg)return null;
+  const [items,financial]=await Promise.all([
+    bvRest('care_package_items?package_id=eq.'+encodeURIComponent(pkg.id)+'&status=neq.cancelled&select=id,label,category,quantity_total,quantity_used,pricing_mode,amount_cents,notes,status,created_at&order=created_at.asc'),
+    bvRest('financial_entries?package_id=eq.'+encodeURIComponent(pkg.id)+'&status=neq.Cancelado&select=id,amount_cents,status,paid_at,description,package_item_id,created_at&order=created_at.asc')
+  ]);
+  return{pkg,items:items||[],financial:financial||[]};
+}
+function bvPlanStatus(bundle){
+  const pending=bundle.financial.filter(x=>x.status==='Pendente').reduce((n,x)=>n+Number(x.amount_cents||0),0);
+  const paid=bundle.financial.filter(x=>x.status==='Pago').reduce((n,x)=>n+Number(x.amount_cents||0),0);
+  return pending>0?{label:'Pendente',tone:'waiting',meta:bvMoney(pending)+' a receber'}:paid>0?{label:'Pago',tone:'completed',meta:bvMoney(paid)+' recebido'}:{label:'Sem cobrança',tone:'',meta:''};
+}
+function bvPlanMarkup(bundle){
+  if(!bundle)return '<article class="detail-card bv-plan-card"><div class="section-heading"><div><span class="section-kicker">PLANO / PACOTE</span><h2>Nenhum plano cadastrado</h2></div></div><p class="bv-plan-empty">Crie o plano a partir de um atendimento para controlar sessões e serviços.</p></article>';
+  const {pkg,items}=bundle,used=Number(pkg.sessions_used||0),total=Number(pkg.sessions_total||0),left=Math.max(0,total-used),pct=total?Math.min(100,Math.round(used/total*100)):0,pay=bvPlanStatus(bundle);
+  const itemRows=items.length?items.map(item=>{
+    const remain=Math.max(0,Number(item.quantity_total||0)-Number(item.quantity_used||0));
+    const price=item.pricing_mode==='additional'&&Number(item.amount_cents||0)>0?'Adicional · '+bvMoney(item.amount_cents):'Incluído no plano';
+    return '<div class="bv-plan-item"><div><strong>'+String(item.label||'Serviço')+'</strong><span>'+Number(item.quantity_used||0)+' de '+Number(item.quantity_total||0)+' utilizados · '+price+'</span></div>'+(remain>0?'<button type="button" class="ui-button" data-bv-use-item="'+item.id+'">Registrar uso</button>':'<span class="pill completed">Concluído</span>')+'</div>';
+  }).join(''):'<div class="bv-plan-no-items">Nenhum serviço adicional incluído ainda.</div>';
+  return '<article class="detail-card bv-plan-card" data-bv-plan-id="'+pkg.id+'">'+
+    '<div class="section-heading"><div><span class="section-kicker">PLANO / PACOTE</span><h2>'+String(pkg.service_label||'Plano de acompanhamento')+'</h2></div><span class="pill '+pay.tone+'">'+pay.label+'</span></div>'+
+    '<div class="bv-plan-metrics"><div><small>Valor do plano</small><strong>'+bvMoney(pkg.total_cents)+'</strong></div><div><small>Consultas</small><strong>'+used+' / '+total+'</strong><span>'+left+' restante'+(left===1?'':'s')+'</span></div></div>'+
+    '<div class="bv-plan-progress" aria-label="'+pct+'% das consultas utilizadas"><i style="width:'+pct+'%"></i></div>'+
+    '<small class="bv-plan-payment">'+pay.meta+'</small>'+
+    '<div class="bv-plan-items-head"><strong>Serviços incluídos depois</strong><button type="button" class="ui-button ui-button-primary" data-bv-add-item="'+pkg.id+'">+ Adicionar serviço</button></div>'+
+    '<div class="bv-plan-items">'+itemRows+'</div>'+
+  '</article>';
+}
+async function bvMountPatientPlan(force=false){
+  const mid=bvPatientMotherId(),screen=document.querySelector('[data-screen="patient"]');if(!mid||!screen)return;
+  let host=document.querySelector('[data-bv-patient-plan]');
+  if(!force&&host?.dataset.motherId===mid)return;
+  const bundle=await bvPatientPackage(mid);
+  if(!host){host=document.createElement('div');host.dataset.bvPatientPlan='';const anchor=screen.querySelector('.baby-selector-wrap');anchor?.insertAdjacentElement('afterend',host)}
+  if(!host)return;
+  host.dataset.motherId=mid;host.innerHTML=bvPlanMarkup(bundle);
+}
+function bvClosePlanDialog(){document.querySelector('[data-bv-plan-dialog]')?.remove()}
+function bvOpenPlanDialog(packageId){
+  bvClosePlanDialog();
+  const wrap=document.createElement('div');wrap.dataset.bvPlanDialog='';wrap.className='bv-plan-dialog-backdrop';
+  wrap.innerHTML='<form class="bv-plan-dialog" data-bv-plan-form><div class="bv-plan-dialog-head"><div><span class="section-kicker">PLANO / PACOTE</span><h2>Adicionar serviço</h2></div><button type="button" class="ui-button ui-button-ghost" data-bv-close-dialog aria-label="Fechar">×</button></div>'+
+    '<label class="field"><span>Serviço</span><input required data-bv-item-label placeholder="Auriculoterapia, laser, taping..."></label>'+
+    '<div class="bv-grid two"><label class="field"><span>Quantidade</span><input required data-bv-item-qty type="number" min="1" step="1" value="1"></label><label class="field"><span>Cobrança</span><select data-bv-item-pricing><option value="included">Incluído no valor atual</option><option value="additional">Adicionar valor ao plano</option></select></label></div>'+
+    '<label class="field" data-bv-item-amount-wrap hidden><span>Valor adicional</span><div class="unit-input"><b>R$</b><input data-bv-item-amount type="number" min="0" step="0.01" inputmode="decimal"></div></label>'+
+    '<label class="field"><span>Observação</span><textarea data-bv-item-notes rows="2" placeholder="Opcional"></textarea></label>'+
+    '<div class="bv-plan-dialog-actions"><button type="button" class="ui-button" data-bv-close-dialog>Cancelar</button><button type="submit" class="ui-button ui-button-primary">Adicionar ao plano</button></div>';
+  wrap.dataset.packageId=packageId;document.body.appendChild(wrap);
+  wrap.querySelector('[data-bv-item-pricing]')?.addEventListener('change',e=>wrap.querySelector('[data-bv-item-amount-wrap]')?.toggleAttribute('hidden',e.target.value!=='additional'));
+  wrap.querySelector('[data-bv-item-label]')?.focus();
+}
+async function bvSubmitPlanItem(form){
+  const wrap=form.closest('[data-bv-plan-dialog]'),packageId=wrap?.dataset.packageId;if(!packageId)return;
+  const label=form.querySelector('[data-bv-item-label]')?.value?.trim(),qty=Math.max(1,Math.floor(Number(form.querySelector('[data-bv-item-qty]')?.value||1))),pricing=form.querySelector('[data-bv-item-pricing]')?.value||'included',amount=pricing==='additional'?bvCents(form.querySelector('[data-bv-item-amount]')?.value||0):0,notes=form.querySelector('[data-bv-item-notes]')?.value?.trim()||'';
+  if(!label)throw new Error('Informe o serviço.');
+  if(pricing==='additional'&&amount<=0)throw new Error('Informe o valor adicional.');
+  await bvRpc('add_care_package_item',{p_package_id:packageId,p_label:label,p_quantity:qty,p_category:'service',p_pricing_mode:pricing,p_amount_cents:amount,p_notes:notes});
+  bvClosePlanDialog();await bvMountPatientPlan(true);bvToast('Serviço adicionado ao plano.','success');
+}
+async function bvUsePlanItem(itemId){
+  if(!window.confirm('Registrar uma utilização deste serviço no plano?'))return;
+  await bvRpc('consume_care_package_item',{p_item_id:itemId,p_appointment_id:null,p_encounter_id:null,p_notes:''});
+  await bvMountPatientPlan(true);bvToast('Uso registrado no plano.','success');
+}
+function bvSchedule(){clearTimeout(bvTimer);bvTimer=setTimeout(()=>{bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}
 try{sessionStorage.removeItem('debora-billing-draft-v4')}catch{}
-window.DeboraBilling={beforeStart:bvBeforeStart,bindAppointment:bvBindAppointment,finalize:bvFinalize,getSelection:bvSelection,remount:()=>bvMount(true)};
+window.DeboraBilling={beforeStart:bvBeforeStart,bindAppointment:bvBindAppointment,finalize:bvFinalize,getSelection:bvSelection,remount:()=>bvMount(true),remountPlan:()=>bvMountPatientPlan(true)};
 new MutationObserver(bvSchedule).observe(document.documentElement,{subtree:true,childList:true});
 window.addEventListener('hashchange',bvSchedule);
 window.addEventListener('focus',bvSchedule);
 document.addEventListener('change',e=>{if(e.target.matches('[data-appointment-patient]'))setTimeout(()=>bvMount(true).catch(()=>{}),0)});
+document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),close=e.target.closest('[data-bv-close-dialog]');if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
+document.addEventListener('submit',e=>{if(e.target.matches('[data-bv-plan-form]')){e.preventDefault();bvSubmitPlanItem(e.target).catch(err=>bvToast(err.message||String(err),'error'))}});
 bvSchedule();
