@@ -1,0 +1,52 @@
+name: Repack phases 6-7 agenda
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - '.github/workflows/repack-phases-6-7.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack agenda source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | tr -d '\r\n' | base64 --decode > /tmp/base.zip
+          unzip -t /tmp/base.zip
+          rm -rf /tmp/agenda
+          mkdir -p /tmp/agenda
+          unzip -q /tmp/base.zip -d /tmp/agenda
+          cp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
+          cp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
+          cd /tmp/agenda
+          zip -qr /tmp/new.zip .
+          cd "$GITHUB_WORKSPACE"
+          base64 -w0 /tmp/new.zip > /tmp/new.b64
+          python3 -c "from pathlib import Path;s=Path('/tmp/new.b64').read_text();n=len(s);cuts=[0,n//4,n//2,(3*n)//4,n];[Path(f'public/release-1.12.0-agenda-{i+1}.txt').write_text(s[cuts[i]:cuts[i+1]]) for i in range(4)]"
+          cat public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt | base64 --decode > /tmp/verify.zip
+          unzip -t /tmp/verify.zip
+          rm -rf /tmp/verify
+          mkdir -p /tmp/verify
+          unzip -q /tmp/verify.zip -d /tmp/verify
+          cmp patch-source/agenda/app-shell.js /tmp/verify/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/verify/core/lib/app-data.js
+          grep -q "DeboraBilling?.finalize" /tmp/verify/core/app-shell.js
+          grep -q "listEncounterIdsForBaby" /tmp/verify/core/app-shell.js
+          grep -q "Abrir prontuário" /tmp/verify/core/app-shell.js
+      - name: Commit archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add public/release-1.12.0-agenda-1.txt public/release-1.12.0-agenda-2.txt public/release-1.12.0-agenda-3.txt public/release-1.12.0-agenda-4.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: pack phases 6-7 into agenda release"
+          git push
