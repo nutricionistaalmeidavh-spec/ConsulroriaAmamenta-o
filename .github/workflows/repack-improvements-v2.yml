@@ -1,0 +1,91 @@
+name: Repack improvements v2 agenda
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - '.github/workflows/repack-improvements-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct current agenda patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
+          unzip -t /tmp/agenda.zip
+          rm -rf /tmp/agenda
+          mkdir -p /tmp/agenda
+          unzip -q /tmp/agenda.zip -d /tmp/agenda
+
+      - name: Apply versioned improvements source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
+          cp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
+
+      - name: Build patched agenda archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/agenda
+          zip -qr /tmp/agenda-improvements-v2.zip .
+          unzip -t /tmp/agenda-improvements-v2.zip
+          base64 -w0 /tmp/agenda-improvements-v2.zip > /tmp/agenda.b64
+          python3 - <<'PY'
+from pathlib import Path
+s=Path('/tmp/agenda.b64').read_text()
+n=len(s)
+cuts=[0]
+for i in range(1,4):
+    cuts.append((n*i)//4)
+cuts.append(n)
+for i in range(4):
+    Path(f'public/release-1.12.0-agenda-{i+1}.txt')
+PY
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PY'
+from pathlib import Path
+s=Path('/tmp/agenda.b64').read_text()
+n=len(s)
+cuts=[0]+[(n*i)//4 for i in range(1,4)]+[n]
+for i in range(4):
+    Path(f'public/release-1.12.0-agenda-{i+1}.txt').write_text(s[cuts[i]:cuts[i+1]])
+PY
+
+      - name: Verify reconstructed patched archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/verify.zip
+          unzip -t /tmp/verify.zip
+          rm -rf /tmp/verify
+          mkdir -p /tmp/verify
+          unzip -q /tmp/verify.zip -d /tmp/verify
+          grep -q "setFinancialPaymentState" /tmp/verify/core/lib/app-data.js
+          grep -q "undoFinancialPaid" /tmp/verify/core/lib/app-data.js
+          grep -q "createOrSupersedeFollowup" /tmp/verify/core/app-shell.js
+          grep -q "listFinalizedEncounters" /tmp/verify/core/app-shell.js
+          grep -q "Desfazer pagamento" /tmp/verify/core/app-shell.js
+          cmp patch-source/agenda/app-shell.js /tmp/verify/core/app-shell.js
+          cmp patch-source/agenda/app-data.js /tmp/verify/core/lib/app-data.js
+
+      - name: Commit patched agenda archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add public/release-1.12.0-agenda-{1,2,3,4}.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: pack improvements phases 1-5 into agenda release"
+          git push
