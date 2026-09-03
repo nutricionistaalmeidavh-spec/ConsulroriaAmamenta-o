@@ -92,8 +92,7 @@ function bvMarkup(selection,packages){
   '<div class="bv-grid">'+
     '<label class="field"><span>Tipo de cobrança</span><select data-bv-mode>'+
       '<option value="individual">Atendimento individual</option>'+
-      (packages.length?'<option value="package_active">Usar plano ativo</option>':'')+
-      '<option value="package_new">Novo plano / pacote</option>'+
+      (packages.length?'<option value="package_active">Usar plano ativo</option>':'<option value="package_new">Novo plano / pacote</option>')+
     '</select></label>'+
     '<label class="field"><span>Serviço</span><select data-bv-service>'+
       ['Consulta inicial','Retorno','Acompanhamento','Pré-natal'].map(x=>'<option>'+x+'</option>').join('')+
@@ -173,8 +172,6 @@ async function bvBindAppointment(mid,appointmentId,encounterId,selection=null){
   return row;
 }
 async function bvFinalize(mid,appointmentId,encounterId){
-  const s=bvValidate(bvSelection());
-  await bvBindAppointment(mid,appointmentId,encounterId,s);
   const result=await bvRpc('finalize_encounter_billing',{p_appointment_id:appointmentId,p_encounter_id:encounterId});
   bvClearDraft();
   if(result?.billing_mode==='package_active'||result?.billing_mode==='package_new'){
