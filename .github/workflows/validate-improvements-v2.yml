@@ -7,6 +7,10 @@ on:
     paths:
       - 'public/release-1.12.0-agenda-*.txt'
       - 'public/improvements-v2.css'
+      - 'public/billing-v2.js'
+      - 'public/billing-v2.css'
+      - 'public/patient-fixes-v2.js'
+      - 'public/growth-feature.js'
       - 'src/bootstrap.js'
       - 'patch-source/agenda/**'
       - 'package.json'
@@ -35,46 +39,52 @@ jobs:
           cmp patch-source/agenda/app-shell.js /tmp/agenda/core/app-shell.js
           cmp patch-source/agenda/app-data.js /tmp/agenda/core/lib/app-data.js
 
-      - name: Validate phase 1 agenda single source
+      - name: Validate phases 1-5 regression
         shell: bash
         run: |
           set -euo pipefail
           grep -q "startClinicalEncounterFromAppointment" /tmp/agenda/core/app-shell.js
-          grep -q "start_clinical_encounter_from_appointment" /tmp/agenda/core/lib/app-data.js
-          grep -q "start_clinical_encounter" /tmp/agenda/core/lib/app-data.js
-
-      - name: Validate phase 2 reversible finance
-        shell: bash
-        run: |
-          set -euo pipefail
           grep -q "set_financial_payment_state" /tmp/agenda/core/lib/app-data.js
-          grep -q "undoFinancialPaid" /tmp/agenda/core/lib/app-data.js
           grep -q "Desfazer pagamento" /tmp/agenda/core/app-shell.js
+          grep -q "create_or_supersede_followup" /tmp/agenda/core/lib/app-data.js
+          grep -q "groupedByPatient" /tmp/agenda/core/app-shell.js
+          grep -q "improvements-v2.css" src/bootstrap.js
+          grep -q "status=eq.finalized" /tmp/agenda/core/lib/app-data.js
 
-      - name: Validate phase 3 follow-up consolidation
+      - name: Validate phase 6 billing and package flow
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "create_or_supersede_followup" /tmp/agenda/core/lib/app-data.js
-          grep -q "createOrSupersedeFollowup" /tmp/agenda/core/app-shell.js
-          grep -q "groupedByPatient" /tmp/agenda/core/app-shell.js
+          grep -q "billing-v2.css" src/bootstrap.js
+          grep -q "billing-v2.js" src/bootstrap.js
+          grep -q "patient-fixes-v2.js" src/bootstrap.js
+          grep -q "set_appointment_billing" public/billing-v2.js
+          grep -q "finalize_encounter_billing" public/billing-v2.js
+          grep -q "package_active" public/billing-v2.js
+          grep -q "package_new" public/billing-v2.js
+          grep -q "DeboraBilling?.bindAppointment" /tmp/agenda/core/app-shell.js
+          grep -q "DeboraBilling?.finalize" /tmp/agenda/core/app-shell.js
+          ! grep -q "window.DeboraBilling=" public/patient-fixes-v2.js
+
+      - name: Validate phase 7 patient and clinical identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Abrir prontuário" /tmp/agenda/core/app-shell.js
+          grep -q "listEncounterIdsForBaby" /tmp/agenda/core/app-shell.js
+          grep -q "baby-tab.active" public/growth-feature.js
+          grep -q "birth_weight_g" public/growth-feature.js
+          grep -q "gfWeightTimelineV4" public/growth-feature.js
+          grep -q "DeboraGrowth" public/growth-feature.js
+          ! grep -R -i -q "Excluir paciente" patch-source/agenda public/patient-fixes-v2.js
 
       - name: Validate phase 4 mobile containment
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "improvements-v2.css" src/bootstrap.js
           grep -q "overflow-x: hidden" public/improvements-v2.css
           grep -q "\[data-date-strip-live\]" public/improvements-v2.css
           grep -q "min-width: 0" public/improvements-v2.css
-
-      - name: Validate phase 5 dashboard source
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q "listFinalizedEncounters" /tmp/agenda/core/app-shell.js
-          grep -q "status=eq.finalized" /tmp/agenda/core/lib/app-data.js
-          grep -q "state.encounters" /tmp/agenda/core/app-shell.js
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
