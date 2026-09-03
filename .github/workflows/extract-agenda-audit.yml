@@ -1,0 +1,37 @@
+name: Extract agenda audit source
+
+on:
+  push:
+    branches:
+      - improvements-v2
+    paths:
+      - '.github/workflows/extract-agenda-audit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct stable agenda patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat public/release-1.12.0-agenda-{1,2,3,4}.txt | tr -d '\r\n' | base64 --decode > /tmp/agenda.zip
+          unzip -t /tmp/agenda.zip
+          rm -rf /tmp/agenda
+          mkdir -p /tmp/agenda .audit-source
+          unzip -q /tmp/agenda.zip -d /tmp/agenda
+          cp /tmp/agenda/core/app-shell.js .audit-source/app-shell.js
+          cp /tmp/agenda/core/lib/app-data.js .audit-source/app-data.js
+      - name: Commit extracted audit source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add .audit-source
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: extract agenda source for phase validation"
+          git push
