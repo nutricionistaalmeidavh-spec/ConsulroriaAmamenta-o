@@ -1,0 +1,48 @@
+name: Smoke Cloudflare production
+
+on:
+  push:
+    branches: [improvements-v2]
+    paths: ['.github/workflows/smoke-cloudflare-production.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Cloudflare production and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev"
+          ok=0
+          for i in $(seq 1 36); do
+            code="$(curl -L -sS -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$code" = "200" ] && grep -q "Débora Lactação" /tmp/root.html; then
+              ok=1
+              break
+            fi
+            echo "Tentativa $i/36: HTTP $code; aguardando deploy..."
+            sleep 10
+          done
+          test "$ok" = "1"
+
+          curl -fsSL "$URL/phase8-design.css" -o /tmp/phase8.css
+          grep -q -- "--p8-shadow-1" /tmp/phase8.css
+          grep -q -- "--p8-shadow-2" /tmp/phase8.css
+          grep -q -- "--p8-shadow-3" /tmp/phase8.css
+          grep -q "icon-192.png" /tmp/phase8.css
+
+          curl -fsSL "$URL/manifest.webmanifest" -o /tmp/manifest.json
+          grep -q "#fbf7f4" /tmp/manifest.json
+
+          curl -fsSL "$URL/billing-v2.js" -o /tmp/billing.js
+          grep -q "set_appointment_billing" /tmp/billing.js
+          grep -q "finalize_encounter_billing" /tmp/billing.js
+
+          curl -fsSL "$URL/improvements-v2.css" -o /tmp/improvements.css
+          grep -q "overflow-x: hidden" /tmp/improvements.css
+
+          echo "Cloudflare production smoke test OK"
