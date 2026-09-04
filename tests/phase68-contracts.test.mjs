@@ -36,7 +36,7 @@ test('phase 7 export is structured from persisted patient data and not DOM scrap
 test('export excludes photos by default and makes inclusion explicit',()=>{const src=readFileSync('public/record-export-feature.js','utf8');assert.match(src,/includeMedia:false/);assert.match(src,/Fotos e mídia clínica/)});
 
 test('patient overview opens dedicated workspaces instead of scrolling to large inline cards',()=>{
-  const hub=readFileSync('public/patient-records-hub.js','utf8'),workspace=readFileSync('public/patient-workspace.js','utf8');assert.match(hub,/DeboraPatientWorkspace/);assert.match(hub,/open\('terms'/);assert.match(hub,/open\('referrals'/);assert.match(hub,/open\('album'/);assert.doesNotMatch(hub,/scrollIntoView/);for(const label of ['Álbum clínico','Encaminhamentos','Termos e autorizações','Prontuários'])assert.ok(workspace.includes(label),`${label} workspace missing`);
+  const hub=readFileSync('public/patient-records-hub.js','utf8'),workspace=readFileSync('public/patient-workspace.js','utf8');assert.match(hub,/DeboraPatientWorkspace/);assert.match(hub,/\['terms','referrals','album'\]/);assert.match(hub,/\.open\(kind,motherId/);assert.doesNotMatch(hub,/scrollIntoView/);for(const label of ['Álbum clínico','Encaminhamentos','Termos e autorizações','Prontuários'])assert.ok(workspace.includes(label),`${label} workspace missing`);
 });
 
 test('patient summary suppresses heavy inline cards and replaces the long record list with recent records',()=>{
