@@ -1,7 +1,7 @@
 # Entregas 0–2 — Documentos clínicos e Termos
 
 Base congelada: `709aeae1dd27d89d007cea914a4e18de4f270571`.
-Branch de trabalho: `feature/clinical-documents-phase-0-2`.
+Branch de trabalho original: `feature/clinical-documents-phase-0-2`.
 
 ## Fase 0 — contrato de regressão
 
@@ -20,7 +20,9 @@ Arquivos novos:
 - `public/documents-feature.js`: cliente documental isolado, leitura de contexto da paciente e acesso REST autenticado.
 - `public/document-pdf-service.js`: gerador de PDF reutilizável, sem dependência nova.
 - `public/documents-feature.css`: superfícies documentais usando os tokens atuais da Débora Lactação.
-- `supabase/phase-clinical-documents-terms.sql`: criação aditiva de `document_templates` e `clinical_documents`, RLS owner-scoped e validação dos vínculos clínicos.
+- `supabase/phase-clinical-documents-terms.sql`: criação aditiva de `clinical_document_templates` e `clinical_documents`, RLS owner-scoped e validação dos vínculos clínicos.
+
+A tabela `public.document_templates` já existente pertence a outra parte do produto e não é alterada por esta camada.
 
 Nenhuma tabela existente é removida ou renomeada.
 

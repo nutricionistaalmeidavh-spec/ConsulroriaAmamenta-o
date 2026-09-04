@@ -1,17 +1,27 @@
-name: Validate clinical documents phase 0-2
+name: Validate clinical documents phase 0-5
 
 on:
   push:
     branches:
       - feature/clinical-documents-phase-0-2
+      - feature/clinical-documents-phase-3-5
     paths:
       - 'public/phase02-loader.js'
       - 'public/documents-feature.js'
       - 'public/documents-feature.css'
       - 'public/document-pdf-service.js'
       - 'public/terms-feature.js'
+      - 'public/phase35-loader.js'
+      - 'public/album-feature.js'
+      - 'public/album-feature.css'
+      - 'public/referral-templates.js'
+      - 'public/referrals-feature.js'
+      - 'public/referrals-feature.css'
       - 'supabase/phase-clinical-documents-terms.sql'
+      - 'supabase/phase-clinical-media-referrals.sql'
       - 'docs/PHASE_0_2_CLINICAL_DOCUMENTS.md'
+      - 'docs/PHASE_3_5_CLINICAL_DOCUMENTS.md'
+      - 'tests/phase35-contracts.test.mjs'
       - 'index.html'
       - '.github/workflows/validate-clinical-documents.yml'
   workflow_dispatch:
@@ -25,12 +35,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify phase 0-2 JS syntax
+      - name: Verify phase 0-5 JS syntax
         run: |
           node --check public/phase02-loader.js
           node --check public/documents-feature.js
           node --check public/document-pdf-service.js
           node --check public/terms-feature.js
+          node --check public/phase35-loader.js
+          node --check public/album-feature.js
+          node --check public/referral-templates.js
+          node --check public/referrals-feature.js
+
+      - name: Run phase 3-5 contract tests
+        run: node --test tests/phase35-contracts.test.mjs
 
       - name: Verify clinical identity and consent contracts
         shell: bash
@@ -42,13 +59,19 @@ jobs:
           grep -q "gerar ou compartilhar um PDF não muda o consentimento" public/terms-feature.js
           grep -q "owner_id=auth.uid()" supabase/phase-clinical-documents-terms.sql
           grep -q "validate_clinical_document_links" supabase/phase-clinical-documents-terms.sql
+          grep -q "clinical_document_templates" supabase/phase-clinical-documents-terms.sql
+          ! grep -q "create table if not exists public.document_templates (" supabase/phase-clinical-documents-terms.sql
           grep -q "phase02-loader.js" index.html
+          grep -q "phase35-loader.js" index.html
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Parse documents stylesheet
-        run: node -e "require('postcss').parse(require('fs').readFileSync('public/documents-feature.css','utf8'))"
+      - name: Parse documents stylesheets
+        run: |
+          node -e "require('postcss').parse(require('fs').readFileSync('public/documents-feature.css','utf8'))"
+          node -e "require('postcss').parse(require('fs').readFileSync('public/album-feature.css','utf8'))"
+          node -e "require('postcss').parse(require('fs').readFileSync('public/referrals-feature.css','utf8'))"
 
       - name: Build application
         run: npm run build
