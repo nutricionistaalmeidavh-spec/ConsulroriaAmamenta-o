@@ -25,6 +25,7 @@ function scrollTo(selector){
   target.classList.add('prh-highlight');setTimeout(()=>target.classList.remove('prh-highlight'),900);
   return true;
 }
+function clearHub(){document.querySelectorAll('[data-prh-card]').forEach(node=>node.parentNode?.removeChild(node))}
 
 function cardMarkup(motherId,data){
   return `<section class="prh-card" data-prh-card data-prh-mother="${motherId}">
@@ -43,7 +44,7 @@ async function mount(motherId){
   const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;
   if(motherId===currentMother&&document.querySelector('[data-prh-card]'))return;
   currentMother=motherId;
-  document.querySelectorAll('[data-prh-card]').forEach(node=>node.remove());
+  clearHub();
   try{
     const data=await counts(motherId),wrap=document.createElement('div');wrap.innerHTML=cardMarkup(motherId,data);const card=wrap.firstElementChild;
     const firstRecords=screen.querySelector('[data-df-terms-card], [data-af-card], [data-rf-card], [data-rx-card]');
@@ -59,7 +60,7 @@ async function mount(motherId){
 }
 
 function refresh(){currentMother='';const motherId=DOC.currentMotherId();if(motherId)mount(motherId)}
-window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{currentMother='';document.querySelectorAll('[data-prh-card]').forEach(node=>node.remove())}});
+window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{currentMother='';clearHub()}});
 window.addEventListener('debora:clinical-document-finalized',refresh);
 window.addEventListener('debora:record-exported',refresh);
 window.DeboraPatientRecordsHub={refresh};
