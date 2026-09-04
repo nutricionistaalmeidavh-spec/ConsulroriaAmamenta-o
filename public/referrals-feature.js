@@ -88,33 +88,43 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
     specialty,motherName:context.mother.name,babyName:baby?.name||'',babyAge:babyAge(baby),
     chiefComplaint,careSummary,weightText:weightText(baby),professionalDestination:destination
   });
-  const panel=sheet(base.title,`<div class="rf-editor-form">
+  const isFinalized=draft?.status === 'finalized';
+  const panel=sheet(base.title,`<div class="rf-editor-form ${isFinalized?'is-finalized':''}">
     <div class="rf-meta-grid">
       <label><span>Especialidade</span><input value="${DOC.escapeHTML(base.specialtyLabel)}" readonly></label>
-      <label><span>Profissional/serviço de destino</span><input data-rf-destination value="${DOC.escapeHTML(base.professionalDestination||'')}" placeholder="ex.: Dra. Maria — Pediatria"></label>
+      <label><span>Profissional/serviço de destino</span><input data-rf-destination value="${DOC.escapeHTML(base.professionalDestination||'')}" placeholder="ex.: Dra. Maria — Pediatria" ${isFinalized?'readonly':''}></label>
     </div>
-    <label class="rf-editor-label"><span>Conteúdo</span>${editorToolbar()}<div class="rf-editor" contenteditable="true" role="textbox" aria-multiline="true" data-rf-editor>${base.html}</div></label>
-    <div class="rf-editor-note">O pré-preenchimento usa apenas dados já registrados da paciente, do bebê e do atendimento selecionado. Revise o texto antes de salvar.</div>
-    <div class="rf-actions"><button type="button" class="rf-secondary" data-rf-close>Cancelar</button><button type="button" class="rf-primary" data-rf-save>Salvar rascunho</button></div>
+    <label class="rf-editor-label"><span>Conteúdo</span>${isFinalized?'':editorToolbar()}<div class="rf-editor" contenteditable="${isFinalized?'false':'true'}" role="textbox" aria-multiline="true" data-rf-editor>${base.html}</div></label>
+    <div class="rf-editor-note">${isFinalized?'Documento finalizado. O conteúdo fica somente para leitura; gere ou compartilhe a versão oficial em PDF.':'O pré-preenchimento usa apenas dados já registrados da paciente, do bebê e do atendimento selecionado. Revise o texto antes de salvar.'}</div>
+    <div class="rf-actions"><button type="button" class="rf-secondary" data-rf-close>${isFinalized?'Fechar':'Cancelar'}</button>${isFinalized?'':'<button type="button" class="rf-primary" data-rf-save>Salvar rascunho</button>'}</div>
   </div>`,true);
   panel.querySelectorAll('[data-rf-close]').forEach(x=>x.addEventListener('click',close));
-  const editor=panel.querySelector('[data-rf-editor]');
+  const editor=panel.querySelector('[data-rf-editor]'),destinationInput=panel.querySelector('[data-rf-destination]');
   panel.querySelectorAll('[data-rf-cmd]').forEach(btn=>btn.addEventListener('click',()=>{editor.focus();document.execCommand(btn.dataset.rfCmd,false,null)}));
-  panel.querySelector('[data-rf-save]').addEventListener('click',async event=>{
-    const button=event.currentTarget;button.disabled=true;button.textContent='Salvando…';
-    const html=sanitizeEditorHtml(editor.innerHTML),professionalDestination=panel.querySelector('[data-rf-destination]').value.trim();
-    if(!cleanText(editor.textContent)){button.disabled=false;button.textContent='Salvar rascunho';return DOC.toast('O encaminhamento está vazio.','error')}
-    const content={
+  const buildPayload=()=>{
+    const html=sanitizeEditorHtml(editor.innerHTML),professionalDestination=destinationInput.value.trim();
+    return {content:{
       schema_version:1,specialty:base.specialty,professional_destination:professionalDestination,html,
       source:{mother_id:motherId,baby_id:babyId||null,encounter_id:encounter?.id||null,appointment_id:encounter?.appointment_id||null},
       prefill:{chief_complaint:Boolean(chiefComplaint),care_summary:Boolean(careSummary),baby_weight:Boolean(weightText(baby))},
       updated_at:new Date().toISOString()
-    };
-    try{
-      if(draft?.id)await DOC.updateDocument(draft.id,{title:`Encaminhamento · ${base.specialtyLabel}`,baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content});
-      else await DOC.saveDocument({document_type:'referral',title:`Encaminhamento · ${base.specialtyLabel}`,status:'draft',baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content});
-      close();DOC.toast('Rascunho de encaminhamento salvo.');currentMother='';await mount(motherId);
-    }catch(error){DOC.toast(error.message||'Não foi possível salvar o encaminhamento.','error');button.disabled=false;button.textContent='Salvar rascunho'}
+    }};
+  };
+  if(!isFinalized){
+    panel.querySelector('[data-rf-save]').addEventListener('click',async event=>{
+      const button=event.currentTarget;button.disabled=true;button.textContent='Salvando…';
+      const payload=buildPayload();
+      if(!cleanText(editor.textContent)){button.disabled=false;button.textContent='Salvar rascunho';return DOC.toast('O encaminhamento está vazio.','error')}
+      try{
+        if(draft?.id)await DOC.updateDocument(draft.id,{title:`Encaminhamento · ${base.specialtyLabel}`,baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
+        else await DOC.saveDocument({document_type:'referral',title:`Encaminhamento · ${base.specialtyLabel}`,status:'draft',baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
+        close();DOC.toast('Rascunho de encaminhamento salvo.');currentMother='';await mount(motherId);
+      }catch(error){DOC.toast(error.message||'Não foi possível salvar o encaminhamento.','error');button.disabled=false;button.textContent='Salvar rascunho'}
+    });
+  }
+  window.DeboraReferralFinalization?.attachEditor({
+    panel,draft,motherId,babyId,encounter,context,baby,specialtyLabel:base.specialtyLabel,buildPayload,
+    onFinalized:async()=>{close();currentMother='';await mount(motherId)}
   });
 }
 async function openNew(motherId,trigger){
@@ -140,10 +150,10 @@ async function openExisting(motherId,id,trigger){
   return openEditor({motherId,babyId,specialty,destination,draft,trigger});
 }
 function cardMarkup(motherId,rows){
-  const recent=rows.slice(0,4);
+  const recent=rows.slice(0,6);
   return `<section class="rf-card" data-rf-card data-rf-mother="${motherId}">
-    <div class="rf-head"><div><small>DOCUMENTOS</small><h2>Encaminhamentos</h2><p>Crie modelos por especialidade com pré-preenchimento seguro a partir do prontuário e revise antes de salvar.</p></div><button type="button" class="rf-primary" data-rf-new-button>Novo encaminhamento</button></div>
-    ${recent.length?`<div class="rf-list">${recent.map(row=>`<button type="button" data-rf-open="${row.id}"><div><strong>${DOC.escapeHTML(row.title||'Encaminhamento')}</strong><small>${DOC.escapeHTML(fmtDate(row.updated_at||row.created_at))}</small></div><span>Rascunho</span><b>›</b></button>`).join('')}</div>`:`<div class="rf-empty"><strong>Nenhum encaminhamento criado</strong><span>Escolha uma especialidade para gerar o primeiro rascunho.</span></div>`}
+    <div class="rf-head"><div><small>DOCUMENTOS</small><h2>Encaminhamentos</h2><p>Crie, revise e finalize documentos por especialidade vinculados ao prontuário da paciente.</p></div><button type="button" class="rf-primary" data-rf-new-button>Novo encaminhamento</button></div>
+    ${recent.length?`<div class="rf-list">${recent.map(row=>{const done=row.status==='finalized';return `<button type="button" data-rf-open="${row.id}"><div><strong>${DOC.escapeHTML(row.title||'Encaminhamento')}</strong><small>${DOC.escapeHTML(fmtDate(row.updated_at||row.created_at))}</small></div><span class="${done?'is-finalized':''}">${done?'Finalizado':'Rascunho'}</span><b>›</b></button>`}).join('')}</div>`:`<div class="rf-empty"><strong>Nenhum encaminhamento criado</strong><span>Escolha uma especialidade para gerar o primeiro rascunho.</span></div>`}
   </section>`;
 }
 async function mount(motherId){
@@ -162,4 +172,5 @@ async function mount(motherId){
   }
 }
 window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{currentMother='';document.querySelectorAll('[data-rf-card]').forEach(x=>x.remove())}});
+window.addEventListener('debora:clinical-document-finalized',event=>{const motherId=event.detail?.motherId;if(motherId===DOC.currentMotherId()){currentMother='';mount(motherId)}});
 window.DeboraReferrals={openNew,openExisting,refresh:()=>{currentMother='';const id=DOC.currentMotherId();if(id)mount(id)}};
