@@ -1,0 +1,54 @@
+name: Validate clinical documents phase 0-2
+
+on:
+  push:
+    branches:
+      - feature/clinical-documents-phase-0-2
+    paths:
+      - 'public/phase02-loader.js'
+      - 'public/documents-feature.js'
+      - 'public/documents-feature.css'
+      - 'public/document-pdf-service.js'
+      - 'public/terms-feature.js'
+      - 'supabase/phase-clinical-documents-terms.sql'
+      - 'docs/PHASE_0_2_CLINICAL_DOCUMENTS.md'
+      - 'index.html'
+      - '.github/workflows/validate-clinical-documents.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify phase 0-2 JS syntax
+        run: |
+          node --check public/phase02-loader.js
+          node --check public/documents-feature.js
+          node --check public/document-pdf-service.js
+          node --check public/terms-feature.js
+
+      - name: Verify clinical identity and consent contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "clinical_documents" public/documents-feature.js
+          grep -q "consents?mother_id" public/documents-feature.js
+          grep -q "source_consent_id" public/terms-feature.js
+          grep -q "gerar ou compartilhar um PDF não muda o consentimento" public/terms-feature.js
+          grep -q "owner_id=auth.uid()" supabase/phase-clinical-documents-terms.sql
+          grep -q "validate_clinical_document_links" supabase/phase-clinical-documents-terms.sql
+          grep -q "phase02-loader.js" index.html
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Parse documents stylesheet
+        run: node -e "require('postcss').parse(require('fs').readFileSync('public/documents-feature.css','utf8'))"
+
+      - name: Build application
+        run: npm run build
