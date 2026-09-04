@@ -32,6 +32,25 @@ async function rest(path,{method='GET',body=null,headers={}}={}){
   if(response.status===204)return null;
   const text=await response.text(); return text?JSON.parse(text):null;
 }
+async function storageRequest(path,{method='GET',body=null,contentType='application/json',headers={}}={}){
+  if(!SUPABASE_URL||!SUPABASE_KEY)throw new Error('Configuração do banco indisponível.');
+  const token=accessToken(); if(!token)throw new Error('Sessão não encontrada.');
+  const response=await fetch(`${SUPABASE_URL}/storage/v1/${path}`,{method,headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${token}`,...(contentType?{'Content-Type':contentType}:{}),...headers},body});
+  if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.message||j.error||msg}catch{}throw new Error(msg)}
+  if(response.status===204)return null;
+  const text=await response.text();return text?JSON.parse(text):null;
+}
+async function signedClinicalMediaUrl(storagePath,expiresIn=900){
+  const row=await storageRequest(`object/sign/clinical-media/${storagePath}`,{method:'POST',body:JSON.stringify({expiresIn})});
+  const signed=row?.signedURL||row?.signedUrl||row?.signed_url;
+  return signed?`${SUPABASE_URL}/storage/v1${signed.startsWith('/')?signed:`/${signed}`}`:'';
+}
+async function uploadClinicalMedia(storagePath,file){
+  return storageRequest(`object/clinical-media/${storagePath}`,{method:'POST',body:file,contentType:file?.type||'application/octet-stream',headers:{'x-upsert':'false'}});
+}
+async function deleteClinicalMedia(storagePath){
+  return storageRequest(`object/clinical-media/${storagePath}`,{method:'DELETE',contentType:''});
+}
 async function patientContext(motherId=currentMotherId()){
   if(!motherId)return null;
   const [mothers,babies]=await Promise.all([
@@ -57,6 +76,20 @@ async function saveDocument(payload={}){
   const rows=await rest('clinical_documents',{method:'POST',headers:{Prefer:'return=representation'},body});
   return rows?.[0]||null;
 }
+async function updateDocument(id,payload={}){
+  if(!id)throw new Error('Documento não identificado.');
+  const rows=await rest(`clinical_documents?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:payload});
+  return rows?.[0]||null;
+}
+async function latestEncounter(motherId=currentMotherId(),babyId=currentBabyId()){
+  if(!motherId)return null;
+  const rows=await rest(`clinical_encounters?mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,appointment_id,status,chief_complaint,care_plan,clinical_note,occurred_at,updated_at&order=occurred_at.desc&limit=30`)||[];
+  if(!babyId)return rows[0]||null;
+  const direct=rows.find(row=>row.baby_id===babyId); if(direct)return direct;
+  const links=await rest(`clinical_encounter_babies?baby_id=eq.${encodeURIComponent(babyId)}&select=encounter_id&order=created_at.desc`)||[];
+  const allowed=new Set(links.map(row=>row.encounter_id));
+  return rows.find(row=>allowed.has(row.id))||null;
+}
 function emitContext(){
   const detail={motherId:currentMotherId(),babyId:currentBabyId()||null};
   window.dispatchEvent(new CustomEvent('debora:patient-context',{detail}));
@@ -68,5 +101,5 @@ new MutationObserver(scheduleContext).observe(document.documentElement,{subtree:
 setTimeout(emitContext,200);
 
 window.DeboraDocuments={
-  version:'0.2.0', rest, accessToken, userId, currentMotherId, currentBabyId, patientContext, consents, listDocuments, saveDocument, toast, escapeHTML
+  version:'0.5.0',rest,storageRequest,accessToken,userId,currentMotherId,currentBabyId,patientContext,consents,listDocuments,saveDocument,updateDocument,latestEncounter,signedClinicalMediaUrl,uploadClinicalMedia,deleteClinicalMedia,toast,escapeHTML
 };
