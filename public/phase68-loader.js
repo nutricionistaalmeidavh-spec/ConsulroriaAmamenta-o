@@ -7,8 +7,10 @@ async function start(){
   try{
     css('./record-export-feature.css','phase68-export');
     css('./patient-records-hub.css','phase68-hub');
+    css('./patient-workspace.css','phase68-workspace');
     await import('./referral-finalization.js');
     await import('./record-export-feature.js');
+    await import('./patient-workspace.js');
     await import('./patient-records-hub.js');
   }catch(error){phase68Started=false;console.error('Falha ao carregar fases clínicas 6-8',error);setTimeout(start,1000)}
 }
