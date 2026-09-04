@@ -9,7 +9,9 @@ const required=[
   'public/record-export-feature.js',
   'public/record-export-feature.css',
   'public/patient-records-hub.js',
-  'public/patient-records-hub.css'
+  'public/patient-records-hub.css',
+  'public/patient-workspace.js',
+  'public/patient-workspace.css'
 ];
 
 test('phase 6-8 files exist',()=>{
@@ -61,21 +63,39 @@ test('export excludes photos by default and makes inclusion explicit',()=>{
   assert.match(src,/Fotos e mídia clínica/);
 });
 
-test('phase 8 groups records without removing existing functional cards',()=>{
-  const src=readFileSync('public/patient-records-hub.js','utf8');
-  assert.match(src,/Registros e documentos/);
-  assert.match(src,/Termos/);
-  assert.match(src,/Encaminhamentos/);
-  assert.match(src,/Álbum clínico/);
-  assert.match(src,/Exportar prontuário/);
-  assert.doesNotMatch(src,/\.remove\(\).*data-(?:df-terms-card|rf-card|af-card)/s);
+test('patient overview opens dedicated workspaces instead of scrolling to large inline cards',()=>{
+  const hub=readFileSync('public/patient-records-hub.js','utf8');
+  const workspace=readFileSync('public/patient-workspace.js','utf8');
+  assert.match(hub,/DeboraPatientWorkspace/);
+  assert.match(hub,/open\('terms'/);
+  assert.match(hub,/open\('referrals'/);
+  assert.match(hub,/open\('album'/);
+  assert.doesNotMatch(hub,/scrollIntoView/);
+  assert.match(workspace,/Álbum clínico/);
+  assert.match(workspace,/Encaminhamentos/);
+  assert.match(workspace,/Termos e autorizações/);
+  assert.match(workspace,/Prontuários/);
 });
 
-test('phase 6-8 loader is additive',()=>{
+test('patient summary suppresses heavy inline document cards while keeping their data modules available',()=>{
+  const css=readFileSync('public/patient-workspace.css','utf8');
+  for(const selector of ['data-af-card','data-rf-card','data-df-terms-card','data-rx-card'])assert.ok(css.includes(selector),`${selector} must be suppressed in patient summary`);
+  assert.match(css,/display:\s*none\s*!important/);
+});
+
+test('quick actions prioritize WhatsApp, album, weight, referral and secondary actions',()=>{
+  const src=readFileSync('public/patient-workspace.js','utf8');
+  for(const label of ['WhatsApp','Álbum','Registrar peso','Encaminhar','Mais ações'])assert.ok(src.includes(label),`${label} quick action missing`);
+  assert.doesNotMatch(src,/quick[^\n]{0,120}Ligar/i);
+  assert.doesNotMatch(src,/quick[^\n]{0,120}Adicionar foto/i);
+});
+
+test('phase 6-8 loader remains additive and loads the patient workspace',()=>{
   const index=readFileSync('index.html','utf8');
   const loader=readFileSync('public/phase68-loader.js','utf8');
   assert.match(index,/\/phase68-loader\.js/);
   assert.match(loader,/referral-finalization\.js/);
   assert.match(loader,/record-export-feature\.js/);
   assert.match(loader,/patient-records-hub\.js/);
+  assert.match(loader,/patient-workspace\.js/);
 });
