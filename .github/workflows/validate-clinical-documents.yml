@@ -24,6 +24,8 @@ on:
       - 'public/record-export-feature.css'
       - 'public/patient-records-hub.js'
       - 'public/patient-records-hub.css'
+      - 'public/patient-workspace.js'
+      - 'public/patient-workspace.css'
       - 'supabase/phase-clinical-documents-terms.sql'
       - 'supabase/phase-clinical-media-referrals.sql'
       - 'docs/PHASE_0_2_CLINICAL_DOCUMENTS.md'
@@ -57,6 +59,7 @@ jobs:
           if [ -f public/phase68-loader.js ]; then node --check public/phase68-loader.js; fi
           if [ -f public/referral-finalization.js ]; then node --check public/referral-finalization.js; fi
           if [ -f public/record-export-feature.js ]; then node --check public/record-export-feature.js; fi
+          if [ -f public/patient-workspace.js ]; then node --check public/patient-workspace.js; fi
           if [ -f public/patient-records-hub.js ]; then node --check public/patient-records-hub.js; fi
 
       - name: Run phase 3-5 contract tests
@@ -91,6 +94,7 @@ jobs:
           node -e "require('postcss').parse(require('fs').readFileSync('public/referrals-feature.css','utf8'))"
           if [ -f public/record-export-feature.css ]; then node -e "require('postcss').parse(require('fs').readFileSync('public/record-export-feature.css','utf8'))"; fi
           if [ -f public/patient-records-hub.css ]; then node -e "require('postcss').parse(require('fs').readFileSync('public/patient-records-hub.css','utf8'))"; fi
+          if [ -f public/patient-workspace.css ]; then node -e "require('postcss').parse(require('fs').readFileSync('public/patient-workspace.css','utf8'))"; fi
 
       - name: Build application
         run: npm run build
