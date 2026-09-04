@@ -1,17 +1,27 @@
-name: Validate clinical documents phase 0-2
+name: Validate clinical documents phase 0-5
 
 on:
   push:
     branches:
       - feature/clinical-documents-phase-0-2
+      - feature/clinical-documents-phase-3-5
     paths:
       - 'public/phase02-loader.js'
       - 'public/documents-feature.js'
       - 'public/documents-feature.css'
       - 'public/document-pdf-service.js'
       - 'public/terms-feature.js'
+      - 'public/phase35-loader.js'
+      - 'public/album-feature.js'
+      - 'public/album-feature.css'
+      - 'public/referral-templates.js'
+      - 'public/referrals-feature.js'
+      - 'public/referrals-feature.css'
       - 'supabase/phase-clinical-documents-terms.sql'
+      - 'supabase/phase-clinical-media-referrals.sql'
       - 'docs/PHASE_0_2_CLINICAL_DOCUMENTS.md'
+      - 'docs/PHASE_3_5_CLINICAL_DOCUMENTS.md'
+      - 'tests/phase35-contracts.test.mjs'
       - 'index.html'
       - '.github/workflows/validate-clinical-documents.yml'
   workflow_dispatch:
@@ -32,6 +42,9 @@ jobs:
           node --check public/document-pdf-service.js
           node --check public/terms-feature.js
 
+      - name: Run phase 3-5 contract tests
+        run: node --test tests/phase35-contracts.test.mjs
+
       - name: Verify clinical identity and consent contracts
         shell: bash
         run: |
@@ -47,8 +60,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Parse documents stylesheet
-        run: node -e "require('postcss').parse(require('fs').readFileSync('public/documents-feature.css','utf8'))"
+      - name: Parse documents stylesheets
+        run: |
+          node -e "require('postcss').parse(require('fs').readFileSync('public/documents-feature.css','utf8'))"
+          if [ -f public/album-feature.css ]; then node -e "require('postcss').parse(require('fs').readFileSync('public/album-feature.css','utf8'))"; fi
+          if [ -f public/referrals-feature.css ]; then node -e "require('postcss').parse(require('fs').readFileSync('public/referrals-feature.css','utf8'))"; fi
 
       - name: Build application
         run: npm run build
