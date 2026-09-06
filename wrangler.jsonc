@@ -3,6 +3,12 @@
   "name": "consulroriaamamenta-o",
   "main": "worker/index.js",
   "compatibility_date": "2026-09-06",
+  "keep_vars": true,
+  "secrets": {
+    "required": [
+      "ASSAS_SECRET"
+    ]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
