@@ -1,4 +1,4 @@
-// Final contract: My Plan + provider-neutral billing scaffold.
+// Final contract: My Plan + Asaas-backed billing scaffold.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -46,12 +46,14 @@ for (const required of [
   if (!sql.includes(required)) fail(`billing migration missing ${required}`);
 }
 
-if (!checkout.includes('pending_provider')) fail('checkout scaffold must remain safe before provider configuration');
-if (!checkout.includes('authorization')) fail('checkout scaffold must use authenticated caller');
-if (!webhook.includes('billing_webhook_secret')) fail('webhook scaffold must require a server-side secret');
-if (!webhook.includes('apply_billing_state')) fail('webhook must converge on canonical billing state RPC');
-if (webhook.includes('service_role') && webhook.includes('client')) {
-  // Informational marker only; service credentials are allowed server-side but never browser-side.
-}
+if (!checkout.includes('pending_provider')) fail('checkout registry must persist the provider-pending state');
+if (!checkout.includes('authorization')) fail('checkout registry must use authenticated caller');
+if (!checkout.includes('attach_provider_checkout')) fail('checkout registry must bind the Asaas checkout to the authenticated request');
 
-if (!process.exitCode) console.log('PASS: My Plan and provider-neutral billing scaffold are present');
+if (!webhook.includes('x-asaas-api-key')) fail('billing bridge must require the server-side Asaas credential');
+if (!webhook.includes('checkoutsession=')) fail('billing bridge must prove the payment belongs to the stored checkout session');
+if (!webhook.includes('apply_billing_state')) fail('billing bridge must converge on canonical billing state RPC');
+if (webhook.includes('billing_webhook_secret')) fail('billing bridge must not require an extra webhook secret');
+if (webhook.includes('billing_provider')) fail('billing bridge must not require an extra provider configuration secret');
+
+if (!process.exitCode) console.log('PASS: My Plan and Asaas billing scaffold are present');
