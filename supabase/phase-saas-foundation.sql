@@ -1,5 +1,5 @@
 -- SaaS commercial foundation — phases 0–2
--- Additive only. This migration is intentionally isolated from the existing Débora landing/app.
+-- Additive only. This migration is intentionally isolated from the existing legacy landing/app.
 -- It creates generic commercial account structures and does not read or mutate clinical tables.
 
 create table if not exists public.saas_accounts (
