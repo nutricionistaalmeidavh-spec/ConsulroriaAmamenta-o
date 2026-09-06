@@ -29,7 +29,7 @@ assert.match(worker, /chargeTypes:\s*\['RECURRENT'\]/);
 
 // A webhook is only a trigger: billing state comes from a fresh Asaas API lookup.
 assert.match(worker, /payload\?\.payment\?\.id/);
-assert.match(worker, /asaasFetch\(env, `\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
+assert.match(worker, /asaasFetch\(\s*env,\s*`\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
 assert.match(worker, /parseExternalReference\(verifiedPayment\?\.externalReference\)/);
 assert.match(worker, /verifiedPayment\?\.status/);
 assert.match(worker, /payment:\$\{verifiedPayment\.id\}:\$\{verifiedStatus\}/);
