@@ -9,8 +9,12 @@ on:
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
+      - 'scripts/test-billing-scaffold.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
+      - 'supabase/phase-saas-billing.sql'
+      - 'supabase/functions/saas-checkout/**'
+      - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
   pull_request:
     paths:
@@ -18,8 +22,12 @@ on:
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
+      - 'scripts/test-billing-scaffold.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
+      - 'supabase/phase-saas-billing.sql'
+      - 'supabase/functions/saas-checkout/**'
+      - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
   workflow_dispatch:
 
@@ -43,3 +51,5 @@ jobs:
         run: node scripts/test-saas-plans.mjs
       - name: Validate server-side SaaS enforcement
         run: node scripts/test-saas-enforcement.mjs
+      - name: Validate My Plan and billing scaffold
+        run: node scripts/test-billing-scaffold.mjs
