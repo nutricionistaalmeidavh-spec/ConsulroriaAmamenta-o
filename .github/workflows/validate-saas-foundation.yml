@@ -3,6 +3,7 @@ name: Validate SaaS foundation
 on:
   push:
     branches:
+      - main
       - feature/saas-foundation-phase-0-2
     paths:
       - 'scripts/test-saas-foundation.mjs'
@@ -10,12 +11,15 @@ on:
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
+      - 'scripts/test-cloudflare-asaas.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
       - 'supabase/phase-saas-billing.sql'
       - 'supabase/functions/saas-checkout/**'
       - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
+      - 'worker/**'
+      - 'wrangler.jsonc'
   pull_request:
     paths:
       - 'scripts/test-saas-foundation.mjs'
@@ -23,12 +27,15 @@ on:
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
+      - 'scripts/test-cloudflare-asaas.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
       - 'supabase/phase-saas-billing.sql'
       - 'supabase/functions/saas-checkout/**'
       - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
+      - 'worker/**'
+      - 'wrangler.jsonc'
   workflow_dispatch:
 
 permissions:
@@ -53,3 +60,7 @@ jobs:
         run: node scripts/test-saas-enforcement.mjs
       - name: Validate My Plan and billing scaffold
         run: node scripts/test-billing-scaffold.mjs
+      - name: Validate Cloudflare Asaas worker contract
+        run: node scripts/test-cloudflare-asaas.mjs
+      - name: Syntax-check Cloudflare worker
+        run: node --check worker/index.js
