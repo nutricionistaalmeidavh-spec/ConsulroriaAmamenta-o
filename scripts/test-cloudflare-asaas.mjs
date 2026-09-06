@@ -41,10 +41,9 @@ assert.match(worker, /JSON\.stringify\(\{ paymentId \}\)/);
 assert.doesNotMatch(worker, /\/rest\/v1\/rpc\/apply_billing_state/);
 assert.doesNotMatch(worker, /billing_webhook_events\?/);
 
-// Temporary branch-only fingerprint route used to pin the existing Asaas key in Supabase.
+// Temporary bootstrap route is removed in the follow-up commit after its SHA-256 is pinned.
 assert.match(worker, /\/api\/asaas\/key-fingerprint/);
 assert.match(worker, /sha256Hex\(env\.ASSAS_SECRET\)/);
-
 assert.doesNotMatch(worker, /ASSAS_SECRET\s*=\s*['"][^'"]+['"]/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
