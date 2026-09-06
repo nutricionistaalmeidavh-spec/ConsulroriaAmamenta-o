@@ -36,6 +36,7 @@ on:
       - 'public/comercial/**'
       - 'worker/**'
       - 'wrangler.jsonc'
+      - '.github/workflows/validate-saas-foundation.yml'
   workflow_dispatch:
 
 permissions:
@@ -64,3 +65,18 @@ jobs:
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
         run: node --check worker/index.js
+      - name: Probe branch Asaas key fingerprint
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/asaas-single-secret-verification'
+        run: |
+          set -e
+          URL='https://feature-asaas-single-secret-verification-consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/api/asaas/key-fingerprint'
+          for attempt in 1 2 3 4 5 6; do
+            body="$(curl --fail --silent --show-error "$URL" || true)"
+            if echo "$body" | grep -q '"sha256"'; then
+              echo "ASAAS_KEY_FINGERPRINT=$body"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Fingerprint endpoint unavailable' >&2
+          exit 1
