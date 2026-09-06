@@ -60,7 +60,7 @@ assert.match(worker, /JSON\.stringify\(\{ paymentId \}\)/);
 assert.doesNotMatch(worker, /\/rest\/v1\/rpc\/apply_billing_state/);
 assert.doesNotMatch(worker, /billing_webhook_events\?/);
 
-// Supabase checkout adapter supports production and sandbox providers without client-controlled arbitrary provider values.
+// Supabase checkout adapter supports production and sandbox providers without arbitrary provider input.
 assert.match(checkoutFunction, /create_request/);
 assert.match(checkoutFunction, /attach_provider_checkout/);
 assert.match(checkoutFunction, /owner_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
@@ -74,7 +74,7 @@ assert.match(billingFunction, /x-asaas-api-key/);
 assert.match(billingFunction, /x-billing-source/);
 assert.match(billingFunction, /api-sandbox\.asaas\.com\/v3/);
 assert.match(billingFunction, /cloudflare-asaas-sandbox/);
-assert.match(billingFunction, /provider:\s*environment === 'sandbox' \? 'asaas_sandbox' : 'asaas'/);
+assert.match(billingFunction, /const provider = environment === 'sandbox' \? 'asaas_sandbox' : 'asaas'/);
 assert.match(billingFunction, /checkoutSession=\$\{encodeURIComponent\(checkoutRequest\.external_checkout_id\)\}/);
 assert.match(billingFunction, /saas_checkout:/);
 assert.match(billingFunction, /apply_billing_state/);
