@@ -1,4 +1,4 @@
--- SaaS commercial foundation — phases 0–4
+-- SaaS commercial foundation — phases 0–5
 -- Additive only. This migration is intentionally isolated from the existing legacy landing/app.
 -- It creates generic commercial account structures and does not read or mutate clinical tables.
 
@@ -89,6 +89,102 @@ grant all on table public.saas_accounts to service_role;
 grant all on table public.professional_profiles to service_role;
 grant all on table public.subscriptions to service_role;
 grant all on table public.entitlements to service_role;
+
+-- Every commercial account starts on Freemium. Selecting Pro on the landing records
+-- purchase intent only; Pro entitlements are applied later by a trusted billing webhook.
+create or replace function public.bootstrap_freemium_entitlements()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.entitlements (
+    account_id,
+    owner_id,
+    feature_key,
+    enabled,
+    limit_value,
+    metadata
+  )
+  values
+  (
+    new.id,
+    new.owner_id,
+    'clinical_core',
+    true,
+    null,
+    jsonb_build_object('plan', 'freemium')
+  ),
+  (
+    new.id,
+    new.owner_id,
+    'patient_limit',
+    true,
+    3,
+    jsonb_build_object('plan', 'freemium', 'unit', 'mothers_patients')
+  ),
+  (
+    new.id,
+    new.owner_id,
+    'media_upload',
+    false,
+    null,
+    jsonb_build_object('plan', 'freemium', 'covers', jsonb_build_array('photo', 'video'))
+  )
+  on conflict (owner_id, feature_key) do nothing;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.bootstrap_freemium_entitlements() from public, anon, authenticated;
+
+drop trigger if exists saas_accounts_bootstrap_freemium on public.saas_accounts;
+create trigger saas_accounts_bootstrap_freemium
+after insert on public.saas_accounts
+for each row
+execute function public.bootstrap_freemium_entitlements();
+
+-- Trusted billing code can use this helper after confirmed Pro payment.
+-- It is intentionally unavailable to browser/authenticated clients.
+create or replace function public.apply_pro_entitlements(p_owner_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_account_id uuid;
+begin
+  select id into strict v_account_id
+  from public.saas_accounts
+  where owner_id = p_owner_id;
+
+  insert into public.entitlements (
+    account_id,
+    owner_id,
+    feature_key,
+    enabled,
+    limit_value,
+    metadata
+  )
+  values
+  (v_account_id, p_owner_id, 'clinical_core', true, null, jsonb_build_object('plan', 'pro')),
+  (v_account_id, p_owner_id, 'patient_limit', true, null, jsonb_build_object('plan', 'pro', 'unlimited', true)),
+  (v_account_id, p_owner_id, 'media_upload', true, null, jsonb_build_object('plan', 'pro', 'covers', jsonb_build_array('photo', 'video')))
+  on conflict (owner_id, feature_key)
+  do update set
+    account_id = excluded.account_id,
+    enabled = excluded.enabled,
+    limit_value = excluded.limit_value,
+    metadata = excluded.metadata,
+    updated_at = now();
+end;
+$$;
+
+revoke all on function public.apply_pro_entitlements(uuid) from public, anon, authenticated;
+grant execute on function public.apply_pro_entitlements(uuid) to service_role;
 
 drop policy if exists saas_accounts_select_own on public.saas_accounts;
 create policy saas_accounts_select_own
