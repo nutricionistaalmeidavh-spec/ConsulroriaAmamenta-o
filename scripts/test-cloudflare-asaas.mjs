@@ -10,6 +10,8 @@ assert.match(wrangler, /"main"\s*:\s*"worker\/index\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*\["\/api\/\*"\]/);
 assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
+assert.match(wrangler, /"keep_vars"\s*:\s*true/);
+assert.match(wrangler, /"secrets"\s*:\s*\{[\s\S]*"required"\s*:\s*\[[\s\S]*"ASSAS_SECRET"[\s\S]*\]/);
 
 assert.match(worker, /env\.ASSAS_SECRET/);
 assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
@@ -37,8 +39,8 @@ assert.match(worker, /JSON\.stringify\(\{ paymentId \}\)/);
 assert.doesNotMatch(worker, /\/rest\/v1\/rpc\/apply_billing_state/);
 assert.doesNotMatch(worker, /billing_webhook_events\?/);
 
-assert.match(worker, /\/api\/asaas\/key-fingerprint/);
-assert.match(worker, /sha256Hex\(env\.ASSAS_SECRET\)/);
+assert.doesNotMatch(worker, /key-fingerprint/);
+assert.doesNotMatch(worker, /sha256Hex/);
 assert.doesNotMatch(worker, /ASSAS_SECRET\s*=\s*['"][^'"]+['"]/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);

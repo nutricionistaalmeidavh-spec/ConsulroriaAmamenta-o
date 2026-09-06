@@ -112,11 +112,6 @@ async function asaasFetch(env, path, options = {}) {
   return { response, payload };
 }
 
-async function sha256Hex(value) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 async function createCheckout(request, env) {
   if (!env.ASSAS_SECRET) return json(503, { error: 'asaas_not_configured' });
 
@@ -216,8 +211,8 @@ async function handleWebhook(request, env) {
   }
 
   // Supabase owns the administrative database credential. Cloudflare sends only
-  // the existing Asaas key over TLS; the Edge Function authenticates its SHA-256
-  // fingerprint and independently re-reads the payment before changing access.
+  // the existing Asaas key over TLS; the Edge Function validates the request and
+  // independently re-reads the payment before changing access.
   const bridgeResponse = await callBillingBridge(env, paymentId);
   const bridgePayload = await bridgeResponse.json().catch(() => null);
   if (!bridgeResponse.ok) {
@@ -246,17 +241,11 @@ function health(env) {
   });
 }
 
-async function temporaryKeyFingerprint(env) {
-  if (!env.ASSAS_SECRET) return json(503, { error: 'asaas_not_configured' });
-  return json(200, { sha256: await sha256Hex(env.ASSAS_SECRET) });
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env);
-    if (url.pathname === '/api/asaas/key-fingerprint' && request.method === 'GET') return temporaryKeyFingerprint(env);
     if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return createCheckout(request, env);
     if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env);
 
