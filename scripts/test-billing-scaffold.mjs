@@ -30,7 +30,7 @@ const webhook = fs.readFileSync(files.webhook, 'utf8').toLowerCase();
 for (const required of ['meu plano', 'r$ 49,90', 'r$ 499', 'pro_monthly', 'pro_annual']) {
   if (!html.includes(required)) fail(`My Plan UI missing ${required}`);
 }
-if (!js.includes('/functions/v1/saas-checkout')) fail('My Plan must call authenticated checkout function');
+if (!js.includes('/api/asaas/checkout')) fail('My Plan must call the authenticated Cloudflare checkout route');
 
 for (const required of [
   'billing_plan_catalog',
