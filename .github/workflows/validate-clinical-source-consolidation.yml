@@ -23,3 +23,10 @@ jobs:
       - run: npm install
       - run: node --test tests/clinical-source-*.test.mjs
       - run: npm run build
+      - name: Verify canonical runtime is published
+        run: |
+          test -f dist/clinical-source/index.html
+          test -f dist/clinical-source/core/app-shell.js
+          test -f dist/clinical-source/core/lib/supabase-client.js
+          test -f dist/clinical-source/features/clinical-note-feature.js
+          test -f dist/clinical-source/manifest.json
