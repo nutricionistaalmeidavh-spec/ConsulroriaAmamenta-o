@@ -38,12 +38,26 @@ test('clinical album supports validated private video uploads',()=>{
   assert.match(src,/50\s*\*\s*1024\s*\*\s*1024/);
   assert.match(src,/<video[^>]+controls[^>]+preload="metadata"/s);
   assert.match(src,/type\.startsWith\('video\/'\)|mime_type.*video\//s);
+  assert.match(src,/MIME_BY_EXTENSION/);
+  assert.match(src,/resolvedMediaMime/);
   assert.match(src,/Enviando/);
   assert.match(docs,/onProgress/);
+  assert.match(docs,/contentType/);
   assert.match(sql,/video\/mp4/);
   assert.match(sql,/video\/quicktime/);
   assert.match(sql,/video\/webm/);
   assert.match(sql,/52428800/);
+});
+
+test('video consent is explicit and legacy clinical media consent is not silently broadened',()=>{
+  const src=readFileSync('public/album-feature.js','utf8');
+  const terms=readFileSync('public/terms-feature.js','utf8');
+  const sql=readFileSync('supabase/phase-clinical-media-video.sql','utf8');
+  assert.match(src,/version\s*!==\s*['"]1\.1['"]/);
+  assert.match(terms,/Fotos, vídeos e documentos clínicos/);
+  assert.match(sql,/clinical_media.*version.*1\.1/is);
+  assert.match(sql,/granted\s*=\s*false/is);
+  assert.match(sql,/revoked_at/is);
 });
 
 test('referrals include specialty templates and safe prefill fields',()=>{
