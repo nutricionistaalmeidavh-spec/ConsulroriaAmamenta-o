@@ -10,7 +10,8 @@ const required=[
   'public/referral-templates.js',
   'public/referrals-feature.js',
   'public/referrals-feature.css',
-  'supabase/phase-clinical-media-referrals.sql'
+  'supabase/phase-clinical-media-referrals.sql',
+  'supabase/phase-clinical-media-video.sql'
 ];
 
 test('phase 3-5 files exist',()=>{
@@ -25,6 +26,24 @@ test('album is SQL indexed and does not use localStorage as clinical source',()=
   assert.match(src,/encounter_id/);
   assert.match(src,/clinical_media.*consent|consent_type==='clinical_media'/s);
   assert.doesNotMatch(src,/localStorage\.setItem\([^\n]*album|localStorage\.getItem\([^\n]*album/i);
+});
+
+test('clinical album supports validated private video uploads',()=>{
+  const src=readFileSync('public/album-feature.js','utf8');
+  const docs=readFileSync('public/documents-feature.js','utf8');
+  const sql=readFileSync('supabase/phase-clinical-media-video.sql','utf8');
+  assert.match(src,/video\/mp4/);
+  assert.match(src,/video\/quicktime/);
+  assert.match(src,/video\/webm/);
+  assert.match(src,/50\s*\*\s*1024\s*\*\s*1024/);
+  assert.match(src,/<video[^>]+controls[^>]+preload="metadata"/s);
+  assert.match(src,/type\.startsWith\('video\/'\)|mime_type.*video\//s);
+  assert.match(src,/Enviando/);
+  assert.match(docs,/onProgress/);
+  assert.match(sql,/video\/mp4/);
+  assert.match(sql,/video\/quicktime/);
+  assert.match(sql,/video\/webm/);
+  assert.match(sql,/52428800/);
 });
 
 test('referrals include specialty templates and safe prefill fields',()=>{
