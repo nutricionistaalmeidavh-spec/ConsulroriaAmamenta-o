@@ -1,0 +1,25 @@
+name: Validate clinical source consolidation
+
+on:
+  push:
+    branches:
+      - refactor/clinical-source-consolidation-work
+  pull_request:
+    paths:
+      - 'src/bootstrap.js'
+      - 'public/clinical-source/**'
+      - 'tests/clinical-source-consolidation.test.mjs'
+      - '.github/workflows/validate-clinical-source-consolidation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/clinical-source-consolidation.test.mjs
+      - run: npm run build
