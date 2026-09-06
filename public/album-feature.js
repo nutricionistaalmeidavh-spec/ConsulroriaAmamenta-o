@@ -4,6 +4,7 @@ const IMAGE_TYPES=new Set(['image/jpeg','image/png','image/webp','image/heic','i
 const VIDEO_TYPES=new Set(['video/mp4','video/quicktime','video/webm']);
 const IMAGE_EXTENSIONS=new Set(['jpg','jpeg','png','webp','heic','heif']);
 const VIDEO_EXTENSIONS=new Set(['mp4','mov','webm']);
+const MIME_BY_EXTENSION=Object.freeze({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime',webm:'video/webm'});
 const IMAGE_MAX_BYTES=12*1024*1024;
 const VIDEO_MAX_BYTES=50*1024*1024;
 let currentMother='',layer=null,lastTrigger=null;
@@ -17,20 +18,25 @@ const safeFileName=value=>String(value||'arquivo').normalize('NFD').replace(/[\u
 const byId=(items,id)=>items.find(item=>item.id===id)||null;
 const extOf=name=>String(name||'').toLowerCase().split('.').pop()||'';
 const isVideoRow=row=>String(row?.mime_type||'').toLowerCase().startsWith('video/');
-const isVideoFile=file=>String(file?.type||'').toLowerCase().startsWith('video/')||VIDEO_EXTENSIONS.has(extOf(file?.name));
 
+function resolvedMediaMime(file){
+  const raw=String(file?.type||'').trim().toLowerCase(),fallback=MIME_BY_EXTENSION[extOf(file?.name)]||'';
+  if(!raw||raw==='application/octet-stream')return fallback;
+  if(IMAGE_TYPES.has(raw)||VIDEO_TYPES.has(raw))return raw;
+  return '';
+}
 function validateMediaFile(file){
   if(!file)throw new Error('Selecione uma foto ou vídeo.');
-  const type=String(file.type||'').toLowerCase(),ext=extOf(file.name),video=isVideoFile(file);
-  if(video){
-    if(type&&!VIDEO_TYPES.has(type)&&!VIDEO_EXTENSIONS.has(ext))throw new Error('Formato de vídeo não suportado. Use MP4, MOV ou WebM.');
-    if(file.size>VIDEO_MAX_BYTES)throw new Error('O vídeo deve ter no máximo 50 MB.');
-    return 'video';
-  }
-  if(type&&!IMAGE_TYPES.has(type)&&!IMAGE_EXTENSIONS.has(ext))throw new Error('Formato de imagem não suportado. Use JPG, PNG, WebP, HEIC ou HEIF.');
-  if(!type&&!IMAGE_EXTENSIONS.has(ext))throw new Error('Formato de arquivo não suportado.');
-  if(file.size>IMAGE_MAX_BYTES)throw new Error('A imagem deve ter no máximo 12 MB.');
-  return 'image';
+  if(!Number.isFinite(file.size)||file.size<=0)throw new Error('O arquivo selecionado está vazio ou inválido.');
+  const ext=extOf(file.name),mime=resolvedMediaMime(file),kind=VIDEO_TYPES.has(mime)?'video':IMAGE_TYPES.has(mime)?'image':'';
+  if(!kind)throw new Error('Formato não suportado. Use JPG, PNG, WebP, HEIC, HEIF, MP4, MOV ou WebM.');
+  const allowedExtensions=kind==='video'?VIDEO_EXTENSIONS:IMAGE_EXTENSIONS;
+  if(ext&&!allowedExtensions.has(ext))throw new Error(kind==='video'?'A extensão do vídeo não corresponde a um formato permitido.':'A extensão da imagem não corresponde a um formato permitido.');
+  const expected=MIME_BY_EXTENSION[ext];
+  if(expected&&expected!==mime)throw new Error('O tipo do arquivo não corresponde à extensão informada.');
+  if(kind==='video'&&file.size>VIDEO_MAX_BYTES)throw new Error('O vídeo deve ter no máximo 50 MB.');
+  if(kind==='image'&&file.size>IMAGE_MAX_BYTES)throw new Error('A imagem deve ter no máximo 12 MB.');
+  return {kind,mime};
 }
 
 function close(){if(!layer)return;layer.remove();layer=null;requestAnimationFrame(()=>lastTrigger?.focus?.())}
@@ -76,16 +82,17 @@ async function openDetail(motherId,id,trigger){
   const preview=url?(video?`<video src="${DOC.escapeHTML(url)}" controls preload="metadata" playsinline aria-label="Vídeo clínico da paciente"></video>`:`<img src="${DOC.escapeHTML(url)}" alt="Imagem clínica da paciente">`):'<div class="af-unavailable">Prévia indisponível.</div>';
   sheet(row.category||'Mídia clínica',`<div class="af-detail">${preview}<dl><div><dt>Tipo</dt><dd>${video?'Vídeo':'Foto'}</dd></div><div><dt>Paciente</dt><dd>${DOC.escapeHTML(context.mother.name)}</dd></div><div><dt>Bebê</dt><dd>${DOC.escapeHTML(baby?.name||'Não vinculado')}</dd></div><div><dt>Data</dt><dd>${DOC.escapeHTML(fmtDate(row.taken_at||row.created_at))}</dd></div><div><dt>Atendimento</dt><dd>${DOC.escapeHTML(row.encounter_id?`${row.encounter_id.slice(0,8)}…`:'Não vinculado')}</dd></div><div><dt>Arquivo</dt><dd>${DOC.escapeHTML(row.file_name||'Sem nome')}</dd></div></dl>${row.caption?`<p>${DOC.escapeHTML(row.caption)}</p>`:''}</div>`);
 }
-async function requireClinicalMediaConsent(motherId){
+async function requireClinicalMediaConsent(motherId,kind='image'){
   const rows=await DOC.consents(motherId);
   const consent=rows.find(row=>row.consent_type==='clinical_media');
   if(!consent?.granted||consent?.revoked_at)throw new Error('A autorização para fotos, vídeos e documentos clínicos não está ativa. Atualize o consentimento em Editar cadastro antes de adicionar mídia.');
+  if(kind==='video'&&consent.version!=='1.1')throw new Error('A autorização atual não inclui vídeos. Em Editar cadastro, confirme novamente “Fotos, vídeos e documentos clínicos” antes de enviar o vídeo.');
   return consent;
 }
 async function openUploader(motherId,trigger){
   lastTrigger=trigger||document.activeElement;
   const context=await DOC.patientContext(motherId);if(!context)throw new Error('Paciente não encontrada.');
-  await requireClinicalMediaConsent(motherId);
+  await requireClinicalMediaConsent(motherId,'image');
   const active=context.activeBabyId||context.babies[0]?.id||'';
   const latest=await DOC.latestEncounter(motherId,active).catch(()=>null);
   const form=sheet('Adicionar foto ou vídeo',`<form class="af-form" data-af-form>
@@ -101,8 +108,8 @@ async function openUploader(motherId,trigger){
   form.addEventListener('submit',async event=>{
     event.preventDefault();
     const button=form.querySelector('button[type="submit"]'),file=form.querySelector('[data-af-file]').files?.[0];
-    let kind;
-    try{kind=validateMediaFile(file)}catch(error){DOC.toast(error.message,'error');return}
+    let media;
+    try{media=validateMediaFile(file);await requireClinicalMediaConsent(motherId,media.kind)}catch(error){DOC.toast(error.message,'error');return}
     button.disabled=true;button.textContent='Preparando…';
     const owner=DOC.userId(),babyId=form.querySelector('[data-af-baby]').value||null;
     let encounter=latest;
@@ -114,16 +121,16 @@ async function openUploader(motherId,trigger){
       progress.hidden=false;
       await DOC.uploadClinicalMedia(storagePath,file,value=>{
         const pct=Math.max(0,Math.min(100,Number(value)||0));
-        bar.style.width=`${pct}%`;progressText.textContent=`Enviando ${kind==='video'?'vídeo':'foto'}… ${pct}%`;button.textContent=`Enviando… ${pct}%`;
-      });
+        bar.style.width=`${pct}%`;progressText.textContent=`Enviando ${media.kind==='video'?'vídeo':'foto'}… ${pct}%`;button.textContent=`Enviando… ${pct}%`;
+      },media.mime);
       try{
         await DOC.rest('clinical_media',{method:'POST',headers:{Prefer:'return=representation'},body:{
           mother_id:motherId,baby_id:babyId,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,
-          storage_path:storagePath,mime_type:file.type||(kind==='video'?'video/mp4':'application/octet-stream'),file_name:file.name||(kind==='video'?'video':'imagem'),file_size:file.size,
+          storage_path:storagePath,mime_type:media.mime,file_name:file.name||(media.kind==='video'?'video':'imagem'),file_size:file.size,
           category:form.querySelector('[data-af-category]').value||'Outro',caption:form.querySelector('[data-af-caption]').value.trim(),taken_at:new Date().toISOString()
         }});
       }catch(error){await DOC.deleteClinicalMedia(storagePath).catch(()=>{});throw error}
-      close();DOC.toast(kind==='video'?'Vídeo adicionado à biblioteca.':'Foto adicionada à biblioteca.');currentMother='';await mount(motherId);
+      close();DOC.toast(media.kind==='video'?'Vídeo adicionado à biblioteca.':'Foto adicionada à biblioteca.');currentMother='';await mount(motherId);
     }catch(error){DOC.toast(error.message||'Não foi possível salvar a mídia.','error');button.disabled=false;button.textContent='Salvar na biblioteca';progress.hidden=true}
   });
 }
