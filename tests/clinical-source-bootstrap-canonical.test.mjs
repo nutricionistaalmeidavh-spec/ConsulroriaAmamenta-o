@@ -32,7 +32,7 @@ test('normal clinical startup loads a complete canonical runtime before consider
   assert.match(bootstrap, /await loadLegacyRuntime\(\)/);
   assert.doesNotMatch(
     bootstrap,
-    /Promise\.all\(\s*\[\s*loadBaseArchive\(\),\s*loadReleasePatch\(\),\s*loadAgendaPatch\(\),/,
+    /Promise\.all\(\s*\[\s*loadBaseArchive\(\),\s*loadReleasePatch\(\),\s*loadAgendaPatch\(\),\s*loadCanonical/i,
     'legacy archives must not be downloaded alongside the canonical source path'
   );
 
