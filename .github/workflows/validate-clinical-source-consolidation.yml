@@ -3,6 +3,7 @@ name: Validate clinical source consolidation
 on:
   push:
     branches:
+      - main
       - refactor/clinical-source-consolidation-work
   pull_request:
     paths:
