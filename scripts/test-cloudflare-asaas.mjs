@@ -5,13 +5,16 @@ const worker = readFileSync('worker/index.js', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
 const planHtml = readFileSync('public/comercial/plano.html', 'utf8');
+const checkoutFunction = readFileSync('supabase/functions/saas-checkout/index.ts', 'utf8');
+const billingFunction = readFileSync('supabase/functions/saas-billing-webhook/index.ts', 'utf8');
 
 assert.match(wrangler, /"main"\s*:\s*"worker\/index\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*\["\/api\/\*"\]/);
 assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
-assert.match(wrangler, /"secrets"\s*:\s*\{[\s\S]*"required"\s*:\s*\[[\s\S]*"ASSAS_SECRET"[\s\S]*\]/);
+// Runtime checks remain authoritative; do not block Git deployments on dashboard secret introspection.
+assert.doesNotMatch(wrangler, /"secrets"\s*:/);
 
 assert.match(worker, /env\.ASSAS_SECRET/);
 assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
@@ -28,16 +31,38 @@ assert.match(worker, /value:\s*499/);
 assert.match(worker, /maxInstallmentCount:\s*12/);
 assert.match(worker, /chargeTypes:\s*\['RECURRENT'\]/);
 
+// Checkout is registered in Supabase using the authenticated user's JWT before and after provider creation.
+assert.match(worker, /\/functions\/v1\/saas-checkout/);
+assert.match(worker, /action:\s*'create_request'/);
+assert.match(worker, /action:\s*'attach_provider_checkout'/);
+assert.match(worker, /saas_checkout:\$\{requestId\}/);
+assert.match(worker, /externalCheckoutId:\s*result\.id/);
+
+// A webhook is only a trigger. Cloudflare re-reads the payment from Asaas before forwarding it.
 assert.match(worker, /payload\?\.payment\?\.id/);
 assert.match(worker, /asaasFetch\(\s*env,\s*`\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
-assert.match(worker, /parseExternalReference\(verifiedPayment\?\.externalReference\)/);
-assert.match(worker, /verifiedPayment\?\.status/);
-
 assert.match(worker, /\/functions\/v1\/saas-billing-webhook/);
 assert.match(worker, /'x-asaas-api-key':\s*env\.ASSAS_SECRET/);
 assert.match(worker, /JSON\.stringify\(\{ paymentId \}\)/);
 assert.doesNotMatch(worker, /\/rest\/v1\/rpc\/apply_billing_state/);
 assert.doesNotMatch(worker, /billing_webhook_events\?/);
+
+// Supabase checkout adapter owns administrative writes and scopes them to the authenticated owner.
+assert.match(checkoutFunction, /create_request/);
+assert.match(checkoutFunction, /attach_provider_checkout/);
+assert.match(checkoutFunction, /owner_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
+assert.match(checkoutFunction, /external_checkout_id/);
+assert.match(checkoutFunction, /status:\s*'checkout_created'/);
+
+// Billing bridge independently verifies the payment and proves it belongs to our stored Asaas checkout session.
+assert.match(billingFunction, /x-asaas-api-key/);
+assert.match(billingFunction, /\/payments\/\$\{encodeURIComponent\(paymentId\)\}/);
+assert.match(billingFunction, /checkoutSession=\$\{encodeURIComponent\(checkoutRequest\.external_checkout_id\)\}/);
+assert.match(billingFunction, /saas_checkout:/);
+assert.match(billingFunction, /apply_billing_state/);
+assert.match(billingFunction, /billing_webhook_events/);
+assert.doesNotMatch(billingFunction, /BILLING_WEBHOOK_SECRET/);
+assert.doesNotMatch(billingFunction, /BILLING_PROVIDER/);
 
 assert.doesNotMatch(worker, /key-fingerprint/);
 assert.doesNotMatch(worker, /sha256Hex/);
