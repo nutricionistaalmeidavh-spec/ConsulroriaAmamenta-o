@@ -2,67 +2,68 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Criar a fundação SaaS e registrar a Débora como tenant inicial sem alterar o comportamento clínico existente.
+**Goal:** Criar a fundação SaaS comercial sem integrar, promover ou transformar a landing/sistema atual da Débora em parte do produto comercial.
 
-**Architecture:** A implementação é aditiva: cinco novas tabelas protegidas por RLS usam o `owner_id` já existente como fronteira inicial. Um backfill defensivo promove somente o owner legado com evidência clínica e financeira real.
+**Architecture:** A implementação é aditiva: quatro novas tabelas protegidas por RLS usam `owner_id` como fronteira dos futuros usuários comerciais. O legado da Débora permanece isolado e a migration comercial não lê nem altera tabelas clínicas.
 
 **Tech Stack:** PostgreSQL/Supabase, GitHub Actions, Node.js.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-saas-foundation-design.md`
 
 ## Global Constraints
-- Não alterar tabelas clínicas existentes.
-- Não alterar `src/bootstrap.js` nem o frontend clínico.
-- Não expor e-mail/UUID pessoal no repositório.
+- Não alterar nem consultar tabelas clínicas existentes na migration SaaS.
+- Não alterar `src/bootstrap.js`, a landing atual ou o frontend clínico.
+- Não criar `public_profiles` nem landing por usuário.
+- Não vincular a conta atual da Débora a `saas_accounts` nesta fase.
 - Não aplicar migration no banco de produção nem fazer deploy nesta entrega.
 
 ---
 
-### Task 1: Contract test da fundação
+### Task 1: Contract test de isolamento
 
 **Files:**
-- Create: `scripts/test-saas-foundation.mjs`
-- Create: `.github/workflows/validate-saas-foundation.yml`
+- Modify: `scripts/test-saas-foundation.mjs`
+- Keep: `.github/workflows/validate-saas-foundation.yml`
 
 **Interfaces:**
-- Consumes: spec SaaS.
-- Produces: validação estática da migration e do backfill.
+- Consumes: spec SaaS revisada.
+- Produces: validação estática da migration comercial.
 
-- [ ] Criar workflow que execute `node scripts/test-saas-foundation.mjs` na branch SaaS.
-- [ ] Criar teste que falhe enquanto `supabase/phase-saas-foundation.sql` não existir.
-- [ ] Confirmar o RED no CI.
+- [x] Exigir as quatro tabelas comerciais e RLS.
+- [x] Falhar se `public_profiles` existir.
+- [x] Falhar se houver slug, branding ou bootstrap da Débora.
+- [x] Falhar se a migration referenciar tabelas clínicas.
+- [x] Confirmar RED contra a migration anterior.
 
-### Task 2: Migration SaaS aditiva
-
-**Files:**
-- Create: `supabase/phase-saas-foundation.sql`
-
-**Interfaces:**
-- Produces: `saas_accounts`, `professional_profiles`, `public_profiles`, `subscriptions`, `entitlements`.
-
-- [ ] Criar somente tabelas novas e constraints SaaS.
-- [ ] Habilitar RLS nas cinco tabelas.
-- [ ] Definir grants explícitos para `anon`, `authenticated` e `service_role`.
-- [ ] Definir policies por `owner_id`.
-- [ ] Reexecutar o teste até GREEN.
-
-### Task 3: Backfill seguro da Débora
+### Task 2: Migration SaaS comercial isolada
 
 **Files:**
 - Modify: `supabase/phase-saas-foundation.sql`
-- Modify: `scripts/test-saas-foundation.mjs`
 
 **Interfaces:**
-- Consumes: owners existentes em `clinical_encounters` e `financial_entries`.
-- Produces: conta SaaS e perfil público `debora-lactacao` somente quando houver um candidato legado inequívoco.
+- Produces: `saas_accounts`, `professional_profiles`, `subscriptions`, `entitlements`.
 
-- [ ] Testar ausência de e-mail/UUID hardcoded e presença de guarda de candidato único.
-- [ ] Implementar backfill idempotente derivado de dados clínicos reais.
-- [ ] Garantir que conta demo sem prontuário/financeiro não seja promovida.
-- [ ] Executar teste final e build existente.
+- [x] Remover `public_profiles` e toda policy/grant anônima relacionada.
+- [x] Remover backfill do owner legado.
+- [x] Remover leituras de `clinical_encounters` e `financial_entries`.
+- [x] Manter somente tabelas novas, constraints, grants e RLS comerciais.
+- [ ] Confirmar GREEN no CI final.
+
+### Task 3: Contrato do legado isolado
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-06-saas-foundation-design.md`
+
+**Interfaces:**
+- Produces: regra explícita de que a landing/sistema atual da Débora não participa do SaaS comercial.
+
+- [x] Registrar que a landing atual não é template nem `public_profile`.
+- [x] Registrar que novos clientes entrarão futuramente por outra landing comercial.
+- [x] Registrar que a conta da Débora não será promovida a tenant comercial nesta fase.
 
 ### Task 4: Verificação de entrega
 
-- [ ] Comparar branch SaaS com `main` e confirmar que apenas arquivos novos/documentação foram alterados.
+- [ ] Confirmar CI final GREEN.
+- [ ] Comparar branch SaaS com `main` e confirmar ausência de mudanças no frontend clínico/landing atual.
 - [ ] Confirmar `main` e snapshot no commit clínico de referência.
 - [ ] Confirmar que o banco de produção não recebeu DDL/DML nesta entrega.
