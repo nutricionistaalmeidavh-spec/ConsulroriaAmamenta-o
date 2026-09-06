@@ -1,0 +1,55 @@
+name: Validate SaaS foundation
+
+on:
+  push:
+    branches:
+      - feature/saas-foundation-phase-0-2
+    paths:
+      - 'scripts/test-saas-foundation.mjs'
+      - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-saas-plans.mjs'
+      - 'scripts/test-saas-enforcement.mjs'
+      - 'scripts/test-billing-scaffold.mjs'
+      - 'supabase/phase-saas-foundation.sql'
+      - 'supabase/phase-saas-enforcement.sql'
+      - 'supabase/phase-saas-billing.sql'
+      - 'supabase/functions/saas-checkout/**'
+      - 'supabase/functions/saas-billing-webhook/**'
+      - 'public/comercial/**'
+  pull_request:
+    paths:
+      - 'scripts/test-saas-foundation.mjs'
+      - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-saas-plans.mjs'
+      - 'scripts/test-saas-enforcement.mjs'
+      - 'scripts/test-billing-scaffold.mjs'
+      - 'supabase/phase-saas-foundation.sql'
+      - 'supabase/phase-saas-enforcement.sql'
+      - 'supabase/phase-saas-billing.sql'
+      - 'supabase/functions/saas-checkout/**'
+      - 'supabase/functions/saas-billing-webhook/**'
+      - 'public/comercial/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  saas-foundation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate additive SaaS contract
+        run: node scripts/test-saas-foundation.mjs
+      - name: Validate commercial funnel and onboarding
+        run: node scripts/test-commercial-funnel.mjs
+      - name: Validate Freemium and Pro plans
+        run: node scripts/test-saas-plans.mjs
+      - name: Validate server-side SaaS enforcement
+        run: node scripts/test-saas-enforcement.mjs
+      - name: Validate My Plan and billing scaffold
+        run: node scripts/test-billing-scaffold.mjs
