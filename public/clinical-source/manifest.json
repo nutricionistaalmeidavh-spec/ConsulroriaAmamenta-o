@@ -1,0 +1,87 @@
+{
+  "version": 2,
+  "strategy": "canonical-first-with-legacy-fallback",
+  "generatedFromLegacyArtifacts": true,
+  "modules": {
+    "config.js": {
+      "promoted": true,
+      "source": "base:config.js",
+      "sha256": "6bfd43752edaaae72790d51a697fbb0936eb9e1fca1c43580c0089cdf77f078b"
+    },
+    "core/app-shell.js": {
+      "promoted": true,
+      "source": "agenda:core/app-shell.js",
+      "sha256": "08bd79c8f1ab5a79fa8913280f6e6c0a0bae9ec60db737eccf497d75602f2393"
+    },
+    "core/lib/app-data.js": {
+      "promoted": true,
+      "source": "agenda:core/lib/app-data.js",
+      "sha256": "9d375d16b19d68091b89ccd7d3bcabef409c5a6e69ddd5cacd9e06213e5d18b2"
+    },
+    "core/lib/auth-service.js": {
+      "promoted": true,
+      "source": "base:lib/auth-service.js",
+      "sha256": "f11c4b3f220d39721dc434050471fb4c369093921b2ce24296b8d77c50396ad0"
+    },
+    "core/lib/backup-service.js": {
+      "promoted": true,
+      "source": "base:lib/backup-service.js",
+      "sha256": "457f27e9d7f87394b44e74da09afa1f1eef306a6fe53f442c3951fb38c5b8ef7"
+    },
+    "core/lib/encounter-form.js": {
+      "promoted": true,
+      "source": "base:lib/encounter-form.js",
+      "sha256": "39812aacb4a220bb151f6c8ddd432bb98f5963e55d2b05f6105d26b867d9ab0f"
+    },
+    "core/lib/media-service.js": {
+      "promoted": true,
+      "source": "base:lib/media-service.js",
+      "sha256": "cbae802542f5ab83caacb69d799aa4c709c3755cf01d09f5b11a984731813e5b"
+    },
+    "core/lib/pdf-service.js": {
+      "promoted": true,
+      "source": "base:lib/pdf-service.js",
+      "sha256": "5b011926db580310eb36eda5ad4ad036be6f9e3f0bce01d331b3342bfbe5a74c"
+    },
+    "core/lib/repositories.js": {
+      "promoted": true,
+      "source": "base:lib/repositories.js",
+      "sha256": "11708b55d27ab9a18f4ff6b1d955defc228e6efebfe281e2a8c459a2d199fcf0"
+    },
+    "core/lib/supabase-client.js": {
+      "promoted": true,
+      "source": "release:core/lib/supabase-client.js",
+      "sha256": "b26779bcd466c96f26dde9faea2f122c389d434188f814d960ad4d93a16c889f"
+    },
+    "features/clinical-note-feature.css": {
+      "promoted": true,
+      "source": "release:features/clinical-note-feature.css",
+      "sha256": "5e8bad7e4800fc287bd638bc68ebc870475f0035fdfce37e33d998cfad97b9e0"
+    },
+    "features/clinical-note-feature.js": {
+      "promoted": true,
+      "source": "release:features/clinical-note-feature.js",
+      "sha256": "4a040e9e12334dda39cf2dc26cb23aab3e6d6d1452a05eef1f2fff1f6a8cd1d9"
+    },
+    "features/patient-fixes.css": {
+      "promoted": true,
+      "source": "release:features/patient-fixes.css",
+      "sha256": "02e6ae61184667b6f45f0282328b13340f3d51b92f511833a307ed456cc3bdf4"
+    },
+    "features/patient-fixes.js": {
+      "promoted": true,
+      "source": "release:features/patient-fixes.js",
+      "sha256": "a0c2d9dc407cb538f81a10b506abf4c475ae77f905b1ce09acd93561af220bec"
+    },
+    "index.html": {
+      "promoted": true,
+      "source": "base:index.html",
+      "sha256": "d4ee5dbf0e4ce4961cfbc8c26829f596df9b3fd7b8ba189e84887cc90ac5b126"
+    },
+    "styles.css": {
+      "promoted": true,
+      "source": "base:styles.css",
+      "sha256": "a14d92d4230f8775549043c4e792cc37ab326729775fe46838cf70a5b2272d79"
+    }
+  }
+}

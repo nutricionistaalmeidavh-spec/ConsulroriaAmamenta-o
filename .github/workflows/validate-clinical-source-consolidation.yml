@@ -1,0 +1,37 @@
+name: Validate clinical source consolidation
+
+on:
+  push:
+    branches:
+      - main
+      - refactor/clinical-source-consolidation-work
+  pull_request:
+    paths:
+      - 'src/bootstrap.js'
+      - 'public/clinical-source/**'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'tests/clinical-source-*.test.mjs'
+      - '.github/workflows/validate-clinical-source-consolidation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: node --test tests/clinical-source-*.test.mjs
+      - name: Validate current Cloudflare Asaas contract
+        run: node scripts/test-cloudflare-asaas.mjs
+      - name: Syntax-check Cloudflare worker
+        run: node --check worker/index.js
+      - run: npm run build
+      - name: Verify canonical runtime is published
+        run: |
+          test -f dist/clinical-source/index.html
+          test -f dist/clinical-source/core/app-shell.js
+          test -f dist/clinical-source/core/lib/supabase-client.js
+          test -f dist/clinical-source/features/clinical-note-feature.js
+          test -f dist/clinical-source/manifest.json

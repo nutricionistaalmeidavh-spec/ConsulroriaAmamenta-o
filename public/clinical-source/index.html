@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="editorial-light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#395e4a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Débora">
+  <title>Débora Lactação</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<section class="auth-shell" data-auth-screen="login">
+  <div class="auth-card">
+    <div class="auth-mark">DL</div>
+    <span class="section-kicker">ACESSO PROFISSIONAL</span>
+    <h1>Débora Lactação</h1>
+    <p>Prontuário e acompanhamento da consultoria de amamentação.</p>
+    <form data-login-form>
+      <label class="field"><span>E-mail</span><input name="email" type="email" autocomplete="username" required></label>
+      <label class="field"><span>Senha</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="ui-button ui-button-primary auth-submit" type="submit">Entrar</button>
+      <button class="ui-button ui-button-ghost auth-secondary" type="button" data-signup-action>Criar primeiro acesso</button>
+      <p class="form-message" data-login-message role="status"></p>
+    </form>
+    <small class="auth-footnote">No primeiro uso, crie o acesso com o e-mail da Débora. Depois use sempre o mesmo login.</small>
+  </div>
+</section>
+<div data-app-root hidden>
+<div class="template-shell lactation-shell">
+  <aside class="template-sidebar lactation-sidebar desktop-only">
+    <div class="template-brand lactation-brand"><span class="template-brand-mark lactation-brand-mark">D</span><span>Débora Lactação</span></div>
+    <div class="lactation-profile-mini"><div class="lactation-avatar">DA</div><div><strong>Débora</strong><span>Consultora de amamentação</span></div></div>
+    <nav class="template-nav lactation-side-nav" aria-label="Navegação principal">
+      <a href="#" aria-current="page" data-nav-target="home"><span class="nav-icon">⌂</span><span>Início</span></a>
+      <a href="#" data-nav-target="agenda"><span class="nav-icon">▦</span><span>Agenda</span></a>
+      <a href="#" data-nav-target="patients"><span class="nav-icon">♡</span><span>Pacientes</span></a>
+      <a href="#" data-nav-target="followups"><span class="nav-icon">↻</span><span>Acompanhamentos</span></a>
+      <a href="#" data-nav-target="finance"><span class="nav-icon">$</span><span>Financeiro</span></a>
+      <a href="#" data-nav-target="library"><span class="nav-icon">▤</span><span>Biblioteca</span></a>
+      <a href="#" data-nav-target="settings"><span class="nav-icon">⚙</span><span>Configurações</span></a>
+    </nav>
+    <div class="ui-grow"></div>
+    <div class="lactation-private-note"><span aria-hidden="true">●</span><div><strong>Uso individual</strong><small>Dados somente desta profissional.</small></div></div>
+  </aside>
+
+  <main class="template-main lactation-main">
+    <header class="template-topbar lactation-topbar">
+      <div class="lactation-mobile-brand mobile-only"><span class="template-brand-mark lactation-brand-mark">D</span><div><strong>Débora Lactação</strong><small data-page-title>Início</small></div></div>
+      <div class="desktop-only"><strong data-page-title>Início</strong><span class="lactation-subtitle">Sua rotina de atendimento em um só lugar</span></div>
+      <div class="template-actions lactation-top-actions">
+        <button class="ui-button ui-button-ghost icon-button" aria-label="Pesquisar">⌕</button>
+        <button class="ui-button ui-button-primary desktop-only" data-action="new-appointment">+ Novo atendimento</button>
+      </div>
+    </header>
+
+    <div class="template-page lactation-page">
+      <section class="lactation-screen" data-screen="home" data-route="/home">
+        <div class="lactation-hello">
+          <div><span class="lactation-kicker" data-home-date>HOJE</span><h1 data-home-greeting>Olá, Débora</h1><p data-home-summary>Carregando sua rotina…</p></div>
+          <button class="ui-button ui-button-primary desktop-only" data-action="new-appointment">Novo atendimento</button>
+        </div>
+
+        <section class="lactation-mobile-priority">
+          <article class="next-appointment-card" data-next-appointment>
+            <div class="card-eyebrow"><span class="status-dot"></span>Próximo atendimento</div>
+            <div class="next-time">--:--</div>
+            <div class="next-patient"><strong>Nenhum atendimento agendado</strong><span>Use “Novo atendimento” ou “Agendar”.</span></div>
+            <div class="quick-row" data-next-actions hidden>
+              <button class="ui-button ui-button-primary" data-action="open-next-patient">Abrir ficha</button>
+              <button class="ui-button ui-button-ghost" data-action="next-whatsapp">WhatsApp</button>
+              <button class="ui-button ui-button-ghost" data-action="next-route">Rota</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="lactation-kpis">
+          <article class="lactation-kpi"><span>Atendimentos hoje</span><strong data-kpi-today>0</strong><small data-kpi-today-meta>carregando…</small></article>
+          <article class="lactation-kpi attention"><span>Follow-ups pendentes</span><strong data-kpi-followups>0</strong><small>contatos programados</small></article>
+          <article class="lactation-kpi"><span>A receber</span><strong data-kpi-receivable>R$ 0</strong><small>pendências financeiras</small></article>
+          <article class="lactation-kpi desktop-only"><span>Atendimentos no mês</span><strong data-kpi-month>0</strong><small data-kpi-month-meta>mês atual</small></article>
+        </section>
+
+        <section class="lactation-dashboard-grid">
+          <div class="lactation-stack">
+            <div class="section-heading"><div><span class="section-kicker">AGENDA</span><h2>Hoje</h2></div><button class="ui-button ui-button-ghost" data-nav-target="agenda">Ver agenda</button></div>
+            <div class="agenda-list" data-home-agenda-live><div class="empty-live">Nenhum atendimento hoje.</div></div>
+          </div>
+
+          <aside class="lactation-stack">
+            <div class="section-heading"><div><span class="section-kicker">ACOMPANHAMENTO</span><h2>Precisa da sua atenção</h2></div></div>
+            <div data-home-followups-live><div class="empty-live">Nenhum acompanhamento pendente.</div></div>
+            <article class="soft-card"><div><span class="section-kicker">ATALHOS</span><h3>Ações rápidas</h3></div><div class="quick-actions-grid"><button data-action="new-appointment"><b>＋</b>Novo atendimento</button><button data-action="new-patient"><b>♡</b>Nova paciente</button><button data-nav-target="followups"><b>↻</b>Follow-up</button><button data-nav-target="finance"><b>$</b>Pagamento</button></div></article>
+          </aside>
+        </section>
+      </section>
+
+      <section class="lactation-screen" data-screen="agenda" data-route="/agenda" hidden>
+        <div class="page-heading"><div><span class="section-kicker">ROTINA</span><h1>Agenda</h1><p>Atendimentos presenciais, domiciliares e online.</p></div><button class="ui-button ui-button-primary" data-action="schedule-appointment">+ Agendar</button></div>
+        <div class="date-strip" data-date-strip-live aria-label="Dias da semana"></div>
+        <div class="agenda-list agenda-full" data-agenda-live><div class="empty-live">Nenhum atendimento agendado.</div></div>
+      </section>
+
+      <section class="lactation-screen" data-screen="patients" data-route="/patients" hidden>
+        <div class="page-heading"><div><span class="section-kicker">MÃE + BEBÊ(S)</span><h1>Pacientes</h1><p>Acompanhamento organizado por mãe e seus bebês.</p></div><button class="ui-button ui-button-primary" data-action="new-patient">+ Nova paciente</button></div>
+        <label class="search-field"><span>⌕</span><input type="search" placeholder="Buscar mãe ou bebê" data-patient-search></label>
+        <div class="patient-grid" data-patient-list></div>
+        <div class="empty-state" data-patient-empty hidden><strong>Nenhuma paciente encontrada</strong><span>Cadastre uma mãe e pelo menos um bebê para começar.</span><button class="ui-button ui-button-primary" data-action="new-patient">+ Nova paciente</button></div>
+      </section>
+
+      <section class="lactation-screen patient-form-screen" data-screen="patient-form" data-route="/patient/form" hidden>
+        <div class="page-heading patient-form-heading"><div><button class="back-link" data-nav-target="patients">‹ Pacientes</button><span class="section-kicker">MÃE + BEBÊ(S)</span><h1 data-patient-form-title>Nova paciente</h1><p>Cadastre somente os dados necessários para acompanhar a família.</p></div></div>
+        <form class="patient-form" data-patient-form>
+          <article class="detail-card patient-form-card">
+            <div class="section-heading"><div><span class="section-kicker">MÃE</span><h2>Dados da mãe</h2></div></div>
+            <div class="form-grid">
+              <label class="field"><span>Nome da mãe *</span><input name="motherName" autocomplete="name" required placeholder="Nome completo"></label>
+              <label class="field"><span>Telefone</span><input name="motherPhone" inputmode="tel" autocomplete="tel" placeholder="(16) 99999-9999"></label>
+              <label class="field"><span>Data de nascimento</span><input name="motherBirthDate" type="date"></label>
+              <label class="field"><span>Parto / contexto</span><input name="motherDelivery" placeholder="Ex.: Cesárea · 28/07/2026"></label>
+            </div>
+            <label class="field"><span>Condições relevantes</span><textarea name="motherConditions" rows="3" placeholder="Alergias, condições clínicas, medicamentos relevantes..."></textarea></label>
+            <label class="field"><span>Histórico de amamentação</span><textarea name="motherHistory" rows="3" placeholder="Experiências anteriores e observações importantes..."></textarea></label>
+          </article>
+          <section class="babies-form-section">
+            <div class="section-heading"><div><span class="section-kicker">BEBÊ(S)</span><h2>Dados dos bebês</h2><p>Cadastre um bebê ou adicione irmãos/gêmeos quando necessário.</p></div><button type="button" class="ui-button ui-button-ghost" data-action="add-baby">+ Adicionar bebê</button></div>
+            <div class="babies-editor" data-babies-editor></div>
+          </section>
+          <article class="detail-card patient-form-card">
+            <label class="field"><span>Observações gerais</span><textarea name="notes" rows="4" placeholder="Contexto útil para próximos atendimentos..."></textarea></label>
+          </article>
+          <div class="patient-form-actions"><button type="button" class="ui-button ui-button-ghost" data-nav-target="patients">Cancelar</button><button type="submit" class="ui-button ui-button-primary" data-patient-save>Salvar paciente</button></div>
+                    <article class="detail-card patient-form-card" data-consent-panel>
+            <div class="section-heading"><div><span class="section-kicker">CONSENTIMENTOS</span><h2>Privacidade e contato</h2></div></div>
+            <label class="consent-row"><input type="checkbox" name="consentData" value="data_processing"><span><strong>Tratamento de dados de saúde</strong><small>Necessário para manter o prontuário e histórico.</small></span></label>
+            <label class="consent-row"><input type="checkbox" name="consentWhatsapp" value="whatsapp"><span><strong>Contato por WhatsApp</strong><small>Confirmações, orientações e acompanhamentos.</small></span></label>
+            <label class="consent-row"><input type="checkbox" name="consentClinicalMedia" value="clinical_media"><span><strong>Fotos e documentos clínicos</strong><small>Armazenamento privado vinculado ao atendimento.</small></span></label>
+            <label class="consent-row"><input type="checkbox" name="consentPublicMedia" value="public_media"><span><strong>Uso público de imagem</strong><small>Separado do prontuário e opcional. Não é necessário para atendimento.</small></span></label>
+          </article>
+          <div class="patient-form-actions">
+            <button class="ui-button ui-button-ghost" type="button" data-nav-target="patients">Cancelar</button>
+            <button class="ui-button ui-button-primary" type="submit">Salvar paciente</button>
+          </div>
+<p class="form-status" data-patient-form-status role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="lactation-screen" data-screen="patient" data-route="/patient/:id" hidden>
+        <div class="patient-header"><button class="back-link" data-nav-target="patients">‹ Pacientes</button><div class="patient-title-row"><div class="patient-avatar big" data-patient-avatar>MB</div><div><span class="section-kicker">MÃE + BEBÊ(S)</span><h1 data-patient-title>Paciente</h1><p data-patient-subtitle>Mãe + bebê</p></div><div class="patient-header-actions"><button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button class="ui-button ui-button-primary" data-action="new-appointment">Novo atendimento</button></div></div><div class="patient-quick"><button>WhatsApp</button><button>Ligar</button><button>Rota</button><button>Registrar peso</button><button>Adicionar foto</button></div></div>
+        <div class="baby-selector-wrap"><span class="section-kicker">BEBÊ EM VISUALIZAÇÃO</span><div class="baby-selector" data-baby-selector></div></div>
+        <div class="patient-detail-grid">
+          <div class="lactation-stack">
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">CADASTRO</span><h2>Dados da mãe</h2></div><button class="text-button" data-action="edit-patient">Editar</button></div><dl class="detail-list"><div><dt>Telefone</dt><dd data-mother-phone>—</dd></div><div><dt>Parto</dt><dd data-mother-delivery>—</dd></div><div><dt>Condições relevantes</dt><dd data-mother-conditions>—</dd></div><div><dt>Histórico</dt><dd data-mother-history>—</dd></div></dl></article>
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">BEBÊ</span><h2 data-baby-detail-title>Dados do bebê</h2></div><button class="text-button" data-action="edit-patient">Editar</button></div><dl class="detail-list"><div><dt>Nascimento</dt><dd data-baby-birth>—</dd></div><div><dt>Peso ao nascer</dt><dd data-baby-birth-weight>—</dd></div><div><dt>Peso atual</dt><dd data-baby-current-weight>—</dd></div><div><dt>Alimentação atual</dt><dd data-baby-feeding>—</dd></div></dl></article>
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">EVOLUÇÃO</span><h2>Histórico de peso</h2></div><button class="text-button" data-action="add-weight">+ Registrar</button></div><div class="weight-chart" data-patient-weights-live aria-label="Histórico de peso"><div class="empty-live">Nenhum peso registrado.</div></div></article>
+          </div>
+          <aside class="lactation-stack">
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">HISTÓRICO</span><h2>Linha do tempo</h2></div></div><div class="timeline" data-patient-timeline-live><div class="empty-live">Nenhum atendimento registrado.</div></div></article>
+          </aside>
+        </div>
+      </section>
+
+      <section class="lactation-screen" data-screen="followups" data-route="/followups" hidden>
+        <div class="page-heading"><div><span class="section-kicker">CONTINUIDADE</span><h1>Acompanhamentos</h1><p>Quem precisa de contato, retorno ou nova avaliação.</p></div><button class="ui-button ui-button-primary" data-action="new-followup">+ Novo follow-up</button></div>
+        <div class="followup-board" data-followups-live><div class="empty-live">Nenhum follow-up pendente.</div></div>
+      </section>
+
+      <section class="lactation-screen" data-screen="finance" data-route="/finance" hidden>
+        <div class="page-heading"><div><span class="section-kicker">GESTÃO SIMPLES</span><h1>Financeiro</h1><p>Somente o necessário para controlar seus atendimentos.</p></div><button class="ui-button ui-button-primary" data-action="new-finance">+ Lançamento</button></div>
+        <section class="lactation-kpis"><article class="lactation-kpi"><span>Recebido no mês</span><strong data-finance-received>R$ 0</strong><small data-finance-received-meta>0 pagamentos</small></article><article class="lactation-kpi attention"><span>A receber</span><strong data-finance-receivable>R$ 0</strong><small data-finance-receivable-meta>0 pendências</small></article><article class="lactation-kpi"><span>Ticket médio</span><strong data-finance-ticket>R$ 0</strong><small data-finance-ticket-meta>mês atual</small></article></section>
+        <div class="agenda-list agenda-full" data-finance-live><div class="empty-live">Nenhum lançamento financeiro.</div></div>
+      </section>
+
+      <section class="lactation-screen" data-screen="library" data-route="/library" hidden>
+        <div class="page-heading"><div><span class="section-kicker">REUTILIZÁVEL</span><h1>Biblioteca</h1><p>Orientações prontas para montar planos de cuidado em segundos.</p></div><button class="ui-button ui-button-primary">+ Nova orientação</button></div>
+        <div class="library-grid"><article class="library-card"><span class="library-icon">♡</span><div><strong>Pega adequada</strong><p>Sinais de boa pega e ajustes de posição.</p></div><button>Usar</button></article><article class="library-card"><span class="library-icon">◒</span><div><strong>Ordenha e armazenamento</strong><p>Orientações de ordenha, conservação e oferta.</p></div><button>Usar</button></article><article class="library-card"><span class="library-icon">⌂</span><div><strong>Retorno ao trabalho</strong><p>Plano progressivo para formar estoque e manter produção.</p></div><button>Usar</button></article><article class="library-card"><span class="library-icon">!</span><div><strong>Sinais de alerta</strong><p>Quando buscar avaliação médica ou pediátrica.</p></div><button>Usar</button></article></div>
+      </section>
+
+      <section class="lactation-screen" data-screen="settings" data-route="/settings" hidden>
+        <div class="page-heading"><div><span class="section-kicker">PREFERÊNCIAS</span><h1>Configurações</h1><p>Segurança, consentimentos e cópias dos seus dados.</p></div></div>
+        <article class="detail-card pdf-layout-settings">
+          <div class="section-heading"><div><span class="section-kicker">DOCUMENTOS</span><h2>Modelo padrão do PDF</h2><p>Você pode trocar o modelo apenas em um atendimento na etapa de finalização.</p></div></div>
+          <label class="field"><span>Layout padrão</span><select data-pdf-layout-default><option value="acolhedor">Acolhedor</option><option value="clinico">Clínico</option><option value="minimalista">Minimalista</option></select></label>
+          <div class="pdf-layout-previews" aria-label="Modelos de PDF">
+            <div class="pdf-layout-preview acolhedor"><b>Acolhedor</b><small>Rosa suave + verde</small></div>
+            <div class="pdf-layout-preview clinico"><b>Clínico</b><small>Relatório técnico</small></div>
+            <div class="pdf-layout-preview minimalista"><b>Minimalista</b><small>Limpo para impressão</small></div>
+          </div>
+        </article>
+        <div class="settings-list">
+          <button data-action="backup-export"><span>⇩</span><div><strong>Exportar backup criptografado</strong><small>Baixa uma cópia protegida por senha.</small></div><b>›</b></button>
+          <button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Importa uma cópia criptografada deste sistema.</small></div><b>›</b></button>
+          <button data-action="logout"><span>↪</span><div><strong>Sair do sistema</strong><small>Encerra a sessão neste aparelho.</small></div><b>›</b></button>
+        </div>
+        <article class="soft-card security-note"><strong>Proteção dos dados</strong><p>O aplicativo não salva prontuários no localStorage. O acesso online depende de autenticação e das políticas RLS do banco.</p></article>
+      </section>
+
+      <section class="lactation-screen" data-screen="more" data-route="/more" hidden>
+        <div class="page-heading"><div><span class="section-kicker">MAIS</span><h1>Outras áreas</h1><p>Acesso rápido às funções menos usadas no dia a dia.</p></div></div>
+        <div class="settings-list"><button data-nav-target="finance"><span>$</span><div><strong>Financeiro</strong><small>Recebimentos e pendências</small></div><b>›</b></button><button data-nav-target="library"><span>▤</span><div><strong>Biblioteca</strong><small>Orientações prontas</small></div><b>›</b></button><button data-nav-target="settings"><span>⚙</span><div><strong>Configurações</strong><small>Perfil, consentimentos e backup</small></div><b>›</b></button></div>
+      </section>
+
+      <section class="lactation-screen appointment-screen" data-screen="appointment" data-route="/appointment/new" hidden>
+        <div class="wizard-header"><button class="back-link" data-wizard-close>‹ Voltar</button><div><span class="section-kicker">ATENDIMENTO</span><h1>Novo atendimento</h1><p><span data-wizard-count>1</span> de 7</p></div><button class="text-button" data-action="save-draft">Salvar rascunho</button></div>
+        <div class="wizard-progress"><span data-progress-segment class="active"></span><span data-progress-segment></span><span data-progress-segment></span><span data-progress-segment></span><span data-progress-segment></span><span data-progress-segment></span><span data-progress-segment></span></div>
+
+        <div class="wizard-card" data-wizard-step="1" data-encounter-section="identification"><span class="section-kicker">ETAPA 1</span><h2>Identificação</h2><p>Quem você está atendendo e qual é o formato da consulta?</p><label class="field"><span>Mãe + bebê</span><select data-appointment-patient data-encounter-field="patientId" data-section="identification"></select></label><label class="field" data-baby-target-field><span>Bebê(s) deste atendimento</span><select data-appointment-baby data-encounter-field="babyTarget" data-section="identification"></select><small>Em caso de gêmeos, escolha um bebê ou “Todos os bebês”.</small></label><div class="choice-grid"><button type="button" class="choice selected" data-encounter-choice data-section="identification" data-field="appointmentType" data-value="Retorno" aria-pressed="true">Retorno</button><button type="button" class="choice" data-encounter-choice data-section="identification" data-field="appointmentType" data-value="Consulta inicial" aria-pressed="false">Consulta inicial</button><button type="button" class="choice" data-encounter-choice data-section="identification" data-field="appointmentType" data-value="Pré-natal" aria-pressed="false">Pré-natal</button><button type="button" class="choice" data-encounter-choice data-section="identification" data-field="appointmentType" data-value="Acompanhamento" aria-pressed="false">Acompanhamento</button></div><div class="choice-grid three"><button type="button" class="choice selected" data-encounter-choice data-section="identification" data-field="format" data-value="Domiciliar" aria-pressed="true">Domiciliar</button><button type="button" class="choice" data-encounter-choice data-section="identification" data-field="format" data-value="Presencial" aria-pressed="false">Presencial</button><button type="button" class="choice" data-encounter-choice data-section="identification" data-field="format" data-value="Online" aria-pressed="false">Online</button></div>
+          <div class="form-grid appointment-meta-grid">
+            <label class="field"><span>Data e hora</span><input type="datetime-local" data-encounter-field="startsAt" data-section="identification"></label>
+            <label class="field"><span>Duração</span><select data-encounter-field="durationMin" data-section="identification"><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option></select></label>
+            <label class="field"><span>Valor</span><div class="unit-input"><b>R$</b><input type="number" min="0" step="0.01" value="0" data-encounter-field="value" data-section="identification"></div></label>
+          </div></div>
+
+        <div class="wizard-card" data-wizard-step="2" data-encounter-section="chief_complaint" hidden><span class="section-kicker">ETAPA 2</span><h2>Queixa principal</h2><p>Marque os pontos que trouxeram a família para o atendimento.</p><div class="tag-grid"><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Dor" data-multiple="true" aria-pressed="false">Dor</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Dificuldade de pega" data-multiple="true" aria-pressed="false">Dificuldade de pega</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Fissura" data-multiple="true" aria-pressed="false">Fissura</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Ganho de peso" data-multiple="true" aria-pressed="false">Ganho de peso</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Baixa produção percebida" data-multiple="true" aria-pressed="false">Baixa produção percebida</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Ingurgitamento" data-multiple="true" aria-pressed="false">Ingurgitamento</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Suplementação" data-multiple="true" aria-pressed="false">Suplementação</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Ordenha" data-multiple="true" aria-pressed="false">Ordenha</button><button type="button" class="tag-choice" data-encounter-choice data-section="chief_complaint" data-field="tags" data-value="Outro" data-multiple="true" aria-pressed="false">Outro</button></div><label class="field"><span>Relato da mãe</span><textarea rows="4" data-encounter-field="notes" data-section="chief_complaint" placeholder="Resumo da queixa e contexto..."></textarea></label></div>
+
+        <div class="wizard-card" data-wizard-step="3" data-encounter-section="maternal_assessment" hidden><span class="section-kicker">ETAPA 3</span><h2>Avaliação materna</h2><p>Registre somente o que for relevante para este atendimento.</p><div class="form-grid"><label class="field"><span>Dor (0–10)</span><input type="number" min="0" max="10" data-encounter-field="painScore" data-section="maternal_assessment"></label><label class="field"><span>Lado mais afetado</span><select data-encounter-field="affectedSide" data-section="maternal_assessment"><option value="">Não informado</option><option>Direita</option><option>Esquerda</option><option>Ambas</option></select></label></div><div class="tag-grid"><button class="tag-choice">Fissura</button><button class="tag-choice">Ingurgitamento</button><button class="tag-choice">Edema</button><button class="tag-choice">Sinais inflamatórios</button><button class="tag-choice">Sem alterações</button></div><label class="field"><span>Observações</span><textarea rows="4" data-encounter-field="notes" data-section="maternal_assessment"></textarea></label><label class="media-drop" data-clinical-media-drop>＋ Adicionar foto clínica<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-clinical-media-input hidden></label></div>
+
+        <div class="wizard-card" data-wizard-step="4" data-encounter-section="baby_assessment" hidden><span class="section-kicker">ETAPA 4</span><h2>Avaliação do bebê</h2><p>Os dados ficam separados para cada bebê selecionado no atendimento.</p><div class="multi-baby-clinical" data-baby-assessment-editor></div></div>
+
+        <div class="wizard-card" data-wizard-step="5" data-encounter-section="feeding_assessment" hidden><span class="section-kicker">ETAPA 5</span><h2>Avaliação da mamada</h2><p>Registre a observação individual de cada bebê quando houver mais de um.</p><div class="multi-baby-clinical" data-feeding-assessment-editor></div></div>
+
+        <div class="wizard-card" data-wizard-step="6" data-encounter-section="care_plan" hidden><span class="section-kicker">ETAPA 6</span><h2>Plano de cuidado</h2><p>Monte um plano claro para a família levar para casa.</p><label class="field"><span>Objetivos</span><textarea rows="3" data-encounter-field="objectives" data-section="care_plan"></textarea></label><div class="library-picker"><div><strong>Adicionar da biblioteca</strong><small>Orientações reutilizáveis</small></div><button class="chip">Pega adequada ✓</button><button class="chip">Sinais de transferência</button><button class="chip">Ordenha manual</button></div><label class="field"><span>Orientações e condutas</span><textarea rows="6" data-encounter-field="instructions" data-section="care_plan"></textarea></label><label class="field"><span>Próximo acompanhamento</span><select data-encounter-field="followup" data-section="care_plan"><option>48 horas</option><option>24 horas</option><option>3 dias</option><option>7 dias</option><option>Personalizado</option></select></label></div>
+
+        <div class="wizard-card final-card" data-wizard-step="7" data-encounter-section="finalization" hidden><span class="success-mark">✓</span><span class="section-kicker">ETAPA 7</span><h2>Finalização</h2><p>O registro está pronto. Escolha o que fazer agora.</p><div class="summary-box"><div><span>Paciente</span><strong data-final-patient>Selecione uma paciente</strong></div><div><span>Plano</span><strong data-final-plan>Preencha o plano</strong></div><div><span>Follow-up</span><strong data-final-followup>A combinar</strong></div></div><label class="field final-pdf-layout"><span>Layout deste PDF</span><select data-pdf-layout-encounter><option value="acolhedor">Acolhedor</option><option value="clinico">Clínico</option><option value="minimalista">Minimalista</option></select></label><div class="final-actions"><button type="button" class="ui-button ui-button-primary" data-action="print-plan">Gerar PDF</button><button type="button" class="ui-button" data-action="share-whatsapp">Enviar no WhatsApp</button><button type="button" class="ui-button" data-action="schedule-followup">Agendar follow-up</button></div></div>
+
+        <div class="wizard-footer"><button class="ui-button ui-button-ghost" data-wizard-prev disabled>Anterior</button><button class="ui-button ui-button-primary" data-wizard-next>Continuar</button></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="route-announcer" data-route-announcer aria-live="polite" aria-atomic="true"></div>
+
+<button class="lactation-fab mobile-only" data-action="new-appointment" aria-label="Novo atendimento">＋</button>
+<nav class="lactation-bottom-nav" aria-label="Navegação móvel">
+  <button class="active" data-mobile-target="home"><span>⌂</span><b>Início</b></button>
+  <button data-mobile-target="agenda"><span>▦</span><b>Agenda</b></button>
+  <button data-mobile-target="patients"><span>♡</span><b>Pacientes</b></button>
+  <button data-mobile-target="followups"><span>↻</span><b>Acomp.</b></button>
+  <button data-mobile-target="more"><span>•••</span><b>Mais</b></button>
+</nav>
+
+
+</div>
+<script src="./config.js"></script>
+<script type="module" src="./app-shell.js"></script>
+</body>
+</html>
