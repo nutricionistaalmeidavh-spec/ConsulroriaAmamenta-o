@@ -29,7 +29,7 @@
         <h1>Mais tempo para cuidar. Menos tempo organizando ferramentas soltas.</h1>
         <p>Centralize agenda, pacientes, prontuário, acompanhamento, documentos, biblioteca e rotina financeira em uma experiência simples para sua consultoria.</p>
         <div class="hero-actions">
-          <button class="button" type="button" data-open="signup">Criar conta</button>
+          <button class="button" type="button" data-open="signup">Criar conta grátis</button>
           <a class="button secondary" href="#recursos">Ver recursos</a>
         </div>
         <div class="trust-row" aria-label="Destaques da plataforma">
@@ -83,7 +83,7 @@
         <article class="feature-card"><span class="feature-number">02</span><h3>Pacientes</h3><p>Centralize mãe, bebê, histórico e informações importantes em um único fluxo.</p></article>
         <article class="feature-card"><span class="feature-number">03</span><h3>Prontuário</h3><p>Registre o atendimento e mantenha evolução e histórico vinculados à consulta correta.</p></article>
         <article class="feature-card"><span class="feature-number">04</span><h3>Acompanhamento</h3><p>Visualize evolução, medidas e retornos com continuidade entre atendimentos.</p></article>
-        <article class="feature-card"><span class="feature-number">05</span><h3>Biblioteca</h3><p>Organize materiais e mídias clínicas com acesso controlado e contexto de paciente.</p></article>
+        <article class="feature-card"><span class="feature-number">05</span><h3>Biblioteca</h3><p>Organize materiais clínicos com acesso controlado e contexto de paciente.</p></article>
         <article class="feature-card"><span class="feature-number">06</span><h3>Gestão</h3><p>Acompanhe recebimentos, documentos e rotina administrativa sem misturar dados.</p></article>
       </div>
     </section>
@@ -103,37 +103,55 @@
     <section class="section plans-section" id="planos">
       <div class="section-heading">
         <span class="eyebrow">Planos</span>
-        <h2>Escolha o formato que combina com sua rotina</h2>
-        <p>A seleção abaixo registra sua intenção de plano. Valores e cobrança serão conectados na etapa comercial seguinte.</p>
+        <h2>Comece grátis e evolua quando sua rotina pedir.</h2>
+        <p>O Freemium libera o fluxo completo para até 3 mães/pacientes, exceto upload de fotos e vídeos. O Pro remove limites e libera mídia clínica.</p>
       </div>
       <div class="plans-grid">
         <article class="plan-card">
-          <span class="plan-label">Individual</span>
-          <h3>Essencial</h3>
-          <p>Para começar a organizar atendimentos em uma única plataforma.</p>
-          <ul><li>Agenda e pacientes</li><li>Prontuário e acompanhamento</li><li>Uso individual</li></ul>
-          <button class="button secondary full" type="button" data-plan="essencial" data-open="signup">Escolher Essencial</button>
+          <span class="plan-label">Comece grátis</span>
+          <h3>Freemium</h3>
+          <p><strong>R$ 0</strong> para usar o fluxo clínico completo em uma operação pequena.</p>
+          <ul>
+            <li>Fluxo completo da plataforma</li>
+            <li>Até 3 mães/pacientes</li>
+            <li>Agenda, prontuário, acompanhamento, documentos e gestão</li>
+            <li>Sem upload de fotos e vídeos</li>
+          </ul>
+          <button class="button secondary full" type="button" data-plan="freemium" data-open="signup">Começar no Freemium</button>
         </article>
+
         <article class="plan-card featured">
-          <span class="plan-label">Mais completo</span>
-          <h3>Profissional</h3>
-          <p>Para quem quer concentrar também documentos, biblioteca e gestão.</p>
-          <ul><li>Fluxo clínico completo</li><li>Biblioteca e documentos</li><li>Gestão administrativa</li></ul>
-          <button class="button full" type="button" data-plan="profissional" data-open="signup">Escolher Profissional</button>
+          <span class="plan-label">Pro mensal</span>
+          <h3>Pro</h3>
+          <p><strong>R$ 49,90/mês</strong> com uso ilimitado.</p>
+          <ul>
+            <li>Uso ilimitado de mães/pacientes</li>
+            <li>Todo o fluxo completo</li>
+            <li>Upload de fotos e vídeos</li>
+            <li>Biblioteca clínica e documentos sem limite de pacientes</li>
+          </ul>
+          <button class="button full" type="button" data-plan="pro_monthly" data-open="signup">Escolher Pro mensal</button>
         </article>
+
         <article class="plan-card">
-          <span class="plan-label">Equipe</span>
-          <h3>Clínica</h3>
-          <p>Estrutura preparada para evoluir para equipes e múltiplos profissionais.</p>
-          <ul><li>Base para múltiplos usuários</li><li>Organização por conta</li><li>Recursos de equipe em evolução</li></ul>
-          <button class="button secondary full" type="button" data-plan="clinica" data-open="signup">Escolher Clínica</button>
+          <span class="plan-label">Pro anual</span>
+          <h3>Pro</h3>
+          <p><strong>R$ 499/ano</strong> com possibilidade de pagamento em até 12x no cartão.</p>
+          <ul>
+            <li>Uso ilimitado de mães/pacientes</li>
+            <li>Todo o fluxo completo</li>
+            <li>Upload de fotos e vídeos</li>
+            <li>Mesmos recursos do Pro mensal</li>
+          </ul>
+          <button class="button secondary full" type="button" data-plan="pro_annual" data-open="signup">Escolher Pro anual</button>
         </article>
       </div>
+      <p class="muted" style="margin-top:20px">Nesta fase, a escolha do Pro registra a intenção de compra. A ativação do Pro ocorrerá somente depois da confirmação do pagamento pelo gateway.</p>
     </section>
 
     <section class="cta-section">
-      <div><span class="eyebrow">Comece pela organização</span><h2>Crie sua conta e configure seu perfil profissional.</h2></div>
-      <button class="button light" type="button" data-open="signup">Criar conta</button>
+      <div><span class="eyebrow">Comece pela organização</span><h2>Crie sua conta grátis e configure seu perfil profissional.</h2></div>
+      <button class="button light" type="button" data-plan="freemium" data-open="signup">Criar conta grátis</button>
     </section>
   </main>
 
@@ -154,7 +172,13 @@
           <label>E-mail<input type="email" name="email" autocomplete="email" required></label>
           <label>Senha<input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
           <label>Confirmar senha<input type="password" name="confirmPassword" autocomplete="new-password" minlength="8" required></label>
-          <label>Plano de interesse<select name="planIntent" id="plan-intent"><option value="essencial">Essencial</option><option value="profissional" selected>Profissional</option><option value="clinica">Clínica</option></select></label>
+          <label>Plano de interesse
+            <select name="planIntent" id="plan-intent">
+              <option value="freemium" selected>Freemium — grátis</option>
+              <option value="pro_monthly">Pro — R$ 49,90/mês</option>
+              <option value="pro_annual">Pro — R$ 499/ano</option>
+            </select>
+          </label>
           <button class="button full" type="submit">Criar conta</button>
           <p class="form-switch">Já tem acesso? <button type="button" class="text-action" data-switch="login">Entrar</button></p>
         </form>
@@ -192,7 +216,7 @@
         <div class="success-icon" aria-hidden="true">✓</div>
         <span class="eyebrow">Conta preparada</span>
         <h2>Configuração concluída</h2>
-        <p class="muted">Seu perfil comercial foi salvo. O acesso ao aplicativo comercial será conectado na próxima etapa sem redirecionar para o ambiente clínico existente.</p>
+        <p class="muted">Seu perfil comercial foi salvo. Toda nova conta nasce no Freemium; uma escolha Pro só será ativada após confirmação de pagamento.</p>
         <button class="button full" type="button" data-close>Voltar para a página</button>
       </div>
 
@@ -200,6 +224,11 @@
     </section>
   </div>
 
+  <script>
+    if (!sessionStorage.getItem('commercial.saas.plan-intent.v1')) {
+      sessionStorage.setItem('commercial.saas.plan-intent.v1', 'freemium');
+    }
+  </script>
   <script src="./config.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
