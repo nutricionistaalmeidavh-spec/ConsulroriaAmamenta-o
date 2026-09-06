@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "strategy": "canonical-first-with-legacy-fallback",
+  "modules": {
+    "core/app-shell.js": {
+      "promoted": true,
+      "source": "patch-source/agenda/app-shell.js",
+      "legacyFallback": "release-1.12.0 agenda patch"
+    },
+    "core/lib/app-data.js": {
+      "promoted": true,
+      "source": "patch-source/agenda/app-data.js",
+      "legacyFallback": "release-1.12.0 agenda patch"
+    },
+    "features/patient-fixes.js": {
+      "promoted": true,
+      "source": "patch-source/release/features/patient-fixes.js",
+      "runtimeStatus": "reference-only-first-slice"
+    },
+    "features/patient-fixes.css": {
+      "promoted": true,
+      "source": "patch-source/release/features/patient-fixes.css",
+      "runtimeStatus": "reference-only-first-slice"
+    }
+  }
+}
