@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+// Permanent contract for the Cloudflare-hosted Asaas adapter.
 const worker = readFileSync('worker/index.js', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
