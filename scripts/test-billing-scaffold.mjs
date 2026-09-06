@@ -1,3 +1,4 @@
+// Final contract: My Plan + provider-neutral billing scaffold.
 import fs from 'node:fs';
 import path from 'node:path';
 
