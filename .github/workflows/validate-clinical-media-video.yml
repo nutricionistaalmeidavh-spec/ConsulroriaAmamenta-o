@@ -1,0 +1,22 @@
+name: Validate clinical media video
+
+on:
+  push:
+    branches:
+      - feature/clinical-media-video
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JavaScript syntax
+        run: |
+          node --check public/album-feature.js
+          node --check public/documents-feature.js
+      - name: Run phase 3-5 contracts
+        run: node --test tests/phase35-contracts.test.mjs
