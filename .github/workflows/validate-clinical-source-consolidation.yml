@@ -8,7 +8,8 @@ on:
     paths:
       - 'src/bootstrap.js'
       - 'public/clinical-source/**'
-      - 'tests/clinical-source-consolidation.test.mjs'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'tests/clinical-source-*.test.mjs'
       - '.github/workflows/validate-clinical-source-consolidation.yml'
 
 jobs:
@@ -20,5 +21,5 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: node --test tests/clinical-source-consolidation.test.mjs
+      - run: node --test tests/clinical-source-*.test.mjs
       - run: npm run build
