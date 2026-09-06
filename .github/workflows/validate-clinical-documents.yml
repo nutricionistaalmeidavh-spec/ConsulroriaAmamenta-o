@@ -3,9 +3,11 @@ name: Validate clinical documents phase 0-8
 on:
   push:
     branches:
+      - main
       - feature/clinical-documents-phase-0-2
       - feature/clinical-documents-phase-3-5
       - feature/clinical-documents-phase-6-8
+      - feature/clinical-media-video
     paths:
       - 'public/phase02-loader.js'
       - 'public/documents-feature.js'
@@ -28,6 +30,7 @@ on:
       - 'public/patient-workspace.css'
       - 'supabase/phase-clinical-documents-terms.sql'
       - 'supabase/phase-clinical-media-referrals.sql'
+      - 'supabase/phase-clinical-media-video.sql'
       - 'docs/PHASE_0_2_CLINICAL_DOCUMENTS.md'
       - 'docs/PHASE_3_5_CLINICAL_DOCUMENTS.md'
       - 'docs/PHASE_6_8_CLINICAL_DOCUMENTS.md'
@@ -80,6 +83,8 @@ jobs:
           grep -q "validate_clinical_document_links" supabase/phase-clinical-documents-terms.sql
           grep -q "clinical_document_templates" supabase/phase-clinical-documents-terms.sql
           ! grep -q "create table if not exists public.document_templates (" supabase/phase-clinical-documents-terms.sql
+          grep -q "video/mp4" supabase/phase-clinical-media-video.sql
+          grep -q "version_clinical_media_consent" supabase/phase-clinical-media-video.sql
           grep -q "phase02-loader.js" index.html
           grep -q "phase35-loader.js" index.html
           if [ -f public/phase68-loader.js ]; then grep -q "phase68-loader.js" index.html; fi
