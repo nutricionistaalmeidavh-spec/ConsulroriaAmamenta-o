@@ -7,12 +7,14 @@ on:
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-saas-plans.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'public/comercial/**'
   pull_request:
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-saas-plans.mjs'
       - 'supabase/phase-saas-foundation.sql'
       - 'public/comercial/**'
   workflow_dispatch:
@@ -33,3 +35,5 @@ jobs:
         run: node scripts/test-saas-foundation.mjs
       - name: Validate commercial funnel and onboarding
         run: node scripts/test-commercial-funnel.mjs
+      - name: Validate Freemium and Pro plans
+        run: node scripts/test-saas-plans.mjs
