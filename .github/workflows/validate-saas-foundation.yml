@@ -1,0 +1,29 @@
+name: Validate SaaS foundation
+
+on:
+  push:
+    branches:
+      - feature/saas-foundation-phase-0-2
+    paths:
+      - 'scripts/test-saas-foundation.mjs'
+      - 'supabase/phase-saas-foundation.sql'
+  pull_request:
+    paths:
+      - 'scripts/test-saas-foundation.mjs'
+      - 'supabase/phase-saas-foundation.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  saas-foundation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate additive SaaS contract
+        run: node scripts/test-saas-foundation.mjs
