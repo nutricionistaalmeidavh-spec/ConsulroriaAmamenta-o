@@ -23,6 +23,10 @@ jobs:
           node-version: 22
       - run: npm install
       - run: node --test tests/clinical-source-*.test.mjs
+      - name: Validate current Cloudflare Asaas contract
+        run: node scripts/test-cloudflare-asaas.mjs
+      - name: Syntax-check Cloudflare worker
+        run: node --check worker/index.js
       - run: npm run build
       - name: Verify canonical runtime is published
         run: |
