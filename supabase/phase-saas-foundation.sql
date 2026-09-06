@@ -96,7 +96,7 @@ create or replace function public.bootstrap_freemium_entitlements()
 returns trigger
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 begin
   insert into public.entitlements (
@@ -152,7 +152,7 @@ create or replace function public.apply_pro_entitlements(p_owner_id uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   v_account_id uuid;
