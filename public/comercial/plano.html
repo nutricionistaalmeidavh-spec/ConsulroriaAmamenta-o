@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f4f2">
+  <title>Meu plano | Gestão para Consultoras</title>
+  <meta name="description" content="Consulte seu plano, uso e opções de upgrade da plataforma.">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./plan.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./index.html" aria-label="Voltar para a página comercial">
+      <span class="brand-mark" aria-hidden="true">L</span>
+      <span>Gestão para Consultoras</span>
+    </a>
+    <nav class="main-nav" aria-label="Navegação da conta">
+      <a href="./index.html">Página inicial</a>
+      <button class="link-button" id="logout-button" type="button" hidden>Sair</button>
+    </nav>
+  </header>
+
+  <main class="plan-shell">
+    <section class="plan-hero">
+      <span class="eyebrow">Conta e assinatura</span>
+      <h1>Meu plano</h1>
+      <p>Aqui você acompanha os limites realmente aplicados à sua conta e pode iniciar um upgrade.</p>
+    </section>
+
+    <section id="auth-required" class="account-state" hidden>
+      <h2>Entre para consultar seu plano</h2>
+      <p>Seu plano e consumo são protegidos pela sua sessão.</p>
+      <a class="button" href="./index.html">Voltar e entrar</a>
+    </section>
+
+    <section id="plan-content" hidden>
+      <div class="plan-overview-grid">
+        <article class="current-plan-card">
+          <span class="plan-label" id="current-plan-badge">Carregando</span>
+          <h2 id="current-plan-name">Plano atual</h2>
+          <p id="current-plan-copy">Consultando permissões efetivas…</p>
+          <div class="usage-grid">
+            <div><span>Pacientes/mães</span><strong id="patient-usage">—</strong></div>
+            <div><span>Fotos e vídeos</span><strong id="media-access">—</strong></div>
+            <div><span>Assinatura</span><strong id="subscription-status">—</strong></div>
+          </div>
+        </article>
+
+        <aside class="account-card">
+          <span class="eyebrow">Conta</span>
+          <strong id="account-email">—</strong>
+          <p id="account-name">Perfil profissional</p>
+          <small>Os limites exibidos vêm dos entitlements do backend, não da escolha visual da landing.</small>
+        </aside>
+      </div>
+
+      <section class="upgrade-section" id="upgrade-section">
+        <div class="section-heading compact">
+          <span class="eyebrow">Upgrade</span>
+          <h2>Pro sem limites de pacientes</h2>
+          <p>O pagamento ainda será conectado a um gateway. Os botões já criam uma solicitação de checkout segura no backend.</p>
+        </div>
+        <div class="upgrade-grid">
+          <article class="upgrade-card">
+            <span class="plan-label">Mensal</span>
+            <h3>Pro</h3>
+            <div class="price"><strong>R$ 49,90</strong><span>/mês</span></div>
+            <ul><li>Pacientes ilimitados</li><li>Fotos e vídeos</li><li>Fluxo completo</li></ul>
+            <button class="button full" type="button" data-checkout="pro_monthly">Escolher mensal</button>
+          </article>
+          <article class="upgrade-card featured">
+            <span class="plan-label">Anual</span>
+            <h3>Pro</h3>
+            <div class="price"><strong>R$ 499</strong><span>/ano</span></div>
+            <p class="installment">Até 12x no cartão</p>
+            <ul><li>Pacientes ilimitados</li><li>Fotos e vídeos</li><li>Fluxo completo</li></ul>
+            <button class="button full" type="button" data-checkout="pro_annual">Escolher anual</button>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <div id="plan-message" class="plan-message" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./plan.js"></script>
+</body>
+</html>
