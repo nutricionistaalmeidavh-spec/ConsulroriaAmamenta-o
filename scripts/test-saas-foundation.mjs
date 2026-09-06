@@ -20,7 +20,6 @@ const normalized = sql.toLowerCase();
 const requiredTables = [
   'saas_accounts',
   'professional_profiles',
-  'public_profiles',
   'subscriptions',
   'entitlements',
 ];
@@ -34,6 +33,23 @@ for (const table of requiredTables) {
   }
 }
 
+if (normalized.includes('create table if not exists public.public_profiles')) {
+  fail('public_profiles must not exist in the commercial SaaS foundation');
+}
+
+const forbiddenDeboraCoupling = [
+  'debora-lactacao',
+  'dé-bora',
+  'débora',
+  'debora',
+  'legacy_full_access',
+  'pre_saas_clinical_account',
+];
+
+for (const token of forbiddenDeboraCoupling) {
+  if (normalized.includes(token)) fail(`Débora coupling is forbidden in SaaS migration: ${token}`);
+}
+
 const protectedClinicalTables = [
   'mothers',
   'babies',
@@ -45,17 +61,10 @@ const protectedClinicalTables = [
 ];
 
 for (const table of protectedClinicalTables) {
-  for (const mutation of ['alter table', 'insert into', 'update', 'delete from', 'truncate table', 'drop table']) {
-    const pattern = new RegExp(`${mutation.replace(' ', '\\s+')}\\s+public\\.${table}\\b`, 'i');
-    if (pattern.test(sql)) fail(`clinical table ${table} is mutated via ${mutation}`);
-  }
+  const tableReference = new RegExp(`public\\.${table}\\b`, 'i');
+  if (tableReference.test(sql)) fail(`commercial SaaS migration must not reference clinical table ${table}`);
 }
 
-if (!normalized.includes("'debora-lactacao'")) fail('Débora public slug is missing');
-if (!normalized.includes('clinical_encounters')) fail('legacy owner selection must use clinical encounter evidence');
-if (!normalized.includes('financial_entries')) fail('legacy owner selection must use financial evidence');
-if (!normalized.includes('expected exactly one legacy clinical owner')) fail('unique legacy owner guard is missing');
-if (!normalized.includes('on conflict')) fail('backfill must be idempotent');
 if (!normalized.includes('auth.uid()')) fail('owner-scoped RLS must use auth.uid()');
 
 const emailLiteral = /['"][^'"\s]+@[^'"\s]+\.[^'"\s]+['"]/;
@@ -64,12 +73,8 @@ if (emailLiteral.test(sql)) fail('migration must not hardcode a personal email')
 const uuidLiteral = /['"][0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}['"]/i;
 if (uuidLiteral.test(sql)) fail('migration must not hardcode a generated UUID');
 
-if (!normalized.includes('grant select on table public.public_profiles to anon')) {
-  fail('public profile read grant for anon is missing');
+if (normalized.includes('grant select on table public.public_profiles to anon')) {
+  fail('commercial SaaS foundation must not expose professional landing profiles to anon');
 }
 
-if (!normalized.includes('published = true')) {
-  fail('anonymous public profile policy must require published=true');
-}
-
-if (!process.exitCode) console.log('PASS: SaaS foundation contract is additive and owner-scoped');
+if (!process.exitCode) console.log('PASS: SaaS foundation is isolated from Débora and owner-scoped');
