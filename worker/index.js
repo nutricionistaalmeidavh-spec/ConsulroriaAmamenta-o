@@ -37,22 +37,29 @@ async function authenticateUser(request) {
   return user?.id ? user : null;
 }
 
+async function callCheckoutRegistry(request, body) {
+  const token = bearerToken(request);
+  if (!token) return { response: null, payload: null };
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/saas-checkout`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
 function tomorrowAsaasDateTime() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
 }
 
-function externalReference(ownerId, planCode) {
-  return `saas:${ownerId}:${planCode}`;
-}
-
-function parseExternalReference(value) {
-  const match = String(value || '').match(/^saas:([0-9a-f-]{36}):(pro_monthly|pro_annual)$/i);
-  if (!match) return null;
-  return { ownerId: match[1], planCode: match[2].toLowerCase() };
-}
-
-function checkoutPayload(planCode, ownerId, origin) {
+function checkoutPayload(planCode, requestId, origin) {
   const callback = {
     successUrl: `${origin}/comercial/plano.html?asaas=success`,
     cancelUrl: `${origin}/comercial/plano.html?asaas=cancel`,
@@ -62,7 +69,7 @@ function checkoutPayload(planCode, ownerId, origin) {
   const common = {
     billingTypes: ['CREDIT_CARD'],
     minutesToExpire: 60,
-    externalReference: externalReference(ownerId, planCode),
+    externalReference: `saas_checkout:${requestId}`,
     callback,
   };
 
@@ -124,15 +131,27 @@ async function createCheckout(request, env) {
     return json(400, { error: 'invalid_plan' });
   }
 
+  const registered = await callCheckoutRegistry(request, {
+    action: 'create_request',
+    planCode,
+  });
+  if (!registered.response?.ok || !registered.payload?.requestId) {
+    return json(registered.response?.status || 502, {
+      error: registered.payload?.error || 'checkout_registry_failed',
+    });
+  }
+  const requestId = String(registered.payload.requestId);
+
   const url = new URL(request.url);
-  const payload = checkoutPayload(planCode, user.id, url.origin);
+  const providerPayload = checkoutPayload(planCode, requestId, url.origin);
   const { response, payload: result } = await asaasFetch(env, '/checkouts', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(providerPayload),
   });
 
   if (!response) return json(503, { error: 'asaas_not_configured' });
   if (!response.ok || !result?.id) {
+    await callCheckoutRegistry(request, { action: 'mark_failed', requestId });
     return json(response.status || 502, {
       error: 'asaas_checkout_failed',
       details: Array.isArray(result?.errors)
@@ -141,25 +160,24 @@ async function createCheckout(request, env) {
     });
   }
 
+  const checkoutUrl = result.link || `${ASAAS_CHECKOUT_URL}${encodeURIComponent(result.id)}`;
+  const attached = await callCheckoutRegistry(request, {
+    action: 'attach_provider_checkout',
+    requestId,
+    externalCheckoutId: result.id,
+    checkoutUrl,
+  });
+
+  if (!attached.response?.ok) {
+    await asaasFetch(env, `/checkouts/${encodeURIComponent(result.id)}/cancel`, { method: 'POST' });
+    return json(502, { error: 'checkout_registry_attach_failed' });
+  }
+
   return json(200, {
     checkoutId: result.id,
-    checkoutUrl: result.link || `${ASAAS_CHECKOUT_URL}${encodeURIComponent(result.id)}`,
+    checkoutUrl,
     planCode,
   });
-}
-
-function verifiedBillingTransition(status) {
-  const normalized = String(status || '').toUpperCase();
-  if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(normalized)) return 'active';
-  if (normalized === 'OVERDUE') return 'past_due';
-  if ([
-    'REFUNDED',
-    'REFUND_REQUESTED',
-    'CHARGEBACK_REQUESTED',
-    'CHARGEBACK_DISPUTE',
-    'AWAITING_CHARGEBACK_REVERSAL',
-  ].includes(normalized)) return 'cancelled';
-  return null;
 }
 
 async function callBillingBridge(env, paymentId) {
@@ -177,8 +195,6 @@ async function callBillingBridge(env, paymentId) {
 async function handleWebhook(request, env) {
   if (!env.ASSAS_SECRET) return json(503, { error: 'asaas_not_configured' });
 
-  // The webhook is only a trigger. Cloudflare never trusts the event status or
-  // external reference to change SaaS access; it re-reads the payment at Asaas.
   const payload = await request.json().catch(() => null);
   const paymentId = String(payload?.payment?.id || '');
   if (!paymentId) return json(200, { status: 'ignored_without_payment' });
@@ -186,33 +202,20 @@ async function handleWebhook(request, env) {
     return json(400, { error: 'invalid_payment_id' });
   }
 
+  // Never trust status/externalReference from the webhook itself.
   const { response: asaasResponse, payload: verifiedPayment } = await asaasFetch(
     env,
     `/payments/${encodeURIComponent(paymentId)}`,
     { method: 'GET' },
   );
-
   if (!asaasResponse) return json(503, { error: 'asaas_not_configured' });
   if (asaasResponse.status === 404) return json(200, { status: 'ignored_payment_not_found' });
-  if (!asaasResponse.ok || !verifiedPayment?.id) {
+  if (!asaasResponse.ok || String(verifiedPayment?.id || '') !== paymentId) {
     return json(502, { error: 'asaas_payment_verification_failed' });
   }
-  if (String(verifiedPayment.id) !== paymentId) {
-    return json(502, { error: 'asaas_payment_identity_mismatch' });
-  }
 
-  const mapped = parseExternalReference(verifiedPayment?.externalReference);
-  if (!mapped) return json(200, { status: 'ignored_unmapped_verified_payment', paymentId });
-
-  const paymentStatus = String(verifiedPayment?.status || '').toUpperCase();
-  const transition = verifiedBillingTransition(paymentStatus);
-  if (!transition) {
-    return json(200, { status: 'ignored_no_billing_transition', paymentId, paymentStatus });
-  }
-
-  // Supabase owns the administrative database credential. Cloudflare sends only
-  // the existing Asaas key over TLS; the Edge Function validates the request and
-  // independently re-reads the payment before changing access.
+  // Supabase owns its service-role credential. It independently verifies that
+  // this payment belongs to the stored checkout session before changing access.
   const bridgeResponse = await callBillingBridge(env, paymentId);
   const bridgePayload = await bridgeResponse.json().catch(() => null);
   if (!bridgeResponse.ok) {
@@ -222,12 +225,7 @@ async function handleWebhook(request, env) {
     });
   }
 
-  return json(200, bridgePayload || {
-    status: 'processed',
-    paymentId,
-    planCode: mapped.planCode,
-    paymentStatus,
-  });
+  return json(200, bridgePayload || { status: 'processed', paymentId });
 }
 
 function health(env) {
@@ -235,7 +233,7 @@ function health(env) {
     ok: true,
     service: 'commercial-asaas-api',
     asaasApiConfigured: Boolean(env.ASSAS_SECRET),
-    webhookVerification: 'asaas_api_lookup',
+    webhookVerification: 'asaas_api_lookup_and_checkout_reconciliation',
     billingBridge: 'supabase_edge_function',
     cloudflareSecretsRequired: ['ASSAS_SECRET'],
   });
