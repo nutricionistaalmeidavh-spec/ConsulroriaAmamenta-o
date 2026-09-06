@@ -32,11 +32,25 @@ function validCheckoutId(value: string) {
   return /^[A-Za-z0-9_-]{3,128}$/.test(value);
 }
 
-function validCheckoutUrl(value: string) {
+function normalizeEnvironment(value: unknown) {
+  const environment = String(value || 'production').toLowerCase();
+  return environment === 'sandbox' ? 'sandbox' : 'production';
+}
+
+function providerForEnvironment(environment: string) {
+  return environment === 'sandbox' ? 'asaas_sandbox' : 'asaas';
+}
+
+function sourceForEnvironment(environment: string) {
+  return environment === 'sandbox' ? 'cloudflare_asaas_sandbox' : 'cloudflare_asaas';
+}
+
+function validCheckoutUrl(value: string, environment: string) {
   try {
     const url = new URL(value);
+    const expectedHost = environment === 'sandbox' ? 'sandbox.asaas.com' : 'asaas.com';
     return url.protocol === 'https:'
-      && url.hostname === 'asaas.com'
+      && url.hostname === expectedHost
       && url.pathname.startsWith('/checkoutSession/');
   } catch {
     return false;
@@ -62,6 +76,9 @@ Deno.serve(async (req: Request) => {
 
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action || 'create_request');
+  const environment = normalizeEnvironment(body?.environment);
+  const provider = providerForEnvironment(environment);
+  const source = sourceForEnvironment(environment);
 
   if (action === 'create_request') {
     const planCode = String(body?.planCode || '');
@@ -98,9 +115,9 @@ Deno.serve(async (req: Request) => {
           account_id: account.id,
           owner_id: user.id,
           plan_code: planCode,
-          provider: 'asaas',
+          provider,
           status: 'pending_provider',
-          metadata: { source: 'cloudflare_asaas' },
+          metadata: { source, environment },
         }),
       },
     );
@@ -112,6 +129,7 @@ Deno.serve(async (req: Request) => {
       status: 'pending_provider',
       requestId: checkoutRequest.id,
       plan,
+      environment,
     });
   }
 
@@ -126,6 +144,7 @@ Deno.serve(async (req: Request) => {
   const ownRequests = await ownRequestResponse.json().catch(() => []);
   const ownRequest = Array.isArray(ownRequests) ? ownRequests[0] : null;
   if (!ownRequestResponse.ok || !ownRequest) return json(404, { error: 'checkout_request_not_found' });
+  if (ownRequest.provider !== provider) return json(409, { error: 'checkout_environment_mismatch' });
 
   if (action === 'mark_failed') {
     const failedResponse = await rest(
@@ -138,13 +157,13 @@ Deno.serve(async (req: Request) => {
       },
     );
     if (!failedResponse.ok) return json(500, { error: 'checkout_request_update_failed' });
-    return json(200, { status: 'failed', requestId });
+    return json(200, { status: 'failed', requestId, environment });
   }
 
   if (action === 'attach_provider_checkout') {
     const externalCheckoutId = String(body?.externalCheckoutId || '');
     const checkoutUrl = String(body?.checkoutUrl || '');
-    if (!validCheckoutId(externalCheckoutId) || !validCheckoutUrl(checkoutUrl)) {
+    if (!validCheckoutId(externalCheckoutId) || !validCheckoutUrl(checkoutUrl, environment)) {
       return json(400, { error: 'invalid_provider_checkout' });
     }
 
@@ -156,11 +175,11 @@ Deno.serve(async (req: Request) => {
         method: 'PATCH',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
-          provider: 'asaas',
+          provider,
           status: 'checkout_created',
           external_checkout_id: externalCheckoutId,
           checkout_url: checkoutUrl,
-          metadata: { source: 'cloudflare_asaas', linked: true },
+          metadata: { source, environment, linked: true },
           updated_at: new Date().toISOString(),
         }),
       },
@@ -168,7 +187,7 @@ Deno.serve(async (req: Request) => {
     const updatedRows = await updateResponse.json().catch(() => []);
     const updated = Array.isArray(updatedRows) ? updatedRows[0] : null;
     if (!updateResponse.ok || !updated) return json(500, { error: 'checkout_request_update_failed' });
-    return json(200, { status: 'checkout_created', requestId, externalCheckoutId });
+    return json(200, { status: 'checkout_created', requestId, externalCheckoutId, environment });
   }
 
   return json(400, { error: 'invalid_action' });
