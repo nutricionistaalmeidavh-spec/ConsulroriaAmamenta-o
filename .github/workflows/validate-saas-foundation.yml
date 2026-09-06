@@ -8,14 +8,18 @@ on:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-saas-plans.mjs'
+      - 'scripts/test-saas-enforcement.mjs'
       - 'supabase/phase-saas-foundation.sql'
+      - 'supabase/phase-saas-enforcement.sql'
       - 'public/comercial/**'
   pull_request:
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-saas-plans.mjs'
+      - 'scripts/test-saas-enforcement.mjs'
       - 'supabase/phase-saas-foundation.sql'
+      - 'supabase/phase-saas-enforcement.sql'
       - 'public/comercial/**'
   workflow_dispatch:
 
@@ -37,3 +41,5 @@ jobs:
         run: node scripts/test-commercial-funnel.mjs
       - name: Validate Freemium and Pro plans
         run: node scripts/test-saas-plans.mjs
+      - name: Validate server-side SaaS enforcement
+        run: node scripts/test-saas-enforcement.mjs
