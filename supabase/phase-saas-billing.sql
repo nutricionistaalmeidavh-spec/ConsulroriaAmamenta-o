@@ -60,6 +60,16 @@ create table if not exists public.billing_checkout_requests (
 
 create index if not exists billing_checkout_owner_idx
   on public.billing_checkout_requests(owner_id, created_at desc);
+create index if not exists billing_checkout_account_owner_idx
+  on public.billing_checkout_requests(account_id, owner_id);
+create index if not exists billing_checkout_plan_code_idx
+  on public.billing_checkout_requests(plan_code);
+create index if not exists professional_profiles_account_owner_idx
+  on public.professional_profiles(account_id, owner_id);
+create index if not exists subscriptions_account_owner_idx
+  on public.subscriptions(account_id, owner_id);
+create index if not exists entitlements_account_owner_idx
+  on public.entitlements(account_id, owner_id);
 
 create table if not exists public.billing_webhook_events (
   id uuid primary key default gen_random_uuid(),
@@ -106,6 +116,15 @@ on public.billing_checkout_requests
 for select
 to authenticated
 using ((select auth.uid()) = owner_id);
+
+-- Explicit client deny policy. The table is service-role-only; this policy documents and
+-- preserves that boundary if client table grants are ever changed accidentally.
+drop policy if exists billing_webhook_events_client_deny on public.billing_webhook_events;
+create policy billing_webhook_events_client_deny
+on public.billing_webhook_events
+for select
+to anon, authenticated
+using (false);
 
 create or replace function public.apply_freemium_entitlements(p_owner_id uuid)
 returns void
