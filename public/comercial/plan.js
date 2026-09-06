@@ -75,24 +75,31 @@ function showSignedIn() {
   logoutButton.hidden = false;
 }
 
+function checkoutReturnMessage() {
+  const state = new URL(window.location.href).searchParams.get('asaas');
+  if (state === 'success') return ['Checkout concluído. A liberação do Pro ocorre após a confirmação recebida pelo webhook do Asaas.', 'success'];
+  if (state === 'cancel') return ['Checkout cancelado. Seu plano atual não foi alterado.', ''];
+  if (state === 'expired') return ['O checkout expirou. Você pode gerar um novo quando quiser.', ''];
+  return null;
+}
+
 async function requestCheckout(planCode, token) {
-  setMessage('Preparando solicitação de checkout…');
-  const response = await fetch(`${supabaseUrl}/functions/v1/saas-checkout`, {
+  setMessage('Preparando checkout seguro no Asaas…');
+  const response = await fetch('/api/asaas/checkout', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      apikey: publishableKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ planCode }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
-  if (payload.checkoutUrl) {
-    window.location.assign(payload.checkoutUrl);
-    return;
+  if (!response.ok) {
+    const firstDetail = payload?.details?.[0]?.description;
+    throw new Error(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
   }
-  setMessage('Solicitação registrada. O gateway de pagamento ainda não está conectado; sua conta continua no plano atual.', 'success');
+  if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
+  window.location.assign(payload.checkoutUrl);
 }
 
 async function init() {
@@ -150,6 +157,9 @@ async function init() {
     document.querySelector('#account-email').textContent = user.email || 'Conta autenticada';
     document.querySelector('#account-name').textContent = profile.professional_name || profile.business_name || 'Perfil profissional';
     document.querySelector('#upgrade-section').hidden = isPro;
+
+    const returned = checkoutReturnMessage();
+    if (returned) setMessage(returned[0], returned[1]);
 
     document.querySelectorAll('[data-checkout]').forEach((button) => {
       button.addEventListener('click', async () => {
