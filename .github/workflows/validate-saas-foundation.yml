@@ -20,6 +20,7 @@ on:
       - 'public/comercial/**'
       - 'worker/**'
       - 'wrangler.jsonc'
+      - '.github/workflows/validate-saas-foundation.yml'
   pull_request:
     paths:
       - 'scripts/test-saas-foundation.mjs'
@@ -65,12 +66,12 @@ jobs:
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
         run: node --check worker/index.js
-      - name: Probe branch Asaas key fingerprint
-        if: github.event_name == 'pull_request' && github.head_ref == 'feature/asaas-single-secret-verification'
+      - name: Probe production Asaas key fingerprint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -e
-          URL='https://feature-asaas-single-secret-verification-consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/api/asaas/key-fingerprint'
-          for attempt in 1 2 3 4 5 6; do
+          URL='https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/api/asaas/key-fingerprint'
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             body="$(curl --fail --silent --show-error "$URL" || true)"
             if echo "$body" | grep -q '"sha256"'; then
               echo "ASAAS_KEY_FINGERPRINT=$body"
