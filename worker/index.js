@@ -70,7 +70,7 @@ function asaasConfig(env, environment = 'production') {
 
   return {
     environment: 'production',
-    secret: env.ASSAS_SECRET,
+    secret: env.ASAAS_SECRET,
     apiUrl: ASAAS_API_URL,
     checkoutFallback: ASAAS_CHECKOUT_URL,
     provider: 'asaas',
@@ -286,7 +286,7 @@ function health(env, environment = 'production') {
     asaasApiConfigured: Boolean(config.secret),
     webhookVerification: 'asaas_api_lookup_and_checkout_reconciliation',
     billingBridge: 'supabase_edge_function',
-    cloudflareSecretsRequired: [environment === 'sandbox' ? 'ASSAS_SANDBOX_SECRET' : 'ASSAS_SECRET'],
+    cloudflareSecretsRequired: [environment === 'sandbox' ? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET'],
   });
 }
 
