@@ -15,18 +15,20 @@ assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 assert.doesNotMatch(wrangler, /"secrets"\s*:/);
 
-assert.match(worker, /env\.ASSAS_SECRET/);
+assert.match(worker, /env\.ASAAS_SECRET/);
+assert.doesNotMatch(worker, /env\.ASSAS_SECRET/);
 assert.match(worker, /env\.ASSAS_SANDBOX_SECRET/);
 assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
 assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(worker, /asaas-access-token/);
 assert.doesNotMatch(worker, /serviceFetch/);
 
-// Production stays unchanged.
+// Production stays unchanged except for matching the configured runtime secret name.
 assert.match(worker, /\/api\/asaas\/checkout/);
 assert.match(worker, /\/api\/webhooks\/asaas/);
 assert.match(worker, /https:\/\/api\.asaas\.com\/v3/);
 assert.match(worker, /https:\/\/asaas\.com\/checkoutSession\/show\?id=/);
+assert.match(worker, /cloudflareSecretsRequired:\s*\[environment === 'sandbox' \? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET'\]/);
 
 // Sandbox is isolated behind separate routes and a separate temporary secret.
 assert.match(worker, /\/api\/sandbox\/asaas\/health/);
@@ -84,7 +86,7 @@ assert.doesNotMatch(billingFunction, /BILLING_PROVIDER/);
 
 assert.doesNotMatch(worker, /key-fingerprint/);
 assert.doesNotMatch(worker, /sha256Hex/);
-assert.doesNotMatch(worker, /ASSAS_SECRET\s*=\s*['"][^'"]+['"]/);
+assert.doesNotMatch(worker, /ASAAS_SECRET\s*=\s*['"][^'"]+['"]/);
 assert.doesNotMatch(worker, /ASSAS_SANDBOX_SECRET\s*=\s*['"][^'"]+['"]/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
