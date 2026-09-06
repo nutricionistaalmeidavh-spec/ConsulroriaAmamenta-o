@@ -10,7 +10,8 @@ const manifestPath = resolve(root, 'public/clinical-source/manifest.json');
 test('canonical clinical source is declared and preferred with legacy fallback', () => {
   assert.equal(existsSync(manifestPath), true, 'canonical clinical source manifest must exist');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.version, 1);
+  assert.equal(manifest.version, 2);
+  assert.equal(manifest.generatedFromLegacyArtifacts, true);
   assert.equal(manifest.modules['core/app-shell.js'].promoted, true);
   assert.equal(manifest.modules['core/lib/app-data.js'].promoted, true);
 
