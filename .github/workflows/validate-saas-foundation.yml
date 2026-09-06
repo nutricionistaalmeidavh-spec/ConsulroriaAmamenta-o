@@ -6,11 +6,15 @@ on:
       - feature/saas-foundation-phase-0-2
     paths:
       - 'scripts/test-saas-foundation.mjs'
+      - 'scripts/test-commercial-funnel.mjs'
       - 'supabase/phase-saas-foundation.sql'
+      - 'public/comercial/**'
   pull_request:
     paths:
       - 'scripts/test-saas-foundation.mjs'
+      - 'scripts/test-commercial-funnel.mjs'
       - 'supabase/phase-saas-foundation.sql'
+      - 'public/comercial/**'
   workflow_dispatch:
 
 permissions:
@@ -27,3 +31,5 @@ jobs:
           node-version: '22'
       - name: Validate additive SaaS contract
         run: node scripts/test-saas-foundation.mjs
+      - name: Validate commercial funnel and onboarding
+        run: node scripts/test-commercial-funnel.mjs
