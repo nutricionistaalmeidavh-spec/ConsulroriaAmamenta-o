@@ -1,4 +1,4 @@
-// Redeploy trigger after runtime secret update (2026-09-06)
+// Redeploy trigger after runtime secrets were confirmed in Worker settings (2026-09-06 20:20 BRT)
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "consulroriaamamenta-o",
