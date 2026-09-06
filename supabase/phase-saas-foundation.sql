@@ -1,4 +1,4 @@
--- SaaS commercial foundation — phases 0–2
+-- SaaS commercial foundation — phases 0–4
 -- Additive only. This migration is intentionally isolated from the existing legacy landing/app.
 -- It creates generic commercial account structures and does not read or mutate clinical tables.
 
@@ -80,7 +80,7 @@ revoke all on table public.professional_profiles from anon, authenticated;
 revoke all on table public.subscriptions from anon, authenticated;
 revoke all on table public.entitlements from anon, authenticated;
 
-grant select on table public.saas_accounts to authenticated;
+grant select, insert on table public.saas_accounts to authenticated;
 grant select, insert, update on table public.professional_profiles to authenticated;
 grant select on table public.subscriptions to authenticated;
 grant select on table public.entitlements to authenticated;
@@ -96,6 +96,13 @@ on public.saas_accounts
 for select
 to authenticated
 using ((select auth.uid()) = owner_id);
+
+drop policy if exists saas_accounts_insert_own on public.saas_accounts;
+create policy saas_accounts_insert_own
+on public.saas_accounts
+for insert
+to authenticated
+with check ((select auth.uid()) = owner_id);
 
 drop policy if exists professional_profiles_select_own on public.professional_profiles;
 create policy professional_profiles_select_own
