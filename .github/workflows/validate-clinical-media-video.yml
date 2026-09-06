@@ -18,5 +18,14 @@ jobs:
         run: |
           node --check public/album-feature.js
           node --check public/documents-feature.js
-      - name: Run phase 3-5 contracts
-        run: node --test tests/phase35-contracts.test.mjs
+          node --check public/phase35-loader.js
+      - name: Run clinical contracts
+        run: |
+          node --test tests/phase35-contracts.test.mjs
+          node --test tests/phase68-contracts.test.mjs
+      - name: Parse clinical media stylesheet
+        run: |
+          npm install --no-audit --no-fund
+          node -e "require('postcss').parse(require('fs').readFileSync('public/album-feature.css','utf8'))"
+      - name: Build application
+        run: npm run build
