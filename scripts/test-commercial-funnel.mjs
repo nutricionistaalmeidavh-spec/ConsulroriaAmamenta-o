@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Contract for phases 3–4: commercial funnel stays isolated from the clinical entrypoint.
 const root = process.cwd();
 const files = {
   html: path.join(root, 'public', 'comercial', 'index.html'),
