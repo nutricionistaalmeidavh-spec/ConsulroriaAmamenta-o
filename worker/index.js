@@ -20,20 +20,6 @@ function bearerToken(request) {
   return match ? match[1] : '';
 }
 
-async function sha256(value) {
-  const bytes = new TextEncoder().encode(value);
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-}
-
-async function safeEqual(left, right) {
-  if (!left || !right) return false;
-  const [a, b] = await Promise.all([sha256(left), sha256(right)]);
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let index = 0; index < a.length; index += 1) diff |= a[index] ^ b[index];
-  return diff === 0;
-}
-
 async function authenticateUser(request) {
   const token = bearerToken(request);
   if (!token) return null;
@@ -183,24 +169,37 @@ async function serviceFetch(env, path, options = {}) {
   });
 }
 
-function eventExternalReference(payload) {
-  return payload?.checkout?.externalReference
-    || payload?.payment?.externalReference
-    || payload?.subscription?.externalReference
-    || '';
-}
-
-function eventExternalSubscriptionId(payload) {
-  return payload?.subscription?.id
-    || payload?.payment?.subscription
-    || payload?.checkout?.subscription?.id
-    || null;
-}
-
-function billingTransition(event) {
-  if (['CHECKOUT_PAID', 'PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event)) return 'active';
-  if (['PAYMENT_OVERDUE', 'PAYMENT_REFUNDED', 'PAYMENT_DELETED', 'PAYMENT_CHARGEBACK_REQUESTED'].includes(event)) return 'past_due';
+function verifiedBillingTransition(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(normalized)) return 'active';
+  if (normalized === 'OVERDUE') return 'past_due';
+  if ([
+    'REFUNDED',
+    'REFUND_REQUESTED',
+    'CHARGEBACK_REQUESTED',
+    'CHARGEBACK_DISPUTE',
+    'AWAITING_CHARGEBACK_REVERSAL',
+  ].includes(normalized)) return 'cancelled';
   return null;
+}
+
+function verifiedPaymentAudit(webhookPayload, verifiedPayment) {
+  return {
+    webhook: {
+      id: webhookPayload?.id || null,
+      event: webhookPayload?.event || null,
+    },
+    verifiedPayment: {
+      id: verifiedPayment?.id || null,
+      status: verifiedPayment?.status || null,
+      externalReference: verifiedPayment?.externalReference || null,
+      subscription: verifiedPayment?.subscription || null,
+      billingType: verifiedPayment?.billingType || null,
+      dueDate: verifiedPayment?.dueDate || null,
+      paymentDate: verifiedPayment?.paymentDate || null,
+      confirmedDate: verifiedPayment?.confirmedDate || null,
+    },
+  };
 }
 
 async function persistBillingEvent(env, eventId, eventType, payload) {
@@ -241,7 +240,7 @@ async function markBillingEvent(env, eventId, status, errorMessage = null) {
   return Boolean(response?.ok);
 }
 
-async function applyBillingState(env, mapped, payload, eventId, status) {
+async function applyBillingState(env, mapped, verifiedPayment, eventId, status) {
   const response = await serviceFetch(env, '/rest/v1/rpc/apply_billing_state', {
     method: 'POST',
     body: JSON.stringify({
@@ -249,11 +248,13 @@ async function applyBillingState(env, mapped, payload, eventId, status) {
       p_plan_code: mapped.planCode,
       p_status: status,
       p_provider: 'asaas',
-      p_external_subscription_id: eventExternalSubscriptionId(payload),
+      p_external_subscription_id: verifiedPayment?.subscription || null,
       p_current_period_end: status === 'active' ? addPlanPeriod(mapped.planCode) : null,
       p_metadata: {
-        source: 'cloudflare_asaas_webhook',
+        source: 'cloudflare_asaas_verified_payment',
         external_event_id: eventId,
+        payment_id: verifiedPayment?.id || null,
+        payment_status: verifiedPayment?.status || null,
       },
     }),
   });
@@ -261,36 +262,65 @@ async function applyBillingState(env, mapped, payload, eventId, status) {
 }
 
 async function handleWebhook(request, env) {
-  if (!env.ASAAS_WEBHOOK_SECRET) return json(503, { error: 'webhook_secret_not_configured' });
-
-  const receivedToken = request.headers.get('asaas-access-token') || '';
-  if (!(await safeEqual(receivedToken, env.ASAAS_WEBHOOK_SECRET))) {
-    return json(401, { error: 'invalid_webhook_token' });
-  }
-
-  const payload = await request.json().catch(() => null);
-  const eventId = String(payload?.id || '');
-  const eventType = String(payload?.event || '');
-  if (!eventId || !eventType) return json(400, { error: 'invalid_webhook_event' });
-
-  const mapped = parseExternalReference(eventExternalReference(payload));
-  if (!mapped) return json(200, { status: 'ignored_unmapped', eventId });
-
+  if (!env.ASSAS_SECRET) return json(503, { error: 'asaas_not_configured' });
   if (!env.SUPABASE_SERVICE_ROLE_KEY) {
     return json(503, { error: 'billing_bridge_not_configured' });
   }
 
-  const stored = await persistBillingEvent(env, eventId, eventType, payload);
+  // The webhook is only a notification trigger. Its event/status/reference are
+  // never trusted to grant or revoke SaaS access. Only the payment ID is used
+  // to retrieve the canonical payment directly from Asaas with ASSAS_SECRET.
+  const payload = await request.json().catch(() => null);
+  const paymentId = String(payload?.payment?.id || '');
+  if (!paymentId) return json(200, { status: 'ignored_without_payment' });
+  if (!/^[A-Za-z0-9_-]{3,128}$/.test(paymentId)) {
+    return json(400, { error: 'invalid_payment_id' });
+  }
+
+  const { response: asaasResponse, payload: verifiedPayment } = await asaasFetch(
+    env,
+    `/payments/${encodeURIComponent(paymentId)}`,
+    { method: 'GET' },
+  );
+
+  if (!asaasResponse) return json(503, { error: 'asaas_not_configured' });
+  if (asaasResponse.status === 404) {
+    return json(200, { status: 'ignored_payment_not_found' });
+  }
+  if (!asaasResponse.ok || !verifiedPayment?.id) {
+    return json(502, { error: 'asaas_payment_verification_failed' });
+  }
+  if (String(verifiedPayment.id) !== paymentId) {
+    return json(502, { error: 'asaas_payment_identity_mismatch' });
+  }
+
+  const mapped = parseExternalReference(verifiedPayment?.externalReference);
+  if (!mapped) {
+    return json(200, { status: 'ignored_unmapped_verified_payment', paymentId });
+  }
+
+  const verifiedStatus = String(verifiedPayment?.status || '').toUpperCase();
+  if (!verifiedStatus) {
+    return json(502, { error: 'asaas_payment_status_missing', paymentId });
+  }
+
+  // Idempotency is based only on canonical Asaas data. A forged webhook event
+  // id cannot be used to replay an old successful payment transition.
+  const eventId = `payment:${verifiedPayment.id}:${verifiedStatus}`;
+  const eventType = `PAYMENT_VERIFIED_${verifiedStatus}`;
+  const auditPayload = verifiedPaymentAudit(payload, verifiedPayment);
+
+  const stored = await persistBillingEvent(env, eventId, eventType, auditPayload);
   if (!stored.ok) return json(500, { error: 'webhook_event_store_failed', eventId });
   if (stored.duplicate) return json(200, { status: 'duplicate_ignored', eventId });
 
-  const transition = billingTransition(eventType);
+  const transition = verifiedBillingTransition(verifiedStatus);
   if (!transition) {
     await markBillingEvent(env, eventId, 'ignored');
-    return json(200, { status: 'ignored_no_billing_transition', eventId });
+    return json(200, { status: 'ignored_no_billing_transition', eventId, paymentStatus: verifiedStatus });
   }
 
-  const response = await applyBillingState(env, mapped, payload, eventId, transition);
+  const response = await applyBillingState(env, mapped, verifiedPayment, eventId, transition);
   if (!response?.ok) {
     const errorText = response ? await response.text() : 'service role unavailable';
     await markBillingEvent(env, eventId, 'failed', errorText.slice(0, 1000));
@@ -298,7 +328,12 @@ async function handleWebhook(request, env) {
   }
 
   await markBillingEvent(env, eventId, 'processed');
-  return json(200, { status: 'processed', eventId, planCode: mapped.planCode });
+  return json(200, {
+    status: 'processed',
+    eventId,
+    planCode: mapped.planCode,
+    paymentStatus: verifiedStatus,
+  });
 }
 
 function health(env) {
@@ -306,7 +341,7 @@ function health(env) {
     ok: true,
     service: 'commercial-asaas-api',
     asaasApiConfigured: Boolean(env.ASSAS_SECRET),
-    webhookConfigured: Boolean(env.ASAAS_WEBHOOK_SECRET),
+    webhookVerification: 'asaas_api_lookup',
     billingBridgeConfigured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
   });
 }
