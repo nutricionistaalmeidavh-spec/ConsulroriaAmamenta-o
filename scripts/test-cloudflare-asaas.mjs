@@ -40,6 +40,14 @@ assert.match(worker, /ASSAS_SANDBOX_SECRET/);
 assert.match(worker, /asaas_sandbox/);
 assert.match(worker, /cloudflare-asaas-sandbox/);
 
+// Health must distinguish "secret exists" from "credential actually authenticates" without leaking it.
+assert.match(worker, /\$aact_hmlg_/);
+assert.match(worker, /\$aact_prod_/);
+assert.match(worker, /credentialEnvironment/);
+assert.match(worker, /asaasApiValid/);
+assert.match(worker, /asaasAuthStatus/);
+assert.match(worker, /asaasFetch\(env, '\/wallets\/', \{ method: 'GET' \}, environment\)/);
+
 assert.match(worker, /value:\s*49\.9/);
 assert.match(worker, /value:\s*499/);
 assert.match(worker, /maxInstallmentCount:\s*12/);
