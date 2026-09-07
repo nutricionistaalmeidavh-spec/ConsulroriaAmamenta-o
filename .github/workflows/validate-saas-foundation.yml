@@ -13,6 +13,7 @@ on:
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
+      - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -33,6 +34,7 @@ on:
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
+      - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -70,6 +72,8 @@ jobs:
         run: node scripts/test-preconfirm-checkout.mjs
       - name: Validate existing e-mail signup continuation
         run: node scripts/test-duplicate-signup-flow.mjs
+      - name: Validate commercial password recovery
+        run: node scripts/test-commercial-auth-recovery.mjs
       - name: Validate Freemium and Pro plans
         run: node scripts/test-saas-plans.mjs
       - name: Validate server-side SaaS enforcement
