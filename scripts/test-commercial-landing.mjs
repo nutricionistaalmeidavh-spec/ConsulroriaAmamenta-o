@@ -5,19 +5,21 @@ const root = process.cwd();
 const htmlPath = path.join(root, 'public/comercial/index.html');
 const cssPath = path.join(root, 'public/comercial/styles.css');
 const motionPath = path.join(root, 'public/comercial/landing.js');
+const phase2CssPath = path.join(root, 'public/comercial/phase2.css');
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
   process.exitCode = 1;
 }
 
-for (const file of [htmlPath, cssPath]) {
+for (const file of [htmlPath, cssPath, motionPath]) {
   if (!fs.existsSync(file)) fail(`missing ${path.relative(root, file)}`);
 }
 if (process.exitCode) process.exit();
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const css = fs.readFileSync(cssPath, 'utf8');
+const motion = fs.readFileSync(motionPath, 'utf8');
 const lower = html.toLowerCase();
 
 const requiredSections = [
@@ -53,8 +55,29 @@ for (const contract of ['id="auth-modal"', 'id="signup-form"', 'id="login-form"'
 }
 
 if (!html.includes('src="./landing.js')) fail('isolated landing motion script is missing');
-if (!fs.existsSync(motionPath)) fail('public/comercial/landing.js is missing');
 if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');
 if (!css.includes('@media (prefers-reduced-motion: reduce)')) fail('reduced-motion fallback is missing');
 
-if (!process.exitCode) console.log('PASS: commercial landing sales-story contract');
+// Phase 2 visual contract: visual refinement must stay isolated from auth/checkout.
+if (!fs.existsSync(phase2CssPath)) fail('Phase 2 visual stylesheet is missing');
+if (!motion.includes("phase2.css")) fail('landing.js must load the isolated Phase 2 stylesheet');
+if (!motion.includes("phase2-visual")) fail('landing.js must opt the commercial page into Phase 2 visual mode');
+if (!motion.includes("billing-switch")) fail('Pro monthly/annual billing switch is missing');
+if (!motion.includes("data-stage")) fail('interactive product story stage state is missing');
+if (!motion.includes("story-step")) fail('product story step controller is missing');
+if (!motion.includes("prefers-reduced-motion")) fail('Phase 2 interactions must preserve reduced-motion behavior');
+
+if (fs.existsSync(phase2CssPath)) {
+  const phase2Css = fs.readFileSync(phase2CssPath, 'utf8');
+  for (const token of [
+    '.phase2-visual .hero',
+    '.phase2-visual .feature-grid',
+    '.billing-switch',
+    '.phase2-visual .auth-modal',
+    '@media (prefers-reduced-motion: reduce)',
+  ]) {
+    if (!phase2Css.includes(token)) fail(`Phase 2 stylesheet missing ${token}`);
+  }
+}
+
+if (!process.exitCode) console.log('PASS: commercial landing Phase 2 visual contract');
