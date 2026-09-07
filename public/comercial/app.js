@@ -12,13 +12,24 @@ const API = Object.freeze({
 
 const SESSION_KEY = 'commercial.saas.session.v1';
 const PLAN_KEY = 'commercial.saas.plan-intent.v1';
+const RETURN_KEY = 'commercial.saas.return.v1';
 const modal = document.querySelector('#auth-modal');
 const message = document.querySelector('#form-message');
 const planIntent = document.querySelector('#plan-intent');
+const pageUrl = new URL(window.location.href);
+
+const requestedReturn = pageUrl.searchParams.get('return');
+const requestedPlan = pageUrl.searchParams.get('plan');
+if (requestedReturn === 'sandbox') sessionStorage.setItem(RETURN_KEY, 'sandbox');
+if (['freemium', 'pro_monthly', 'pro_annual'].includes(requestedPlan)) {
+  sessionStorage.setItem(PLAN_KEY, requestedPlan);
+}
+
 let previousFocus = null;
 let currentSession = readSession();
 let currentUser = currentSession?.user || null;
-let selectedPlan = sessionStorage.getItem(PLAN_KEY) || 'profissional';
+let selectedPlan = sessionStorage.getItem(PLAN_KEY) || 'freemium';
+let returnContext = sessionStorage.getItem(RETURN_KEY) || '';
 
 class ApiError extends Error {
   constructor(messageText, status, payload) {
@@ -150,6 +161,11 @@ async function getAuthenticatedUser() {
   try {
     const user = await request(API.user, { token });
     currentUser = user;
+    const metadataPlan = user?.user_metadata?.plan_intent;
+    if (!sessionStorage.getItem(PLAN_KEY) && ['freemium', 'pro_monthly', 'pro_annual'].includes(metadataPlan)) {
+      selectedPlan = metadataPlan;
+      sessionStorage.setItem(PLAN_KEY, selectedPlan);
+    }
     return user;
   } catch (error) {
     if (error?.status === 401) clearSession();
@@ -215,6 +231,66 @@ async function saveProfessionalProfile(account, values) {
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
+function confirmationRedirectUrl() {
+  const redirect = new URL('./index.html', window.location.href);
+  redirect.searchParams.set('confirmed', '1');
+  redirect.searchParams.set('plan', selectedPlan);
+  if (returnContext === 'sandbox') {
+    redirect.searchParams.set('return', 'sandbox');
+    redirect.searchParams.set('auto', '1');
+  } else if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
+    redirect.searchParams.set('checkout', '1');
+  }
+  return redirect.href;
+}
+
+async function startCheckout(planCode, environment = 'production') {
+  const token = currentSession?.access_token;
+  if (!token) throw new ApiError('Sua sessão expirou. Entre novamente.', 401, null);
+
+  const endpoint = environment === 'sandbox'
+    ? '/api/sandbox/asaas/checkout'
+    : '/api/asaas/checkout';
+
+  setMessage(environment === 'sandbox'
+    ? 'Abrindo checkout de teste no Asaas Sandbox…'
+    : 'Abrindo checkout seguro no Asaas…');
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ planCode }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const firstDetail = payload?.details?.[0]?.description;
+    throw new ApiError(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o checkout.', response.status, payload);
+  }
+  if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
+  window.location.assign(payload.checkoutUrl);
+}
+
+async function continueAfterOnboarding() {
+  returnContext = sessionStorage.getItem(RETURN_KEY) || returnContext;
+  selectedPlan = sessionStorage.getItem(PLAN_KEY) || selectedPlan;
+
+  if (returnContext === 'sandbox') {
+    window.location.assign('./sandbox-teste.html?auto=1');
+    return;
+  }
+
+  if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
+    await startCheckout(selectedPlan, 'production');
+    return;
+  }
+
+  showView('complete');
+  setMessage('Perfil profissional salvo com isolamento por conta.', 'success');
+}
+
 async function routeAuthenticatedSession() {
   const user = await getAuthenticatedUser();
   if (!user?.id) {
@@ -224,6 +300,11 @@ async function routeAuthenticatedSession() {
 
   const profile = await getProfile(user.id);
   if (profile) {
+    const shouldContinue = pageUrl.searchParams.get('auto') === '1' || pageUrl.searchParams.get('checkout') === '1';
+    if (shouldContinue) {
+      await continueAfterOnboarding();
+      return;
+    }
     showView('complete');
     setMessage(`Conta configurada para ${profile.professional_name || user.email || 'seu acesso'}.`, 'success');
     return;
@@ -261,7 +342,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
   const email = String(data.get('email') || '').trim();
   const password = String(data.get('password') || '');
   const confirmPassword = String(data.get('confirmPassword') || '');
-  selectedPlan = String(data.get('planIntent') || selectedPlan || 'profissional');
+  selectedPlan = String(data.get('planIntent') || selectedPlan || 'freemium');
   sessionStorage.setItem(PLAN_KEY, selectedPlan);
 
   if (password !== confirmPassword) {
@@ -272,7 +353,8 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
   setBusy(form, true);
   setMessage('Criando seu acesso…');
   try {
-    const result = await request(API.signup, {
+    const signupPath = `${API.signup}?redirect_to=${encodeURIComponent(confirmationRedirectUrl())}`;
+    const result = await request(signupPath, {
       method: 'POST',
       body: {
         email,
@@ -289,7 +371,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
       setMessage('Acesso criado. Vamos configurar seu perfil.', 'success');
       await routeAuthenticatedSession();
     } else {
-      setMessage('Conta criada. Confira seu e-mail para confirmar o cadastro e depois use Entrar.', 'success');
+      setMessage('Conta criada. Confira seu e-mail para confirmar o cadastro. O link retornará para este ambiente comercial.', 'success');
     }
   } catch (error) {
     setMessage(friendlyError(error), 'error');
@@ -344,8 +426,7 @@ document.querySelector('#onboarding-form').addEventListener('submit', async (eve
 
     const account = await ensureAccount(user.id, values.accountType);
     await saveProfessionalProfile(account, values);
-    showView('complete');
-    setMessage('Perfil profissional salvo com isolamento por conta.', 'success');
+    await continueAfterOnboarding();
   } catch (error) {
     if (error?.status === 401) {
       clearSession();
