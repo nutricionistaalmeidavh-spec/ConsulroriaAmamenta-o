@@ -7,7 +7,10 @@ const cssPath = path.join(root, 'public/comercial/styles.css');
 const motionPath = path.join(root, 'public/comercial/landing.js');
 const phase2CssPath = path.join(root, 'public/comercial/phase2.css');
 const realPreviewCssPath = path.join(root, 'public/comercial/real-preview.css');
+const mobileFixesCssPath = path.join(root, 'public/comercial/mobile-fixes.css');
 const productPreviewPath = path.join(root, 'public/comercial/product-preview.html');
+const libraryPreviewPath = path.join(root, 'public/comercial/product-preview-library.html');
+const mediaPreviewPath = path.join(root, 'public/comercial/product-preview-media.html');
 const officialLogoPath = path.join(root, 'public/icon.svg');
 const logoMotionCssPath = path.join(root, 'public/comercial/logo-motion.css');
 
@@ -26,64 +29,45 @@ const css = fs.readFileSync(cssPath, 'utf8');
 const motion = fs.readFileSync(motionPath, 'utf8');
 const lower = html.toLowerCase();
 
-const requiredSections = [
-  'id="problema"',
-  'id="produto"',
-  'id="recursos"',
-  'id="para-quem"',
-  'id="planos"',
-  'id="faq"',
-];
-for (const section of requiredSections) {
+for (const section of ['id="problema"','id="produto"','id="recursos"','id="para-quem"','id="planos"','id="faq"']) {
   if (!lower.includes(section)) fail(`missing sales-story section ${section}`);
 }
-
-for (const phrase of [
-  'começar grátis',
-  'até 3 mães/pacientes',
-  'r$ 49,90/mês',
-  'r$ 499/ano',
-  'upload de fotos e vídeos',
-]) {
+for (const phrase of ['começar grátis','até 3 mães/pacientes','r$ 49,90/mês','r$ 499/ano','upload de fotos e vídeos']) {
   if (!lower.includes(phrase)) fail(`missing commercial promise: ${phrase}`);
 }
-
 if ((html.match(/<details\b/g) || []).length < 6) fail('FAQ must contain at least 6 native details items');
 if (!html.includes('class="comparison-table"')) fail('plan comparison table is missing');
 if (!html.includes('data-plan="freemium" data-open="signup"')) fail('Freemium CTA contract changed');
 if (!html.includes('data-plan="pro_monthly" data-open="signup"')) fail('monthly Pro CTA contract changed');
 if (!html.includes('data-plan="pro_annual" data-open="signup"')) fail('annual Pro CTA contract changed');
-
-for (const contract of ['id="auth-modal"', 'id="signup-form"', 'id="login-form"', 'id="onboarding-form"', 'id="plan-intent"', 'id="form-message"']) {
+for (const contract of ['id="auth-modal"','id="signup-form"','id="login-form"','id="onboarding-form"','id="plan-intent"','id="form-message"']) {
   if (!html.includes(contract)) fail(`auth contract removed: ${contract}`);
 }
-
 if (!html.includes('src="./landing.js')) fail('isolated landing motion script is missing');
 if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');
 if (!css.includes('@media (prefers-reduced-motion: reduce)')) fail('reduced-motion fallback is missing');
 
-// Official logo contract. Header animates with page scroll; footer must render a full real logo.
+// Header + footer official logo and full-page scroll motion.
 if ((html.match(/src="\.\.\/icon\.svg"/g) || []).length < 2) fail('header and footer must retain static official logo fallbacks');
-if (!fs.existsSync(officialLogoPath)) {
-  fail('official vector logo public/icon.svg is missing');
-} else {
+if (!fs.existsSync(officialLogoPath)) fail('official vector logo public/icon.svg is missing');
+else {
   const officialLogo = fs.readFileSync(officialLogoPath, 'utf8');
   if (!officialLogo.includes('viewBox="0 0 290 290"')) fail('official logo geometry changed');
   if (!officialLogo.includes('linearGradient id="bg"')) fail('official logo gradient is missing');
 }
-if (!fs.existsSync(logoMotionCssPath)) {
-  fail('scroll-reactive logo stylesheet is missing');
-} else {
+if (!fs.existsSync(logoMotionCssPath)) fail('scroll-reactive logo stylesheet is missing');
+else {
   const logoMotionCss = fs.readFileSync(logoMotionCssPath, 'utf8');
   if (!logoMotionCss.includes('.brand-mark[data-logo-motion]')) fail('scroll-reactive logo styles are missing');
   if (!logoMotionCss.includes('.footer-brand .brand-logo-motion')) fail('footer official logo rendering is missing');
-  if (!logoMotionCss.includes('@media (prefers-reduced-motion: reduce)')) fail('logo motion reduced-motion fallback is missing');
+  if (!logoMotionCss.includes('filter:none!important')) fail('official SVG must not be flattened into a white square');
+  if (!logoMotionCss.includes('@media (prefers-reduced-motion:reduce)')) fail('logo motion reduced-motion fallback is missing');
 }
-for (const token of ['mountLogoMotion', 'data-logo-part="mother"', 'data-logo-part="baby"', 'data-logo-part="heart"', 'updateLogoMotion', 'logoMotionProgress', 'logo-motion.css', 'document.documentElement.scrollHeight']) {
+for (const token of ['mountLogoMotion','data-logo-part="mother"','data-logo-part="baby"','data-logo-part="heart"','updateLogoMotion','logoMotionProgress','document.documentElement.scrollHeight']) {
   if (!motion.includes(token)) fail(`scroll-reactive logo controller missing ${token}`);
 }
 
-// Phase 2 visual contract: visual refinement must stay isolated from auth/checkout.
+// Phase 2 stays isolated from auth/checkout.
 if (!fs.existsSync(phase2CssPath)) fail('Phase 2 visual stylesheet is missing');
 if (!motion.includes("phase2.css")) fail('landing.js must load the isolated Phase 2 stylesheet');
 if (!motion.includes("phase2-visual")) fail('landing.js must opt the commercial page into Phase 2 visual mode');
@@ -91,61 +75,66 @@ if (!motion.includes("billing-switch")) fail('Pro monthly/annual billing switch 
 if (!motion.includes("data-stage")) fail('interactive product story stage state is missing');
 if (!motion.includes("story-step")) fail('product story step controller is missing');
 if (!motion.includes("prefers-reduced-motion")) fail('Phase 2 interactions must preserve reduced-motion behavior');
-
 if (fs.existsSync(phase2CssPath)) {
   const phase2Css = fs.readFileSync(phase2CssPath, 'utf8');
-  for (const token of [
-    '.phase2-visual .hero',
-    '.phase2-visual .feature-grid',
-    '.billing-switch',
-    '.phase2-visual .auth-modal',
-    '@media (prefers-reduced-motion: reduce)',
-  ]) {
+  for (const token of ['.phase2-visual .hero','.phase2-visual .feature-grid','.billing-switch','.phase2-visual .auth-modal','@media (prefers-reduced-motion: reduce)']) {
     if (!phase2Css.includes(token)) fail(`Phase 2 stylesheet missing ${token}`);
   }
-  if (!phase2Css.includes('.comparison-mobile')) fail('mobile plan comparison replacement is missing');
-  if (!phase2Css.includes('@media (max-width: 760px)')) fail('mobile layout contract is missing');
 }
 
-// Product preview contract: real clinical screens, distinct cards, safe crops and no fake placeholders.
-if (!fs.existsSync(productPreviewPath)) {
-  fail('real clinical product preview is missing');
-} else {
+// Product previews: distinct real UI surfaces instead of repeated/empty cards.
+if (!fs.existsSync(productPreviewPath)) fail('real clinical product preview is missing');
+else {
   const productPreview = fs.readFileSync(productPreviewPath, 'utf8');
   if (!productPreview.includes('../clinical-source/styles.css')) fail('product preview must reuse clinical-source styles');
-  if (!productPreview.includes('../album-feature.css')) fail('media preview must reuse the real album feature styles');
-  for (const token of ['lactation-shell', 'lactation-kpis', 'agenda-card', 'patient-grid', 'patient-detail-grid', 'library-grid', 'af-grid']) {
+  for (const token of ['lactation-shell','lactation-kpis','agenda-card','patient-grid','patient-detail-grid']) {
     if (!productPreview.includes(token)) fail(`product preview must reuse real clinical UI class ${token}`);
   }
-  for (const screen of ['home', 'agenda', 'patients', 'appointment', 'patient', 'library', 'media']) {
-    if (!productPreview.includes(`data-preview-screen="${screen}"`)) fail(`missing distinct real product preview screen ${screen}`);
+  for (const screen of ['home','agenda','patients','appointment','patient']) {
+    if (!productPreview.includes(`data-preview-screen="${screen}"`)) fail(`missing base product preview screen ${screen}`);
   }
-  if (!productPreview.includes('dados demonstrativos')) fail('product preview must identify demo-safe data');
 }
-if (!motion.includes('product-preview.html')) fail('landing.js must embed the real product preview');
-if (!motion.includes('previewScreenByStage')) fail('product story must map stages to real product screens');
-if (!motion.includes('setPreviewScreen')) fail('product story must update the real product preview screen');
+if (!fs.existsSync(libraryPreviewPath)) fail('distinct real library preview is missing');
+else {
+  const preview = fs.readFileSync(libraryPreviewPath, 'utf8');
+  if (!preview.includes('../clinical-source/styles.css') || !preview.includes('data-preview-screen="library"') || !preview.includes('library-grid')) fail('library preview must reuse the real clinical library UI');
+  if (!preview.includes('dados demonstrativos')) fail('library preview must identify demo-safe data');
+}
+if (!fs.existsSync(mediaPreviewPath)) fail('distinct real media preview is missing');
+else {
+  const preview = fs.readFileSync(mediaPreviewPath, 'utf8');
+  if (!preview.includes('../clinical-source/styles.css') || !preview.includes('../album-feature.css') || !preview.includes('data-preview-screen="media"') || !preview.includes('af-grid')) fail('media preview must reuse the real album feature UI');
+  if (!preview.includes('dados demonstrativos')) fail('media preview must identify demo-safe data');
+}
+if (!motion.includes('product-preview.html') || !motion.includes('product-preview-library.html') || !motion.includes('product-preview-media.html')) fail('landing must route to all distinct product previews');
+if (!motion.includes('previewScreenByStage') || !motion.includes('setPreviewScreen')) fail('product story must update real product screens');
 
-// Hero must alternate multiple real screens and allow manual/swipe navigation.
-for (const token of ['heroPreviewScreens', 'hero-preview-controls', 'setHeroPreview', 'startHeroPreviewRotation', 'pointerdown', 'pointerup']) {
+// Hero cycles through distinct real screens with manual dots and swipe.
+for (const token of ['heroPreviewScreens','hero-preview-controls','setHeroPreview','startHeroPreviewRotation','pointerdown','pointerup']) {
   if (!motion.includes(token)) fail(`hero real-screen carousel missing ${token}`);
 }
 
-// Every feature card needs a distinct real preview; fixed pixel iframe widths caused the mobile crops in production.
-if (!motion.includes("screen: 'agenda'")) fail('agenda feature preview missing');
-if (!motion.includes("screen: 'patients'")) fail('patients feature preview missing');
-if (!motion.includes("screen: 'appointment'")) fail('appointment feature preview missing');
-if (!motion.includes("screen: 'patient'")) fail('patient feature preview missing');
-if (!motion.includes("screen: 'library'")) fail('library feature preview missing');
-if (!motion.includes("screen: 'media'")) fail('media feature preview missing');
-if (!fs.existsSync(realPreviewCssPath)) {
-  fail('real preview stylesheet is missing');
-} else {
+// All six feature cards have real previews with responsive crops.
+for (const screen of ['agenda','patients','appointment','patient','library','media']) {
+  if (!motion.includes(`screen: '${screen}'`)) fail(`feature preview missing ${screen}`);
+}
+if (!motion.includes('injectCompactCrop')) fail('feature crop controller is missing');
+if (!fs.existsSync(realPreviewCssPath)) fail('real preview stylesheet is missing');
+else {
   const realPreviewCss = fs.readFileSync(realPreviewCssPath, 'utf8');
-  if (realPreviewCss.includes('width: 390px')) fail('mobile preview must not use fixed 390px iframe width');
-  if (realPreviewCss.includes('width: 760px')) fail('feature preview must not use fixed 760px iframe width');
+  if (realPreviewCss.includes('width: 390px') || realPreviewCss.includes('width: 760px')) fail('feature previews must not use fixed iframe widths');
   if (!realPreviewCss.includes('calc(100% / var(--preview-scale))')) fail('feature preview must size from its crop container');
   if (!realPreviewCss.includes('.feature-card:nth-child(6).has-real-preview')) fail('Pro media card crop styling is missing');
+}
+
+// Mobile comparison replaces the clipped horizontal table.
+if (!motion.includes('comparison-mobile')) fail('mobile comparison cards are not generated');
+if (!fs.existsSync(mobileFixesCssPath)) fail('mobile fixes stylesheet is missing');
+else {
+  const mobileCss = fs.readFileSync(mobileFixesCssPath, 'utf8');
+  if (!mobileCss.includes('.comparison-mobile')) fail('mobile comparison styles are missing');
+  if (!mobileCss.includes('.comparison-table{display:none!important}')) fail('wide comparison table must be hidden on mobile');
+  if (!mobileCss.includes('@media(max-width:760px)')) fail('mobile comparison breakpoint is missing');
 }
 
 if (!process.exitCode) console.log('PASS: commercial landing mobile visual contract');
