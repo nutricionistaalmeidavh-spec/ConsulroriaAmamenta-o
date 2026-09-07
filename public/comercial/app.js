@@ -13,6 +13,7 @@ const API = Object.freeze({
 const SESSION_KEY = 'commercial.saas.session.v1';
 const PLAN_KEY = 'commercial.saas.plan-intent.v1';
 const RETURN_KEY = 'commercial.saas.return.v1';
+const CHECKOUT_AFTER_LOGIN_KEY = 'commercial.saas.checkout-after-login.v1';
 const modal = document.querySelector('#auth-modal');
 const message = document.querySelector('#form-message');
 const planIntent = document.querySelector('#plan-intent');
@@ -85,6 +86,17 @@ function generateSignupNonce() {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function isExistingSignupResult(result) {
+  return Boolean(result?.user?.id)
+    && Array.isArray(result?.user?.identities)
+    && result.user.identities.length === 0;
+}
+
+function pendingCheckoutAfterLogin() {
+  const plan = sessionStorage.getItem(CHECKOUT_AFTER_LOGIN_KEY) || '';
+  return ['pro_monthly', 'pro_annual'].includes(plan) ? plan : '';
 }
 
 async function request(path, { method = 'GET', token = null, body = null, prefer = null } = {}) {
@@ -341,6 +353,7 @@ async function continueAfterOnboarding() {
   }
 
   if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
+    sessionStorage.removeItem(CHECKOUT_AFTER_LOGIN_KEY);
     await startCheckout(selectedPlan, 'production');
     return;
   }
@@ -357,7 +370,19 @@ async function routeAuthenticatedSession() {
   }
 
   const profile = await getProfile(user.id);
+  const pendingPlan = pendingCheckoutAfterLogin();
+  if (pendingPlan) {
+    selectedPlan = pendingPlan;
+    sessionStorage.setItem(PLAN_KEY, pendingPlan);
+  }
+
   if (profile) {
+    if (pendingPlan) {
+      sessionStorage.removeItem(CHECKOUT_AFTER_LOGIN_KEY);
+      await startCheckout(pendingPlan, 'production');
+      return;
+    }
+
     const shouldContinue = pageUrl.searchParams.get('auto') === '1' || pageUrl.searchParams.get('checkout') === '1';
     if (shouldContinue) {
       await continueAfterOnboarding();
@@ -426,6 +451,19 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
         },
       },
     });
+
+    if (isExistingSignupResult(result)) {
+      if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
+        sessionStorage.setItem(CHECKOUT_AFTER_LOGIN_KEY, selectedPlan);
+      } else {
+        sessionStorage.removeItem(CHECKOUT_AFTER_LOGIN_KEY);
+      }
+      const loginEmail = document.querySelector('#login-form input[name="email"]');
+      if (loginEmail) loginEmail.value = email;
+      showView('login');
+      setMessage('Este e-mail já possui uma conta. Entre com sua senha para continuar para o pagamento.', 'error');
+      return;
+    }
 
     if (result?.access_token) saveSession(result);
 
