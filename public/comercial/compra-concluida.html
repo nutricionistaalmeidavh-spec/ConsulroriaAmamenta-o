@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f4f2">
+  <title>Compra concluída | Gestão para Consultoras</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    .purchase-shell{min-height:100vh;display:grid;place-items:center;padding:32px 18px;background:#f8f4f2}.purchase-card{width:min(620px,100%);background:#fff;border:1px solid rgba(69,54,57,.12);border-radius:24px;padding:38px;box-shadow:0 24px 60px rgba(72,50,58,.09)}.purchase-icon{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#e7f2eb;color:#35634b;font-size:30px;font-weight:800;margin-bottom:24px}.purchase-card h1{margin:8px 0 14px;font-size:clamp(2rem,6vw,3.2rem)}.purchase-card p{font-size:1.05rem;line-height:1.65}.purchase-steps{margin:26px 0;padding:0;list-style:none;display:grid;gap:14px}.purchase-steps li{display:flex;gap:12px;align-items:flex-start}.purchase-steps span{width:28px;height:28px;flex:0 0 28px;border-radius:50%;display:grid;place-items:center;background:#6b3f52;color:#fff;font-weight:700}.purchase-note{padding:16px 18px;border-radius:14px;background:#f7f1f3;color:#523743;margin:22px 0}.purchase-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.purchase-actions .button{flex:1 1 220px;text-align:center;text-decoration:none}.purchase-muted{color:#746b6e;font-size:.95rem}
+  </style>
+</head>
+<body>
+  <main class="purchase-shell">
+    <section class="purchase-card" aria-labelledby="purchase-title">
+      <div class="purchase-icon" aria-hidden="true">✓</div>
+      <span class="eyebrow">Próximo passo</span>
+      <h1 id="purchase-title">Checkout concluído</h1>
+      <p>Sua compra foi enviada ao Asaas. Assim que o pagamento for confirmado, o plano Pro fica registrado na sua conta.</p>
+
+      <div class="purchase-note"><strong>Para liberar o acesso ao sistema, falta confirmar seu e-mail.</strong> A confirmação de pagamento sozinha não libera o ambiente clínico.</div>
+
+      <ol class="purchase-steps">
+        <li><span>1</span><div><strong>Abra sua caixa de entrada.</strong><br>Procure o e-mail de confirmação da sua conta.</div></li>
+        <li><span>2</span><div><strong>Confirme seu e-mail.</strong><br>O link retorna para o ambiente comercial desta plataforma.</div></li>
+        <li><span>3</span><div><strong>Finalize seu perfil.</strong><br>Depois disso, o acesso é liberado conforme o status confirmado do pagamento.</div></li>
+      </ol>
+
+      <div class="purchase-actions">
+        <a class="button" href="./index.html?confirmed=1">Já confirmei meu e-mail</a>
+        <a class="button secondary" href="./index.html">Voltar para a página</a>
+      </div>
+      <p class="purchase-muted">Se o pagamento ainda estiver em processamento, o plano será atualizado automaticamente quando o Asaas enviar a confirmação.</p>
+    </section>
+  </main>
+</body>
+</html>

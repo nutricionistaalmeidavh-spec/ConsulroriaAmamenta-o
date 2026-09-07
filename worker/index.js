@@ -56,6 +56,20 @@ async function callCheckoutRegistry(request, body) {
   return { response, payload };
 }
 
+async function callPendingCheckoutRegistry(body) {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/saas-checkout`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
 function asaasConfig(env, environment = 'production') {
   if (environment === 'sandbox') {
     return {
@@ -91,13 +105,20 @@ function tomorrowAsaasDateTime() {
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
 }
 
-function checkoutPayload(planCode, requestId, origin, environment = 'production') {
+function checkoutPayload(planCode, requestId, origin, environment = 'production', flow = 'authenticated') {
   const suffix = environment === 'sandbox' ? '&environment=sandbox' : '';
-  const callback = {
-    successUrl: `${origin}/comercial/plano.html?asaas=success${suffix}`,
-    cancelUrl: `${origin}/comercial/plano.html?asaas=cancel${suffix}`,
-    expiredUrl: `${origin}/comercial/plano.html?asaas=expired${suffix}`,
-  };
+  const isPreconfirm = flow === 'pre_email_confirmation' && environment === 'production';
+  const callback = isPreconfirm
+    ? {
+        successUrl: `${origin}/comercial/compra-concluida.html?status=success&plan=${encodeURIComponent(planCode)}`,
+        cancelUrl: `${origin}/comercial/index.html?checkout=cancel&plan=${encodeURIComponent(planCode)}`,
+        expiredUrl: `${origin}/comercial/index.html?checkout=expired&plan=${encodeURIComponent(planCode)}`,
+      }
+    : {
+        successUrl: `${origin}/comercial/plano.html?asaas=success${suffix}`,
+        cancelUrl: `${origin}/comercial/plano.html?asaas=cancel${suffix}`,
+        expiredUrl: `${origin}/comercial/plano.html?asaas=expired${suffix}`,
+      };
 
   const common = {
     billingTypes: ['CREDIT_CARD'],
@@ -230,6 +251,84 @@ async function createCheckout(request, env, environment = 'production') {
   });
 }
 
+async function createPreconfirmCheckout(request, env) {
+  const config = asaasConfig(env, 'production');
+  if (!config.secret) return json(503, { error: 'asaas_not_configured' });
+
+  const input = await request.json().catch(() => null);
+  const userId = String(input?.userId || '');
+  const signupNonce = String(input?.signupNonce || '');
+  const planCode = String(input?.planCode || '');
+  if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
+
+  const registered = await callPendingCheckoutRegistry({
+    action: 'create_pending_request',
+    userId,
+    signupNonce,
+    planCode,
+    environment: 'production',
+  });
+  if (!registered.response?.ok || !registered.payload?.requestId || !registered.payload?.requestSecret) {
+    return json(registered.response?.status || 502, {
+      error: registered.payload?.error || 'pending_checkout_registry_failed',
+    });
+  }
+
+  const requestId = String(registered.payload.requestId);
+  const requestSecret = String(registered.payload.requestSecret);
+  const url = new URL(request.url);
+  const providerPayload = checkoutPayload(
+    planCode,
+    requestId,
+    url.origin,
+    'production',
+    'pre_email_confirmation',
+  );
+  const { response, payload: result } = await asaasFetch(env, '/checkouts', {
+    method: 'POST',
+    body: JSON.stringify(providerPayload),
+  }, 'production');
+
+  if (!response) return json(503, { error: 'asaas_not_configured' });
+  if (!response.ok || !result?.id) {
+    await callPendingCheckoutRegistry({
+      action: 'mark_pending_failed',
+      requestId,
+      requestSecret,
+      environment: 'production',
+    });
+    return json(response.status || 502, {
+      error: 'asaas_checkout_failed',
+      details: Array.isArray(result?.errors)
+        ? result.errors.map((item) => ({ code: item.code, description: item.description }))
+        : undefined,
+    });
+  }
+
+  const checkoutUrl = checkoutUrlFromResult(result, 'production');
+  const attached = await callPendingCheckoutRegistry({
+    action: 'attach_pending_provider_checkout',
+    requestId,
+    requestSecret,
+    externalCheckoutId: result.id,
+    checkoutUrl,
+    environment: 'production',
+  });
+
+  if (!attached.response?.ok) {
+    await asaasFetch(env, `/checkouts/${encodeURIComponent(result.id)}/cancel`, { method: 'POST' }, 'production');
+    return json(502, { error: 'pending_checkout_registry_attach_failed' });
+  }
+
+  return json(200, {
+    checkoutId: result.id,
+    checkoutUrl,
+    planCode,
+    environment: 'production',
+    emailConfirmationRequiredForAccess: true,
+  });
+}
+
 async function callBillingBridge(env, paymentId, environment = 'production') {
   const config = asaasConfig(env, environment);
   return fetch(`${SUPABASE_URL}/functions/v1/saas-billing-webhook`, {
@@ -256,7 +355,6 @@ async function handleWebhook(request, env, environment = 'production') {
     return json(400, { error: 'invalid_payment_id' });
   }
 
-  // Never trust status/externalReference from the webhook itself.
   const { response: asaasResponse, payload: verifiedPayment } = await asaasFetch(
     env,
     `/payments/${encodeURIComponent(paymentId)}`,
@@ -271,8 +369,6 @@ async function handleWebhook(request, env, environment = 'production') {
     return json(502, { error: 'asaas_payment_verification_failed' });
   }
 
-  // Supabase owns its service-role credential. It independently verifies that
-  // this payment belongs to the stored checkout session before changing access.
   const bridgeResponse = await callBillingBridge(env, paymentId, environment);
   const bridgePayload = await bridgeResponse.json().catch(() => null);
   if (!bridgeResponse.ok) {
@@ -317,6 +413,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env, 'production');
+    if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return createPreconfirmCheckout(request, env);
     if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return createCheckout(request, env, 'production');
     if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env, 'production');
 

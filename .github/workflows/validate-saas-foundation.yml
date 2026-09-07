@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - feature/saas-foundation-phase-0-2
+      - feature/pro-checkout-before-email-confirmation
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
+      - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -27,6 +29,7 @@ on:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
+      - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -60,6 +63,8 @@ jobs:
         run: node scripts/test-commercial-funnel.mjs
       - name: Validate commercial checkout continuation
         run: node scripts/test-commercial-checkout-return.mjs
+      - name: Validate Pro checkout before e-mail confirmation
+        run: node scripts/test-preconfirm-checkout.mjs
       - name: Validate Freemium and Pro plans
         run: node scripts/test-saas-plans.mjs
       - name: Validate server-side SaaS enforcement
