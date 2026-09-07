@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="editorial-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Prévia do produto</title>
+  <link rel="stylesheet" href="../clinical-source/styles.css">
+  <style>
+    html, body { min-height: 100%; background: var(--lac-warm, #fbfaf7); }
+    body { margin: 0; overflow: hidden; }
+    .preview-shell { min-height: 100vh; }
+    .preview-shell .template-sidebar { overflow: hidden; }
+    .preview-shell .template-nav a { cursor: default; }
+    .preview-shell button, .preview-shell input { pointer-events: none; }
+    .preview-shell .lactation-page { padding-bottom: 42px; }
+    .preview-demo-note {
+      position: fixed; right: 14px; bottom: 12px; z-index: 80;
+      padding: 6px 9px; border: 1px solid var(--ui-border, #e9e4de); border-radius: 999px;
+      color: var(--ui-text-secondary, #6f6a66); background: rgba(255,255,255,.88);
+      box-shadow: 0 6px 18px rgba(78,62,53,.05); font: 700 9px/1.1 Inter, ui-sans-serif, system-ui;
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .preview-brand-copy { display: grid; gap: 1px; min-width: 0; }
+    .preview-brand-copy strong { font-size: 13px; color: var(--lac-ink, #2e2927); white-space: nowrap; }
+    .preview-brand-copy small { color: var(--ui-text-secondary, #6f6a66); font-size: 10px; }
+    .preview-main-copy { min-width: 0; }
+    .preview-main-copy strong, .preview-main-copy span, .preview-main-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-screen[data-preview-screen][hidden] { display: none !important; }
+    .preview-screen .patient-card { cursor: default; }
+    .preview-screen .agenda-card { min-width: 0; }
+    .preview-screen .agenda-main { min-width: 0; }
+    .preview-screen .agenda-main strong, .preview-screen .agenda-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-screen .detail-card { overflow: hidden; }
+    .preview-screen .media-drop { display: grid; place-items: center; color: var(--lac-rose, #b66b70); }
+    .preview-screen .wizard-progress { margin-bottom: 2px; }
+    .preview-screen .field input, .preview-screen .field textarea { color: #4d4845; }
+    .preview-screen .field textarea { min-height: 72px; }
+    .preview-screen .choice-grid { margin-top: 2px; }
+    .preview-screen .choice.selected { background: var(--lac-rose-soft, #f7e9e7); border-color: #e6c2c3; color: #874d52; }
+    .preview-screen .weight-chart { margin-bottom: 24px; }
+    @media (max-width: 760px) {
+      body { overflow: hidden; padding-bottom: 0; }
+      .preview-shell .lactation-page { padding-bottom: 90px; }
+      .preview-demo-note { right: 8px; bottom: 72px; font-size: 8px; }
+      .preview-shell .lactation-bottom-nav { pointer-events: none; }
+      .preview-shell .patient-title-row > .patient-header-actions { position: static; width: auto; height: auto; box-shadow: none; }
+      .preview-shell .patient-title-row > .patient-header-actions .ui-button-primary { position: fixed; right: 18px; bottom: 92px; width: 54px; height: 54px; border-radius: 50%; font-size: 0; }
+      .preview-shell .patient-title-row > .patient-header-actions .ui-button-primary::after { content: '＋'; font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="template-shell lactation-shell preview-shell">
+  <aside class="template-sidebar lactation-sidebar desktop-only">
+    <div class="template-brand lactation-brand">
+      <span class="template-brand-mark lactation-brand-mark">G</span>
+      <span class="preview-brand-copy"><strong>Gestão de Amamentação</strong><small>ambiente profissional</small></span>
+    </div>
+    <div class="lactation-profile-mini"><div class="lactation-avatar">CA</div><div><strong>Consultora</strong><span>Amamentação materno-infantil</span></div></div>
+    <nav class="template-nav lactation-side-nav" aria-label="Navegação de demonstração">
+      <a href="#" data-demo-nav="home"><span class="nav-icon">⌂</span><span>Início</span></a>
+      <a href="#" data-demo-nav="agenda"><span class="nav-icon">▦</span><span>Agenda</span></a>
+      <a href="#" data-demo-nav="patients"><span class="nav-icon">♡</span><span>Pacientes</span></a>
+      <a href="#" data-demo-nav="followups"><span class="nav-icon">↻</span><span>Acompanhamentos</span></a>
+      <a href="#" data-demo-nav="finance"><span class="nav-icon">$</span><span>Financeiro</span></a>
+      <a href="#" data-demo-nav="library"><span class="nav-icon">▤</span><span>Biblioteca</span></a>
+      <a href="#" data-demo-nav="settings"><span class="nav-icon">⚙</span><span>Configurações</span></a>
+    </nav>
+    <div class="ui-grow"></div>
+    <div class="lactation-private-note"><span aria-hidden="true">●</span><div><strong>Ambiente clínico</strong><small>Dados protegidos e organizados.</small></div></div>
+  </aside>
+
+  <main class="template-main lactation-main">
+    <header class="template-topbar lactation-topbar">
+      <div class="lactation-mobile-brand mobile-only"><span class="template-brand-mark lactation-brand-mark">G</span><div class="preview-brand-copy"><strong>Gestão de Amamentação</strong><small data-demo-page-title>Início</small></div></div>
+      <div class="desktop-only"><strong data-demo-page-title>Início</strong><span class="lactation-subtitle">Sua rotina de atendimento em um só lugar</span></div>
+      <div class="template-actions lactation-top-actions"><button class="ui-button ui-button-ghost icon-button" aria-label="Pesquisar">⌕</button><button class="ui-button ui-button-primary desktop-only" data-demo-primary>+ Novo atendimento</button></div>
+    </header>
+
+    <div class="template-page lactation-page">
+      <section class="lactation-screen preview-screen" data-preview-screen="home">
+        <div class="lactation-hello">
+          <div><span class="lactation-kicker">HOJE · 07 SET</span><h1>Bom dia</h1><p>3 atendimentos e 2 acompanhamentos para revisar.</p></div>
+          <button class="ui-button ui-button-primary desktop-only">Novo atendimento</button>
+        </div>
+        <section class="lactation-mobile-priority">
+          <article class="next-appointment-card"><div class="card-eyebrow"><span class="status-dot"></span>Próximo atendimento</div><div class="next-time">14:30</div><div class="next-patient"><strong>Juliana & bebê</strong><span>Consulta individual · domiciliar</span></div></article>
+        </section>
+        <section class="lactation-kpis">
+          <article class="lactation-kpi"><span>Atendimentos hoje</span><strong>3</strong><small>1 concluído · 2 próximos</small></article>
+          <article class="lactation-kpi attention"><span>Follow-ups pendentes</span><strong>2</strong><small>precisam da sua atenção</small></article>
+          <article class="lactation-kpi"><span>A receber</span><strong>R$ 480</strong><small>2 pendências financeiras</small></article>
+          <article class="lactation-kpi desktop-only"><span>Atendimentos no mês</span><strong>18</strong><small>mês atual</small></article>
+        </section>
+        <section class="lactation-dashboard-grid">
+          <div class="lactation-stack">
+            <div class="section-heading"><div><span class="section-kicker">AGENDA</span><h2>Hoje</h2></div><button class="ui-button ui-button-ghost">Ver agenda</button></div>
+            <div class="agenda-list">
+              <div class="agenda-card current"><time>09:00</time><div class="agenda-main"><strong>Ana & bebê</strong><span>Retorno · online</span></div><span class="pill completed">Concluído</span><button class="round-action">›</button></div>
+              <div class="agenda-card"><time>14:30</time><div class="agenda-main"><strong>Juliana & bebê</strong><span>Consulta individual · domiciliar</span></div><span class="pill confirmed">Confirmado</span><button class="round-action">›</button></div>
+              <div class="agenda-card"><time>17:00</time><div class="agenda-main"><strong>Camila & bebê</strong><span>Retorno · clínica</span></div><span class="pill waiting">Aguardando</span><button class="round-action">›</button></div>
+            </div>
+          </div>
+          <aside class="lactation-stack">
+            <div class="section-heading"><div><span class="section-kicker">ACOMPANHAMENTO</span><h2>Precisa da sua atenção</h2></div></div>
+            <div class="followup-card urgent"><div class="followup-icon">48h</div><div><strong>Juliana & bebê</strong><span>Reavaliar pega e dor</span><small>retorno programado para hoje</small></div><button class="ui-button ui-button-ghost">Abrir</button></div>
+            <div class="followup-card"><div class="followup-icon">7d</div><div><strong>Ana & bebê</strong><span>Revisar evolução de peso</span><small>registro disponível</small></div><button class="ui-button ui-button-ghost">Abrir</button></div>
+            <article class="soft-card"><div><span class="section-kicker">ATALHOS</span><h3>Ações rápidas</h3></div><div class="quick-actions-grid"><button><b>＋</b>Novo atendimento</button><button><b>♡</b>Nova paciente</button><button><b>↻</b>Follow-up</button><button><b>$</b>Pagamento</button></div></article>
+          </aside>
+        </section>
+      </section>
+
+      <section class="lactation-screen preview-screen" data-preview-screen="agenda" hidden>
+        <div class="page-heading"><div><span class="section-kicker">ROTINA</span><h1>Agenda</h1><p>Atendimentos presenciais, domiciliares e online.</p></div><button class="ui-button ui-button-primary">+ Agendar</button></div>
+        <div class="date-strip"><button>‹</button><button><small>SEG</small><strong>07</strong></button><button class="selected"><small>TER</small><strong>08</strong></button><button><small>QUA</small><strong>09</strong></button><button><small>QUI</small><strong>10</strong></button><button><small>SEX</small><strong>11</strong></button><button>›</button></div>
+        <div class="agenda-list agenda-full">
+          <div class="agenda-card current"><time>08:30</time><div class="agenda-main"><strong>Ana & bebê</strong><span>Retorno · online</span></div><span class="pill confirmed">Confirmado</span><div class="agenda-actions"><button>Abrir ficha</button><button>WhatsApp</button></div><button class="round-action">›</button></div>
+          <div class="agenda-card"><time>10:00</time><div class="agenda-main"><strong>Marina & bebê</strong><span>Primeira consulta · clínica</span></div><span class="pill waiting">Aguardando</span><div class="agenda-actions"><button>Abrir ficha</button><button>Detalhes</button></div><button class="round-action">›</button></div>
+          <div class="agenda-card"><time>14:30</time><div class="agenda-main"><strong>Juliana & bebê</strong><span>Consulta individual · domiciliar</span></div><span class="pill confirmed">Confirmado</span><div class="agenda-actions"><button>Abrir ficha</button><button>Rota</button></div><button class="round-action">›</button></div>
+          <div class="agenda-card"><time>17:00</time><div class="agenda-main"><strong>Camila & bebê</strong><span>Retorno · clínica</span></div><span class="pill waiting">Aguardando</span><div class="agenda-actions"><button>Abrir ficha</button><button>WhatsApp</button></div><button class="round-action">›</button></div>
+        </div>
+      </section>
+
+      <section class="lactation-screen preview-screen" data-preview-screen="patients" hidden>
+        <div class="page-heading"><div><span class="section-kicker">MÃE + BEBÊ(S)</span><h1>Pacientes</h1><p>Acompanhamento organizado por mãe e seus bebês.</p></div><button class="ui-button ui-button-primary">+ Nova paciente</button></div>
+        <label class="search-field"><span>⌕</span><input type="search" placeholder="Buscar mãe ou bebê" readonly></label>
+        <div class="patient-grid">
+          <div class="patient-card"><div class="patient-avatar">AF</div><div class="preview-main-copy"><strong>Ana Ferreira</strong><span>Bebê · 2 meses</span><small>Último atendimento: hoje</small></div><span class="pill completed">Em acompanhamento</span></div>
+          <div class="patient-card"><div class="patient-avatar">JS</div><div class="preview-main-copy"><strong>Juliana Souza</strong><span>Bebê · 18 dias</span><small>Próximo retorno: hoje 14:30</small></div><span class="pill confirmed">Retorno hoje</span></div>
+          <div class="patient-card"><div class="patient-avatar">CM</div><div class="preview-main-copy"><strong>Camila Martins</strong><span>Bebê · 1 mês</span><small>Último atendimento: 05 set</small></div><span class="pill completed">Em acompanhamento</span></div>
+          <div class="patient-card"><div class="patient-avatar">MB</div><div class="preview-main-copy"><strong>Marina Barros</strong><span>Bebê · 7 dias</span><small>Primeira consulta agendada</small></div><span class="pill waiting">Novo</span></div>
+        </div>
+      </section>
+
+      <section class="lactation-screen appointment-screen preview-screen" data-preview-screen="appointment" hidden>
+        <div class="wizard-header"><button class="back-link">‹ Agenda</button><div><span class="section-kicker">ATENDIMENTO</span><h1>Registrar consulta</h1><p>Prontuário estruturado no mesmo contexto da paciente.</p></div><span></span></div>
+        <div class="wizard-progress"><span class="active"></span><span class="active"></span><span class="active"></span><span></span><span></span><span></span><span></span></div>
+        <article class="wizard-card">
+          <div><span class="section-kicker">03 · AVALIAÇÃO</span><h2>Como está a mamada hoje?</h2></div>
+          <p>Registre os pontos clínicos importantes sem sair do fluxo do atendimento.</p>
+          <div class="choice-grid three"><button class="choice selected">Pega eficaz</button><button class="choice">Dor leve</button><button class="choice">Fissura</button></div>
+          <div class="form-grid"><label class="field"><span>Peso atual</span><input value="4,18 kg" readonly></label><label class="field"><span>Frequência</span><input value="Livre demanda" readonly></label></div>
+          <label class="field"><span>Evolução clínica</span><textarea readonly>Melhora da pega e redução da dor. Orientada manutenção da posição e reavaliação em 48 horas.</textarea></label>
+          <button class="media-drop" type="button">＋ Adicionar foto ou vídeo clínico no Pro</button>
+          <div class="final-actions"><button class="ui-button ui-button-ghost">Voltar</button><button class="ui-button ui-button-primary">Salvar e continuar</button></div>
+        </article>
+      </section>
+
+      <section class="lactation-screen preview-screen" data-preview-screen="patient" hidden>
+        <div class="patient-header">
+          <button class="back-link">‹ Pacientes</button>
+          <div class="patient-title-row"><div class="patient-avatar big">JS</div><div class="preview-main-copy"><span class="section-kicker">MÃE + BEBÊ</span><h1>Juliana Souza</h1><p>Mãe + bebê · em acompanhamento</p></div><div class="patient-header-actions"><button class="ui-button ui-button-ghost">Editar</button><button class="ui-button ui-button-primary">Novo atendimento</button></div></div>
+          <div class="patient-quick"><button>WhatsApp</button><button>Ligar</button><button>Rota</button><button>Registrar peso</button><button>Adicionar foto</button></div>
+        </div>
+        <div class="baby-selector-wrap"><span class="section-kicker">BEBÊ EM VISUALIZAÇÃO</span><div class="baby-selector"><button class="baby-tab active">Bebê · 18 dias</button></div></div>
+        <div class="patient-detail-grid">
+          <div class="lactation-stack">
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">CADASTRO</span><h2>Dados da mãe</h2></div><button class="text-button">Editar</button></div><dl class="detail-list"><div><dt>Telefone</dt><dd>(16) 99999-0000</dd></div><div><dt>Parto</dt><dd>Cesárea · 20/08/2026</dd></div><div><dt>Condições relevantes</dt><dd>Sem alertas registrados</dd></div><div><dt>Histórico</dt><dd>Primeiro filho · acompanhamento desde a alta</dd></div></dl></article>
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">EVOLUÇÃO</span><h2>Peso do bebê</h2></div><span class="pill completed">+220 g</span></div><div class="weight-chart"><div class="chart-line"><span style="left:8%;bottom:21%"></span><span style="left:34%;bottom:38%"></span><span style="left:61%;bottom:55%"></span><span style="left:88%;bottom:72%"></span></div><div class="chart-axis"><span>23 ago</span><span>29 ago</span><span>03 set</span><span>07 set</span></div></div></article>
+          </div>
+          <aside class="lactation-stack">
+            <article class="detail-card"><div class="section-heading"><div><span class="section-kicker">HISTÓRICO</span><h2>Últimos registros</h2></div></div><div class="timeline"><div class="timeline-item active"><span></span><div><small>HOJE · 14:30</small><strong>Retorno programado</strong><p>Reavaliar pega, dor e evolução do peso.</p></div></div><div class="timeline-item"><span></span><div><small>03 SET</small><strong>Evolução registrada</strong><p>Pega melhor, mamadas mais eficientes.</p></div></div><div class="timeline-item"><span></span><div><small>29 AGO</small><strong>Primeira consulta</strong><p>Plano inicial e orientações entregues.</p></div></div></div></article>
+            <article class="soft-card"><span class="section-kicker">DOCUMENTOS</span><h3>Plano e materiais</h3><div style="display:grid;gap:8px"><button class="ui-button ui-button-ghost">Plano de cuidado.pdf</button><button class="ui-button ui-button-ghost">Orientações pós-consulta</button></div></article>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<nav class="lactation-bottom-nav mobile-only" aria-label="Navegação inferior da demonstração">
+  <button data-demo-nav="home"><span>⌂</span><b>Início</b></button>
+  <button data-demo-nav="agenda"><span>▦</span><b>Agenda</b></button>
+  <button data-demo-nav="patients"><span>♡</span><b>Pacientes</b></button>
+  <button data-demo-nav="followups"><span>↻</span><b>Retornos</b></button>
+  <button data-demo-nav="library"><span>▤</span><b>Materiais</b></button>
+</nav>
+<div class="preview-demo-note">dados demonstrativos</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const requested = params.get('screen') || 'home';
+  const allowed = new Set(['home', 'agenda', 'patients', 'appointment', 'patient']);
+  const screen = allowed.has(requested) ? requested : 'home';
+  const pageTitle = {
+    home: 'Início',
+    agenda: 'Agenda',
+    patients: 'Pacientes',
+    appointment: 'Atendimento',
+    patient: 'Paciente',
+  }[screen];
+  const navTarget = screen === 'patient' || screen === 'appointment' ? 'patients' : screen;
+
+  document.querySelectorAll('[data-preview-screen]').forEach((section) => {
+    section.hidden = section.dataset.previewScreen !== screen;
+  });
+  document.querySelectorAll('[data-demo-page-title]').forEach((node) => { node.textContent = pageTitle; });
+  document.querySelectorAll('[data-demo-nav]').forEach((node) => {
+    const active = node.dataset.demoNav === navTarget;
+    node.toggleAttribute('aria-current', active);
+    node.classList.toggle('active', active);
+  });
+
+  const primary = document.querySelector('[data-demo-primary]');
+  if (primary) {
+    primary.textContent = screen === 'agenda' ? '+ Agendar' : screen === 'patients' ? '+ Nova paciente' : '+ Novo atendimento';
+  }
+</script>
+</body>
+</html>
