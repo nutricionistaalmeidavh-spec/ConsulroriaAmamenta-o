@@ -83,6 +83,11 @@ async function init() {
       return;
     }
 
+    const metadataPlan = user?.user_metadata?.plan_intent;
+    if (['pro_monthly', 'pro_annual'].includes(metadataPlan)) {
+      sessionStorage.setItem(PLAN_KEY, metadataPlan);
+    }
+
     accountEl.textContent = user.email || user.id;
     readyEl.hidden = false;
     setStatus('Sandbox pronto. Escolha um plano para gerar a cobrança de teste.', 'success');
