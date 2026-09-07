@@ -192,6 +192,7 @@
           <label>E-mail<input type="email" name="email" autocomplete="email" required></label>
           <label>Senha<input type="password" name="password" autocomplete="current-password" required></label>
           <button class="button full" type="submit">Entrar</button>
+          <p class="form-switch"><button type="button" class="text-action" data-recover-password>Esqueci minha senha</button></p>
           <p class="form-switch">Ainda não tem conta? <button type="button" class="text-action" data-switch="signup">Criar conta</button></p>
         </form>
       </div>
@@ -229,7 +230,8 @@
       sessionStorage.setItem('commercial.saas.plan-intent.v1', 'freemium');
     }
   </script>
-  <script src="./config.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script src="./config.js?v=20260907-auth3"></script>
+  <script type="module" src="./app.js?v=20260907-auth3"></script>
+  <script type="module" src="./auth-recovery.js?v=20260907-auth3"></script>
 </body>
 </html>
