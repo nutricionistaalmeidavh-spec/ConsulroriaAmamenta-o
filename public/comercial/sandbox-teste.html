@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Teste Sandbox Asaas</title>
+  <link rel="stylesheet" href="./plan.css" />
+</head>
+<body>
+  <main class="plan-shell">
+    <section class="plan-card" style="max-width:760px;margin:40px auto;">
+      <p class="eyebrow">Ambiente de homologação</p>
+      <h1>Teste Sandbox Asaas</h1>
+      <p>Esta página usa somente o endpoint Sandbox. Nenhuma cobrança real é criada.</p>
+
+      <div id="sandbox-status" class="plan-message">Verificando sua sessão comercial…</div>
+
+      <div id="sandbox-auth" hidden>
+        <p>Entre ou crie uma conta comercial primeiro e volte para esta página na mesma aba.</p>
+        <a class="primary-action" href="./index.html">Abrir acesso comercial</a>
+      </div>
+
+      <div id="sandbox-ready" hidden>
+        <p><strong>Conta:</strong> <span id="sandbox-account">—</span></p>
+        <p><strong>Ambiente:</strong> Sandbox</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;">
+          <button class="primary-action" type="button" data-sandbox-checkout="pro_monthly">Testar Pro mensal — R$ 49,90</button>
+          <button class="secondary-action" type="button" data-sandbox-checkout="pro_annual">Testar Pro anual — R$ 499</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./config.js"></script>
+  <script src="./sandbox-teste.js"></script>
+</body>
+</html>
