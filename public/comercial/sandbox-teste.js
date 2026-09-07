@@ -2,6 +2,7 @@ const runtime = window.SAAS_RUNTIME_CONFIG || {};
 const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
 const publishableKey = String(runtime.supabasePublishableKey || '');
 const SESSION_KEY = 'commercial.saas.session.v1';
+const PLAN_KEY = 'commercial.saas.plan-intent.v1';
 
 const statusEl = document.querySelector('#sandbox-status');
 const authEl = document.querySelector('#sandbox-auth');
@@ -97,6 +98,13 @@ async function init() {
         }
       });
     });
+
+    const shouldAutoStart = new URL(window.location.href).searchParams.get('auto') === '1';
+    if (shouldAutoStart) {
+      const storedPlan = sessionStorage.getItem(PLAN_KEY);
+      const planCode = ['pro_monthly', 'pro_annual'].includes(storedPlan) ? storedPlan : 'pro_monthly';
+      await createSandboxCheckout(planCode, token);
+    }
   } catch (error) {
     sessionStorage.removeItem(SESSION_KEY);
     authEl.hidden = false;
