@@ -8,6 +8,7 @@ const motionPath = path.join(root, 'public/comercial/landing.js');
 const phase2CssPath = path.join(root, 'public/comercial/phase2.css');
 const productPreviewPath = path.join(root, 'public/comercial/product-preview.html');
 const officialLogoPath = path.join(root, 'public/icon.svg');
+const logoMotionCssPath = path.join(root, 'public/comercial/logo-motion.css');
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -60,8 +61,9 @@ if (!html.includes('src="./landing.js')) fail('isolated landing motion script is
 if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');
 if (!css.includes('@media (prefers-reduced-motion: reduce)')) fail('reduced-motion fallback is missing');
 
-// Official logo contract. The vector was previously shipped in public/icon.svg and
-// the commercial mark must animate its real mother -> baby -> heart layers with scroll.
+// Official logo contract. The static SVG must work before JS, while landing.js
+// enhances the same mark into the mother -> baby -> heart scroll-reactive version.
+if (!html.includes('src="../icon.svg"')) fail('commercial header must retain the static official logo fallback');
 if (!fs.existsSync(officialLogoPath)) {
   fail('official vector logo public/icon.svg is missing');
 } else {
@@ -69,12 +71,16 @@ if (!fs.existsSync(officialLogoPath)) {
   if (!officialLogo.includes('viewBox="0 0 290 290"')) fail('official logo geometry changed');
   if (!officialLogo.includes('linearGradient id="bg"')) fail('official logo gradient is missing');
 }
-for (const token of ['data-logo-motion', 'data-logo-part="mother"', 'data-logo-part="baby"', 'data-logo-part="heart"']) {
-  if (!html.includes(token)) fail(`scroll-reactive logo markup missing ${token}`);
+if (!fs.existsSync(logoMotionCssPath)) {
+  fail('scroll-reactive logo stylesheet is missing');
+} else {
+  const logoMotionCss = fs.readFileSync(logoMotionCssPath, 'utf8');
+  if (!logoMotionCss.includes('.brand-mark[data-logo-motion]')) fail('scroll-reactive logo styles are missing');
+  if (!logoMotionCss.includes('@media (prefers-reduced-motion: reduce)')) fail('logo motion reduced-motion fallback is missing');
 }
-if (!motion.includes('updateLogoMotion')) fail('scroll-reactive logo controller is missing');
-if (!motion.includes('logoMotionProgress')) fail('logo scroll progress state is missing');
-if (!css.includes('.brand-mark[data-logo-motion]')) fail('scroll-reactive logo styles are missing');
+for (const token of ['data-logo-motion', 'data-logo-part="mother"', 'data-logo-part="baby"', 'data-logo-part="heart"', 'updateLogoMotion', 'logoMotionProgress', 'logo-motion.css']) {
+  if (!motion.includes(token)) fail(`scroll-reactive logo controller missing ${token}`);
+}
 
 // Phase 2 visual contract: visual refinement must stay isolated from auth/checkout.
 if (!fs.existsSync(phase2CssPath)) fail('Phase 2 visual stylesheet is missing');
