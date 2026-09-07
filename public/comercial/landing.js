@@ -83,7 +83,7 @@ function setStoryStage(index, scrollToStage = false) {
   if (!storyStage || !storySteps.length) return;
   const safeIndex = Math.max(0, Math.min(storySteps.length - 1, index));
   activeStage = safeIndex;
-  storyStage.dataset.stage = String(safeIndex + 1);
+  storyStage.setAttribute('data-stage', String(safeIndex + 1));
 
   storySteps.forEach((step, stepIndex) => {
     const active = stepIndex === safeIndex;
