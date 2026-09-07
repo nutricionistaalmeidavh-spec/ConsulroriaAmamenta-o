@@ -6,6 +6,7 @@ const htmlPath = path.join(root, 'public/comercial/index.html');
 const cssPath = path.join(root, 'public/comercial/styles.css');
 const motionPath = path.join(root, 'public/comercial/landing.js');
 const phase2CssPath = path.join(root, 'public/comercial/phase2.css');
+const realPreviewCssPath = path.join(root, 'public/comercial/real-preview.css');
 const productPreviewPath = path.join(root, 'public/comercial/product-preview.html');
 const officialLogoPath = path.join(root, 'public/icon.svg');
 const logoMotionCssPath = path.join(root, 'public/comercial/logo-motion.css');
@@ -61,9 +62,8 @@ if (!html.includes('src="./landing.js')) fail('isolated landing motion script is
 if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');
 if (!css.includes('@media (prefers-reduced-motion: reduce)')) fail('reduced-motion fallback is missing');
 
-// Official logo contract. The static SVG must work before JS, while landing.js
-// enhances the same mark into the mother -> baby -> heart scroll-reactive version.
-if (!html.includes('src="../icon.svg"')) fail('commercial header must retain the static official logo fallback');
+// Official logo contract. Header animates with page scroll; footer must render a full real logo.
+if ((html.match(/src="\.\.\/icon\.svg"/g) || []).length < 2) fail('header and footer must retain static official logo fallbacks');
 if (!fs.existsSync(officialLogoPath)) {
   fail('official vector logo public/icon.svg is missing');
 } else {
@@ -76,9 +76,10 @@ if (!fs.existsSync(logoMotionCssPath)) {
 } else {
   const logoMotionCss = fs.readFileSync(logoMotionCssPath, 'utf8');
   if (!logoMotionCss.includes('.brand-mark[data-logo-motion]')) fail('scroll-reactive logo styles are missing');
+  if (!logoMotionCss.includes('.footer-brand .brand-logo-motion')) fail('footer official logo rendering is missing');
   if (!logoMotionCss.includes('@media (prefers-reduced-motion: reduce)')) fail('logo motion reduced-motion fallback is missing');
 }
-for (const token of ['data-logo-motion', 'data-logo-part="mother"', 'data-logo-part="baby"', 'data-logo-part="heart"', 'updateLogoMotion', 'logoMotionProgress', 'logo-motion.css']) {
+for (const token of ['mountLogoMotion', 'data-logo-part="mother"', 'data-logo-part="baby"', 'data-logo-part="heart"', 'updateLogoMotion', 'logoMotionProgress', 'logo-motion.css', 'document.documentElement.scrollHeight']) {
   if (!motion.includes(token)) fail(`scroll-reactive logo controller missing ${token}`);
 }
 
@@ -102,17 +103,22 @@ if (fs.existsSync(phase2CssPath)) {
   ]) {
     if (!phase2Css.includes(token)) fail(`Phase 2 stylesheet missing ${token}`);
   }
+  if (!phase2Css.includes('.comparison-mobile')) fail('mobile plan comparison replacement is missing');
+  if (!phase2Css.includes('@media (max-width: 760px)')) fail('mobile layout contract is missing');
 }
 
-// Product preview contract: marketing must show the real clinical UI structure/styles,
-// with demo-safe data, instead of a hand-drawn CSS mockup.
+// Product preview contract: real clinical screens, distinct cards, safe crops and no fake placeholders.
 if (!fs.existsSync(productPreviewPath)) {
   fail('real clinical product preview is missing');
 } else {
   const productPreview = fs.readFileSync(productPreviewPath, 'utf8');
   if (!productPreview.includes('../clinical-source/styles.css')) fail('product preview must reuse clinical-source styles');
-  for (const token of ['lactation-shell', 'lactation-kpis', 'agenda-card', 'patient-grid', 'patient-detail-grid']) {
+  if (!productPreview.includes('../album-feature.css')) fail('media preview must reuse the real album feature styles');
+  for (const token of ['lactation-shell', 'lactation-kpis', 'agenda-card', 'patient-grid', 'patient-detail-grid', 'library-grid', 'af-grid']) {
     if (!productPreview.includes(token)) fail(`product preview must reuse real clinical UI class ${token}`);
+  }
+  for (const screen of ['home', 'agenda', 'patients', 'appointment', 'patient', 'library', 'media']) {
+    if (!productPreview.includes(`data-preview-screen="${screen}"`)) fail(`missing distinct real product preview screen ${screen}`);
   }
   if (!productPreview.includes('dados demonstrativos')) fail('product preview must identify demo-safe data');
 }
@@ -120,4 +126,26 @@ if (!motion.includes('product-preview.html')) fail('landing.js must embed the re
 if (!motion.includes('previewScreenByStage')) fail('product story must map stages to real product screens');
 if (!motion.includes('setPreviewScreen')) fail('product story must update the real product preview screen');
 
-if (!process.exitCode) console.log('PASS: commercial landing Phase 2 visual contract');
+// Hero must alternate multiple real screens and allow manual/swipe navigation.
+for (const token of ['heroPreviewScreens', 'hero-preview-controls', 'setHeroPreview', 'startHeroPreviewRotation', 'pointerdown', 'pointerup']) {
+  if (!motion.includes(token)) fail(`hero real-screen carousel missing ${token}`);
+}
+
+// Every feature card needs a distinct real preview; fixed pixel iframe widths caused the mobile crops in production.
+if (!motion.includes("screen: 'agenda'")) fail('agenda feature preview missing');
+if (!motion.includes("screen: 'patients'")) fail('patients feature preview missing');
+if (!motion.includes("screen: 'appointment'")) fail('appointment feature preview missing');
+if (!motion.includes("screen: 'patient'")) fail('patient feature preview missing');
+if (!motion.includes("screen: 'library'")) fail('library feature preview missing');
+if (!motion.includes("screen: 'media'")) fail('media feature preview missing');
+if (!fs.existsSync(realPreviewCssPath)) {
+  fail('real preview stylesheet is missing');
+} else {
+  const realPreviewCss = fs.readFileSync(realPreviewCssPath, 'utf8');
+  if (realPreviewCss.includes('width: 390px')) fail('mobile preview must not use fixed 390px iframe width');
+  if (realPreviewCss.includes('width: 760px')) fail('feature preview must not use fixed 760px iframe width');
+  if (!realPreviewCss.includes('calc(100% / var(--preview-scale))')) fail('feature preview must size from its crop container');
+  if (!realPreviewCss.includes('.feature-card:nth-child(6).has-real-preview')) fail('Pro media card crop styling is missing');
+}
+
+if (!process.exitCode) console.log('PASS: commercial landing mobile visual contract');
