@@ -122,7 +122,8 @@ if (!motion.includes('injectCompactCrop')) fail('feature crop controller is miss
 if (!fs.existsSync(realPreviewCssPath)) fail('real preview stylesheet is missing');
 else {
   const realPreviewCss = fs.readFileSync(realPreviewCssPath, 'utf8');
-  if (realPreviewCss.includes('width: 390px') || realPreviewCss.includes('width: 760px')) fail('feature previews must not use fixed iframe widths');
+  // Only flag actual width declarations, not responsive `max-width: 760px` breakpoints.
+  if (/^\s*width:\s*(?:390|760)px\s*;/m.test(realPreviewCss)) fail('feature previews must not use fixed iframe widths');
   if (!realPreviewCss.includes('calc(100% / var(--preview-scale))')) fail('feature preview must size from its crop container');
   if (!realPreviewCss.includes('.feature-card:nth-child(6).has-real-preview')) fail('Pro media card crop styling is missing');
 }
