@@ -6,6 +6,7 @@ const htmlPath = path.join(root, 'public/comercial/index.html');
 const cssPath = path.join(root, 'public/comercial/styles.css');
 const motionPath = path.join(root, 'public/comercial/landing.js');
 const phase2CssPath = path.join(root, 'public/comercial/phase2.css');
+const productPreviewPath = path.join(root, 'public/comercial/product-preview.html');
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -79,5 +80,21 @@ if (fs.existsSync(phase2CssPath)) {
     if (!phase2Css.includes(token)) fail(`Phase 2 stylesheet missing ${token}`);
   }
 }
+
+// Product preview contract: marketing must show the real clinical UI structure/styles,
+// with demo-safe data, instead of a hand-drawn CSS mockup.
+if (!fs.existsSync(productPreviewPath)) {
+  fail('real clinical product preview is missing');
+} else {
+  const productPreview = fs.readFileSync(productPreviewPath, 'utf8');
+  if (!productPreview.includes('../clinical-source/styles.css')) fail('product preview must reuse clinical-source styles');
+  for (const token of ['lactation-shell', 'lactation-kpis', 'agenda-card', 'patient-grid', 'patient-detail-grid']) {
+    if (!productPreview.includes(token)) fail(`product preview must reuse real clinical UI class ${token}`);
+  }
+  if (!productPreview.includes('dados demonstrativos')) fail('product preview must identify demo-safe data');
+}
+if (!motion.includes('product-preview.html')) fail('landing.js must embed the real product preview');
+if (!motion.includes('previewScreenByStage')) fail('product story must map stages to real product screens');
+if (!motion.includes('setPreviewScreen')) fail('product story must update the real product preview screen');
 
 if (!process.exitCode) console.log('PASS: commercial landing Phase 2 visual contract');
