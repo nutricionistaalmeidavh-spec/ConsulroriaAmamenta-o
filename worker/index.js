@@ -78,6 +78,14 @@ function asaasConfig(env, environment = 'production') {
   };
 }
 
+function credentialEnvironment(secret) {
+  const value = String(secret || '').trim();
+  if (!value) return 'missing';
+  if (value.startsWith('$aact_hmlg_')) return 'sandbox';
+  if (value.startsWith('$aact_prod_')) return 'production';
+  return 'unknown';
+}
+
 function tomorrowAsaasDateTime() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
@@ -277,13 +285,27 @@ async function handleWebhook(request, env, environment = 'production') {
   return json(200, bridgePayload || { status: 'processed', paymentId, environment });
 }
 
-function health(env, environment = 'production') {
+async function health(env, environment = 'production') {
   const config = asaasConfig(env, environment);
+  const credentialEnvironmentValue = credentialEnvironment(config.secret);
+  let asaasAuthStatus = null;
+  let asaasApiValid = false;
+
+  if (config.secret) {
+    const { response } = await asaasFetch(env, '/wallets/', { method: 'GET' }, environment);
+    asaasAuthStatus = response?.status ?? null;
+    asaasApiValid = Boolean(response?.ok);
+  }
+
   return json(200, {
     ok: true,
     service: 'commercial-asaas-api',
     environment,
     asaasApiConfigured: Boolean(config.secret),
+    asaasApiValid,
+    asaasAuthStatus,
+    credentialEnvironment: credentialEnvironmentValue,
+    credentialMatchesEnvironment: credentialEnvironmentValue === environment,
     webhookVerification: 'asaas_api_lookup_and_checkout_reconciliation',
     billingBridge: 'supabase_edge_function',
     cloudflareSecretsRequired: [environment === 'sandbox' ? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET'],
