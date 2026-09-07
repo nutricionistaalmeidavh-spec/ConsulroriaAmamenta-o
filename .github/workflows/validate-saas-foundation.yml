@@ -10,6 +10,7 @@ on:
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-commercial-landing.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
@@ -35,6 +36,7 @@ on:
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
+      - 'scripts/test-commercial-landing.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
@@ -74,6 +76,8 @@ jobs:
         run: node scripts/test-saas-foundation.mjs
       - name: Validate commercial funnel and onboarding
         run: node scripts/test-commercial-funnel.mjs
+      - name: Validate commercial landing Phase 2
+        run: node scripts/test-commercial-landing.mjs
       - name: Validate commercial checkout continuation
         run: node scripts/test-commercial-checkout-return.mjs
       - name: Validate Pro checkout before e-mail confirmation
