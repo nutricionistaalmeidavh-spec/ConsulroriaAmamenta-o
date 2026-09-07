@@ -1,5 +1,5 @@
 /* Real product preview layer for the commercial landing.
-   The iframe document reuses ../clinical-source/styles.css and contains demo-safe data only. */
+   All previews reuse the real clinical UI styles and demo-safe data. */
 
 .phase2-visual .real-product-frame {
   position: relative;
@@ -9,7 +9,6 @@
   background: #fbfaf7;
   box-shadow: 0 38px 110px rgba(48,40,43,.16), 0 2px 0 rgba(255,255,255,.88) inset;
 }
-
 .phase2-visual .real-product-frame::after {
   content: "";
   position: absolute;
@@ -18,10 +17,9 @@
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.46);
 }
-
 .phase2-visual .real-window-bar {
   position: relative;
-  z-index: 3;
+  z-index: 4;
   display: grid;
   grid-template-columns: 90px 1fr 90px;
   align-items: center;
@@ -30,7 +28,6 @@
   border-bottom: 1px solid #ece8e8;
   background: rgba(251,250,249,.96);
 }
-
 .phase2-visual .real-window-dots { display: flex; gap: 6px; }
 .phase2-visual .real-window-dots i { width: 8px; height: 8px; border-radius: 50%; background: #d8d2d4; }
 .phase2-visual .real-window-address {
@@ -47,7 +44,6 @@
   letter-spacing: .02em;
 }
 .phase2-visual .real-window-status { justify-self: end; color: #3f6b58; font-size: 9px; font-weight: 850; }
-
 .phase2-visual .product-preview-frame {
   display: block;
   width: 100%;
@@ -57,93 +53,106 @@
   pointer-events: none;
 }
 
+/* Hero: one real product surface, but with several distinct live screens. */
 .phase2-visual .hero-visual { margin-top: 66px; }
-.phase2-visual .hero-real-preview { height: clamp(540px, 58vw, 700px); }
-.phase2-visual .hero-real-preview .product-preview-frame { height: calc(100% - 48px); }
-.phase2-visual .hero-real-preview::before {
-  content: "produto real · dados demonstrativos";
+.phase2-visual .hero-real-preview { height: clamp(560px, 59vw, 710px); }
+.phase2-visual .hero-real-preview .hero-preview-viewport { position: absolute; inset: 48px 0 0; overflow: hidden; background: #fbfaf7; }
+.phase2-visual .hero-real-preview .product-preview-frame {
   position: absolute;
-  z-index: 6;
-  right: 18px;
+  inset: 0;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity .24s ease, transform .32s cubic-bezier(.2,.75,.2,1);
+}
+.phase2-visual .hero-real-preview.is-changing .product-preview-frame { opacity: .28; transform: scale(.994); }
+.phase2-visual .hero-preview-meta {
+  position: absolute;
+  z-index: 7;
+  left: 18px;
   bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 7px 10px;
   border: 1px solid rgba(107,63,80,.10);
   border-radius: 999px;
   color: var(--brand);
-  background: rgba(255,255,255,.9);
+  background: rgba(255,255,255,.92);
   font-size: 9px;
   font-weight: 850;
-  letter-spacing: .06em;
+  letter-spacing: .05em;
   text-transform: uppercase;
   backdrop-filter: blur(12px);
 }
-
+.phase2-visual .hero-preview-meta::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+.phase2-visual .hero-preview-controls {
+  position: absolute;
+  z-index: 8;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid rgba(107,63,80,.10);
+  border-radius: 999px;
+  background: rgba(255,255,255,.93);
+  backdrop-filter: blur(12px);
+}
+.phase2-visual .hero-preview-controls button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #d8ced2;
+  transition: width .18s ease, background .18s ease;
+}
+.phase2-visual .hero-preview-controls button.is-active { width: 22px; background: var(--brand); }
 .phase2-visual .hero-visual .floating-note,
 .phase2-visual .hero-visual .browser-shell,
 .phase2-visual .hero-visual .hero-glow { display: none !important; }
 
-.phase2-visual .story-stage {
-  min-height: 620px;
-  background: #fbfaf7;
-}
+/* Story preview uses full real screens and swaps them without internal scrolling. */
+.phase2-visual .story-stage { min-height: 620px; background: #fbfaf7; }
+.phase2-visual .real-story-window { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: #fbfaf7; }
+.phase2-visual .real-story-window .product-preview-frame { position: absolute; inset: 0; transition: opacity .22s ease, transform .34s cubic-bezier(.2,.75,.2,1); }
+.phase2-visual .story-stage.is-changing .product-preview-frame { opacity: .35; transform: scale(.992); }
+.phase2-visual .stage-caption { top: 18px; left: 18px; box-shadow: 0 9px 25px rgba(47,56,51,.07); }
 
-.phase2-visual .real-story-window {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: inherit;
-  background: #fbfaf7;
-}
-
-.phase2-visual .real-story-window .product-preview-frame {
-  position: absolute;
-  inset: 0;
-  transition: opacity .22s ease, transform .34s cubic-bezier(.2,.75,.2,1);
-}
-
-.phase2-visual .story-stage.is-changing .product-preview-frame {
-  opacity: .35;
-  transform: scale(.992);
-}
-
-.phase2-visual .stage-caption {
-  top: 18px;
-  left: 18px;
-  box-shadow: 0 9px 25px rgba(47,56,51,.07);
-}
-
-.phase2-visual .feature-card.has-real-preview {
-  min-height: 390px;
-  padding-bottom: 205px;
-}
-
+/* Bento previews: size from the actual crop container instead of fixed iframe widths. */
+.phase2-visual .feature-card.has-real-preview { min-height: 410px; padding-bottom: 225px; }
 .phase2-visual .feature-real-preview {
+  --preview-scale: .62;
   position: absolute;
   left: 26px;
   right: 26px;
   bottom: 24px;
-  height: 172px;
+  height: 190px;
   overflow: hidden;
   border: 1px solid rgba(107,63,80,.10);
   border-radius: 18px;
   background: #fbfaf7;
   box-shadow: 0 12px 32px rgba(47,56,51,.07);
 }
-
 .phase2-visual .feature-real-preview .product-preview-frame {
-  width: 760px;
-  height: 480px;
-  transform: scale(.47);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(100% / var(--preview-scale));
+  height: calc(100% / var(--preview-scale));
+  transform: scale(var(--preview-scale));
   transform-origin: left top;
 }
-
-.phase2-visual .feature-card:nth-child(4).has-real-preview .feature-real-preview .product-preview-frame {
-  transform: scale(.50);
-}
-
+.phase2-visual .feature-real-preview[data-preview-screen="agenda"] { --preview-scale: .68; }
+.phase2-visual .feature-real-preview[data-preview-screen="patients"] { --preview-scale: .66; }
+.phase2-visual .feature-real-preview[data-preview-screen="appointment"] { --preview-scale: .64; }
+.phase2-visual .feature-real-preview[data-preview-screen="patient"] { --preview-scale: .64; }
+.phase2-visual .feature-real-preview[data-preview-screen="library"] { --preview-scale: .67; }
+.phase2-visual .feature-real-preview[data-preview-screen="media"] { --preview-scale: .67; }
 .phase2-visual .feature-preview-label {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   right: 8px;
   bottom: 8px;
   padding: 5px 7px;
@@ -156,26 +165,48 @@
   letter-spacing: .05em;
   text-transform: uppercase;
 }
+.phase2-visual .feature-card.feature-dark.has-real-preview { padding-bottom: 225px; }
+.phase2-visual .feature-card.feature-dark .feature-real-preview { border-color: rgba(255,255,255,.18); box-shadow: 0 16px 38px rgba(34,23,28,.22); }
+.phase2-visual .feature-card.feature-dark .feature-preview-label { color: #fff; border-color: rgba(255,255,255,.18); background: rgba(86,50,65,.88); }
+.phase2-visual .feature-card:nth-child(6).has-real-preview .feature-real-preview { height: 192px; }
 
 @media (max-width: 1020px) {
-  .phase2-visual .hero-real-preview { height: 610px; }
+  .phase2-visual .hero-real-preview { height: 620px; }
   .phase2-visual .story-stage { min-height: 590px; }
 }
 
 @media (max-width: 760px) {
   .phase2-visual .hero-visual { margin-top: 42px; }
-  .phase2-visual .hero-real-preview { height: 610px; border-radius: 22px; }
-  .phase2-visual .real-window-bar { grid-template-columns: 64px 1fr 64px; min-height: 42px; padding: 0 10px; }
+  .phase2-visual .hero-real-preview { height: 620px; border-radius: 22px; }
+  .phase2-visual .real-window-bar { grid-template-columns: 56px 1fr 56px; min-height: 42px; padding: 0 10px; }
   .phase2-visual .real-window-address { min-width: 0; width: 100%; padding-inline: 8px; font-size: 8px; }
   .phase2-visual .real-window-status { font-size: 8px; }
-  .phase2-visual .hero-real-preview .product-preview-frame { height: calc(100% - 42px); }
-  .phase2-visual .hero-real-preview::before { right: 10px; bottom: 10px; font-size: 8px; }
+  .phase2-visual .hero-real-preview .hero-preview-viewport { inset: 42px 0 0; }
+  .phase2-visual .hero-preview-meta { left: 10px; bottom: 10px; max-width: calc(100% - 110px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 8px; }
+  .phase2-visual .hero-preview-controls { right: 10px; bottom: 9px; }
   .phase2-visual .story-stage { min-height: 600px; border-radius: 22px; }
-  .phase2-visual .feature-card.has-real-preview { min-height: 370px; padding-bottom: 190px; }
-  .phase2-visual .feature-real-preview { left: 18px; right: 18px; bottom: 18px; height: 160px; }
-  .phase2-visual .feature-real-preview .product-preview-frame { width: 390px; height: 720px; transform: scale(.42); }
+
+  .phase2-visual .feature-card.has-real-preview { min-height: 455px; padding-bottom: 242px; }
+  .phase2-visual .feature-real-preview {
+    --preview-scale: .76;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    height: 215px;
+    border-radius: 16px;
+  }
+  .phase2-visual .feature-real-preview[data-preview-screen="agenda"] { --preview-scale: .78; }
+  .phase2-visual .feature-real-preview[data-preview-screen="patients"] { --preview-scale: .76; }
+  .phase2-visual .feature-real-preview[data-preview-screen="appointment"] { --preview-scale: .74; }
+  .phase2-visual .feature-real-preview[data-preview-screen="patient"] { --preview-scale: .74; }
+  .phase2-visual .feature-real-preview[data-preview-screen="library"] { --preview-scale: .76; }
+  .phase2-visual .feature-real-preview[data-preview-screen="media"] { --preview-scale: .76; }
+  .phase2-visual .feature-card.feature-dark.has-real-preview { min-height: 470px; padding-bottom: 250px; }
+  .phase2-visual .feature-card:nth-child(6).has-real-preview .feature-real-preview { height: 222px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .phase2-visual .real-story-window .product-preview-frame { transition: none !important; }
+  .phase2-visual .real-story-window .product-preview-frame,
+  .phase2-visual .hero-real-preview .product-preview-frame,
+  .phase2-visual .hero-preview-controls button { transition: none !important; }
 }
