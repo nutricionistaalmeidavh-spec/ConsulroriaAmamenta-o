@@ -1,3 +1,5 @@
+import { sendPaidConfirmation } from '../_shared/post-payment-email.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'content-type, x-asaas-api-key, x-billing-source',
@@ -181,7 +183,19 @@ Deno.serve(async (req: Request) => {
   if (!eventResponse.ok) return json(500, { error: 'webhook_event_store_failed' });
   const eventRows = await eventResponse.json().catch(() => []);
   if (!Array.isArray(eventRows) || eventRows.length === 0) {
-    return json(200, { status: 'duplicate_ignored', eventId, environment });
+    const existingResponse = await serviceFetch(supabaseUrl, serviceKey,
+      `/rest/v1/billing_webhook_events?provider=eq.${encodeURIComponent(provider)}&external_event_id=eq.${encodeURIComponent(eventId)}&select=status&limit=1`);
+    const existing = await existingResponse.json().catch(() => []);
+    if (!existingResponse.ok || !existing[0]) return json(503, { error: 'event_lookup_failed' });
+    if (existing[0].status === 'received') return json(503, { error: 'event_in_progress' });
+    if (existing[0].status === 'processed') {
+      if (environment === 'production' && transition === 'active') {
+        const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
+        if (!email.ok) return json(503, { error: email.status, eventId });
+      }
+      return json(200, { status: 'duplicate_ignored', eventId, environment });
+    }
+    // A failed application may be retried; never mark an email-delivery failure as a billing failure.
   }
 
   const rpcResponse = await serviceFetch(
@@ -209,8 +223,25 @@ Deno.serve(async (req: Request) => {
     },
   );
 
-  const processed = rpcResponse.ok;
-  const rpcError = processed ? null : (await rpcResponse.text()).slice(0, 1000);
+  let processed = rpcResponse.ok;
+  let rpcError = processed ? null : (await rpcResponse.text()).slice(0, 1000);
+
+  if (processed && (transition === 'active' || transition === 'cancelled')) {
+    const checkoutUpdate = await serviceFetch(
+      supabaseUrl,
+      serviceKey,
+      `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: transition === 'active' ? 'paid' : 'cancelled',
+          updated_at: new Date().toISOString(),
+        }),
+      },
+    );
+    if (!checkoutUpdate.ok) { processed = false; rpcError = 'checkout_status_update_failed'; }
+  }
+
 
   await serviceFetch(
     supabaseUrl,
@@ -228,19 +259,9 @@ Deno.serve(async (req: Request) => {
 
   if (!processed) return json(500, { error: 'billing_state_apply_failed', eventId });
 
-  if (transition === 'active' || transition === 'cancelled') {
-    await serviceFetch(
-      supabaseUrl,
-      serviceKey,
-      `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: transition === 'active' ? 'paid' : 'cancelled',
-          updated_at: new Date().toISOString(),
-        }),
-      },
-    );
+  if (environment === 'production' && transition === 'active') {
+    const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
+    if (!email.ok) return json(503, { error: email.status, eventId });
   }
 
   return json(200, {
