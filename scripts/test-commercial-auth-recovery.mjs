@@ -8,7 +8,7 @@ assert.match(html, /data-recover-password/);
 assert.match(html, /auth-recovery\.js\?v=/);
 assert.match(html, /app\.js\?v=/);
 assert.match(recovery, /\/auth\/v1\/recover/);
-assert.match(recovery, /recovery=1/);
+assert.match(recovery, /searchParams\.set\('recovery', '1'\)/);
 assert.match(recovery, /\/auth\/v1\/user/);
 assert.match(recovery, /commercial\.saas\.session\.v1/);
 assert.match(recovery, /Nova senha/);
