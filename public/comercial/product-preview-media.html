@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="editorial-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Prévia de fotos e vídeos</title>
+  <link rel="stylesheet" href="../clinical-source/styles.css">
+  <link rel="stylesheet" href="../album-feature.css">
+  <style>
+    html,body{min-height:100%;background:var(--lac-warm,#fbfaf7)}body{margin:0;overflow:hidden}.preview-shell{min-height:100vh}.preview-shell button{pointer-events:none}.preview-demo-note{position:fixed;right:12px;bottom:12px;z-index:80;padding:6px 9px;border:1px solid var(--ui-border,#e9e4de);border-radius:999px;color:var(--ui-text-secondary,#6f6a66);background:rgba(255,255,255,.9);font:700 9px/1.1 Inter,system-ui;letter-spacing:.04em;text-transform:uppercase}.preview-brand-copy{display:grid;gap:1px}.preview-brand-copy strong{font-size:13px}.preview-brand-copy small{font-size:10px;color:var(--ui-text-secondary,#6f6a66)}.demo-photo-one{background:linear-gradient(145deg,#ead8d7,#f7efea 60%,#d8b9bd)}.demo-photo-two{background:linear-gradient(145deg,#d8c9be,#f4e8df 52%,#b97d82)}.demo-photo-three{background:linear-gradient(145deg,#d8ddd7,#f7f1eb 58%,#c8999d)}.af-thumb>span{position:relative;color:#6b3f50}.af-thumb>span::after{content:"";position:absolute;inset:18% 20%;border:2px solid rgba(107,63,80,.18);border-radius:38% 42% 35% 46%}.af-card{margin-top:0}
+    @media(max-width:760px){.preview-shell .lactation-page{padding-bottom:80px}.preview-demo-note{bottom:68px;font-size:8px}.preview-shell .lactation-bottom-nav{pointer-events:none}.af-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+<div class="template-shell lactation-shell preview-shell">
+  <aside class="template-sidebar lactation-sidebar desktop-only">
+    <div class="template-brand lactation-brand"><span class="template-brand-mark lactation-brand-mark">G</span><span class="preview-brand-copy"><strong>Gestão de Amamentação</strong><small>ambiente profissional</small></span></div>
+    <nav class="template-nav lactation-side-nav" aria-label="Navegação de demonstração"><a href="#"><span class="nav-icon">⌂</span><span>Início</span></a><a href="#"><span class="nav-icon">▦</span><span>Agenda</span></a><a href="#" aria-current="page"><span class="nav-icon">♡</span><span>Pacientes</span></a></nav>
+  </aside>
+  <main class="template-main lactation-main">
+    <header class="template-topbar lactation-topbar"><div class="lactation-mobile-brand mobile-only"><span class="template-brand-mark lactation-brand-mark">G</span><div class="preview-brand-copy"><strong>Gestão de Amamentação</strong><small>Fotos e vídeos</small></div></div><div class="desktop-only"><strong>Paciente</strong><span class="lactation-subtitle">Mídias clínicas no contexto certo</span></div><div class="template-actions lactation-top-actions"><button class="ui-button ui-button-ghost icon-button">⌕</button></div></header>
+    <div class="template-page lactation-page">
+      <section class="lactation-screen preview-screen" data-preview-screen="media">
+        <div class="patient-header"><button class="back-link">‹ Pacientes</button><div class="patient-title-row"><div class="patient-avatar big">JS</div><div><span class="section-kicker">MÃE + BEBÊ</span><h1>Juliana Souza</h1><p>Mãe + bebê · em acompanhamento</p></div></div></div>
+        <article class="af-card">
+          <div class="af-head"><div><small>ÁLBUM CLÍNICO</small><h2>Fotos e vídeos do acompanhamento</h2><p>Mídias vinculadas à paciente e ao atendimento correspondente.</p></div><button class="af-primary">+ Adicionar mídia</button></div>
+          <div class="af-grid">
+            <button class="af-thumb"><span class="demo-photo-one">Foto</span><b>Posicionamento</b><small>07 set · retorno</small></button>
+            <button class="af-thumb"><span class="demo-photo-two">Vídeo</span><b>Mamada</b><small>03 set · avaliação</small></button>
+            <button class="af-thumb"><span class="demo-photo-three">Foto</span><b>Evolução</b><small>29 ago · consulta inicial</small></button>
+          </div>
+        </article>
+      </section>
+    </div>
+  </main>
+</div>
+<nav class="lactation-bottom-nav mobile-only" aria-label="Navegação inferior da demonstração"><button><span>⌂</span><b>Início</b></button><button><span>▦</span><b>Agenda</b></button><button class="active"><span>♡</span><b>Pacientes</b></button><button><span>▤</span><b>Materiais</b></button></nav>
+<div class="preview-demo-note">dados demonstrativos</div>
+</body>
+</html>
