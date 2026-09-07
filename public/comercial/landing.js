@@ -7,7 +7,41 @@ const phase2Styles = document.createElement('link');
 phase2Styles.rel = 'stylesheet';
 phase2Styles.href = './phase2.css?v=20260907';
 document.head.appendChild(phase2Styles);
+
+const realPreviewStyles = document.createElement('link');
+realPreviewStyles.rel = 'stylesheet';
+realPreviewStyles.href = './real-preview.css?v=20260907b';
+document.head.appendChild(realPreviewStyles);
+
 root.classList.add('landing-motion-ready', 'phase2-visual');
+
+const previewUrl = (screen) => `./product-preview.html?screen=${encodeURIComponent(screen)}&v=20260907b`;
+const previewIframe = (screen, title, className = 'product-preview-frame') => `
+  <iframe
+    class="${className}"
+    src="${previewUrl(screen)}"
+    title="${title}"
+    loading="lazy"
+    tabindex="-1"
+    aria-hidden="true"
+    sandbox="allow-scripts allow-same-origin"
+  ></iframe>
+`;
+
+// Replace the illustrative hero mockup with the real clinical UI structure/styles.
+const heroVisual = document.querySelector('.hero-visual');
+if (heroVisual) {
+  heroVisual.innerHTML = `
+    <div class="real-product-frame hero-real-preview" data-real-product-preview="home">
+      <div class="real-window-bar" aria-hidden="true">
+        <span class="real-window-dots"><i></i><i></i><i></i></span>
+        <span class="real-window-address">app / visão do dia</span>
+        <span class="real-window-status">online</span>
+      </div>
+      ${previewIframe('home', 'Prévia real do painel clínico')}
+    </div>
+  `;
+}
 
 const revealItems = [...document.querySelectorAll('[data-reveal]')];
 
@@ -37,23 +71,33 @@ updateProgress();
 window.addEventListener('scroll', updateProgress, { passive: true });
 window.addEventListener('resize', updateProgress);
 
-// Product story: use motion to explain context instead of decorative animation.
+// Product story: every stage now points to a real screen from the clinical UI,
+// rendered with demo-safe data inside product-preview.html.
 const productStory = document.querySelector('.product-story');
 const storyStage = document.querySelector('.story-stage');
 const storySteps = [...document.querySelectorAll('.story-step')];
-const desktopTabs = [...document.querySelectorAll('.desktop-tabs span')];
 const stageLabels = [
   'Agenda e visão do dia',
   'Paciente, mãe e bebê',
   'Prontuário no atendimento',
   'Evolução e continuidade',
 ];
-const tabByStage = [0, 0, 1, 2];
+const previewScreenByStage = ['home', 'patients', 'appointment', 'patient'];
 
 let activeStage = 0;
 let stageCaption = null;
+let storyPreview = null;
+let storyPreviewTimer = null;
 
 if (storyStage && storySteps.length) {
+  storyStage.innerHTML = `
+    <div class="real-story-window" data-real-story-window>
+      ${previewIframe(previewScreenByStage[0], 'Prévia real do fluxo clínico')}
+    </div>
+  `;
+  storyPreview = storyStage.querySelector('.product-preview-frame');
+  if (storyPreview) storyPreview.dataset.previewScreen = previewScreenByStage[0];
+
   stageCaption = document.createElement('div');
   stageCaption.className = 'stage-caption';
   stageCaption.setAttribute('aria-live', 'polite');
@@ -79,6 +123,26 @@ if (storyStage && storySteps.length) {
   setStoryStage(0, false);
 }
 
+function setPreviewScreen(screen) {
+  if (!storyPreview || !storyStage) return;
+  if (storyPreview.dataset.previewScreen === screen) return;
+
+  if (storyPreviewTimer) window.clearTimeout(storyPreviewTimer);
+  storyStage.classList.add('is-changing');
+
+  const commitChange = () => {
+    storyPreview.src = previewUrl(screen);
+    storyPreview.dataset.previewScreen = screen;
+    storyStage.classList.remove('is-changing');
+  };
+
+  if (reduceMotion) {
+    commitChange();
+  } else {
+    storyPreviewTimer = window.setTimeout(commitChange, 90);
+  }
+}
+
 function setStoryStage(index, scrollToStage = false) {
   if (!storyStage || !storySteps.length) return;
   const safeIndex = Math.max(0, Math.min(storySteps.length - 1, index));
@@ -91,11 +155,8 @@ function setStoryStage(index, scrollToStage = false) {
     step.setAttribute('aria-current', active ? 'step' : 'false');
   });
 
-  desktopTabs.forEach((tab, tabIndex) => {
-    tab.classList.toggle('active', tabIndex === tabByStage[safeIndex]);
-  });
-
   if (stageCaption) stageCaption.textContent = stageLabels[safeIndex] || '';
+  setPreviewScreen(previewScreenByStage[safeIndex] || 'home');
 
   if (scrollToStage && productStory && window.matchMedia('(min-width: 1021px)').matches) {
     const sectionTop = window.scrollY + productStory.getBoundingClientRect().top;
@@ -132,6 +193,22 @@ const updateStoryFromScroll = () => {
 window.addEventListener('scroll', updateStoryFromScroll, { passive: true });
 window.addEventListener('resize', updateStoryFromScroll);
 updateStoryFromScroll();
+
+// Put real product crops inside two Bento cards without changing their sales copy.
+const featureCards = [...document.querySelectorAll('.feature-card')];
+const featurePreviewMap = [
+  { index: 0, screen: 'agenda', label: 'Agenda real' },
+  { index: 3, screen: 'patient', label: 'Evolução real' },
+];
+featurePreviewMap.forEach(({ index, screen, label }) => {
+  const card = featureCards[index];
+  if (!card) return;
+  card.classList.add('has-real-preview');
+  const preview = document.createElement('div');
+  preview.className = 'feature-real-preview';
+  preview.innerHTML = `${previewIframe(screen, `${label} da plataforma`)}<span class="feature-preview-label">${label}</span>`;
+  card.appendChild(preview);
+});
 
 // Pro is one product. Monthly and annual are billing choices inside the same card.
 const proCard = document.querySelector('.price-card.pro');
