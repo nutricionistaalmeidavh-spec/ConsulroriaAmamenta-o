@@ -1,0 +1,181 @@
+/* Real product preview layer for the commercial landing.
+   The iframe document reuses ../clinical-source/styles.css and contains demo-safe data only. */
+
+.phase2-visual .real-product-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(107, 63, 80, .13);
+  border-radius: 28px;
+  background: #fbfaf7;
+  box-shadow: 0 38px 110px rgba(48,40,43,.16), 0 2px 0 rgba(255,255,255,.88) inset;
+}
+
+.phase2-visual .real-product-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.46);
+}
+
+.phase2-visual .real-window-bar {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 90px 1fr 90px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 15px;
+  border-bottom: 1px solid #ece8e8;
+  background: rgba(251,250,249,.96);
+}
+
+.phase2-visual .real-window-dots { display: flex; gap: 6px; }
+.phase2-visual .real-window-dots i { width: 8px; height: 8px; border-radius: 50%; background: #d8d2d4; }
+.phase2-visual .real-window-address {
+  justify-self: center;
+  min-width: 210px;
+  padding: 6px 14px;
+  border: 1px solid #eee9ea;
+  border-radius: 999px;
+  color: #858b87;
+  background: #fff;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+.phase2-visual .real-window-status { justify-self: end; color: #3f6b58; font-size: 9px; font-weight: 850; }
+
+.phase2-visual .product-preview-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fbfaf7;
+  pointer-events: none;
+}
+
+.phase2-visual .hero-visual { margin-top: 66px; }
+.phase2-visual .hero-real-preview { height: clamp(540px, 58vw, 700px); }
+.phase2-visual .hero-real-preview .product-preview-frame { height: calc(100% - 48px); }
+.phase2-visual .hero-real-preview::before {
+  content: "produto real · dados demonstrativos";
+  position: absolute;
+  z-index: 6;
+  right: 18px;
+  bottom: 16px;
+  padding: 7px 10px;
+  border: 1px solid rgba(107,63,80,.10);
+  border-radius: 999px;
+  color: var(--brand);
+  background: rgba(255,255,255,.9);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+}
+
+.phase2-visual .hero-visual .floating-note,
+.phase2-visual .hero-visual .browser-shell,
+.phase2-visual .hero-visual .hero-glow { display: none !important; }
+
+.phase2-visual .story-stage {
+  min-height: 620px;
+  background: #fbfaf7;
+}
+
+.phase2-visual .real-story-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #fbfaf7;
+}
+
+.phase2-visual .real-story-window .product-preview-frame {
+  position: absolute;
+  inset: 0;
+  transition: opacity .22s ease, transform .34s cubic-bezier(.2,.75,.2,1);
+}
+
+.phase2-visual .story-stage.is-changing .product-preview-frame {
+  opacity: .35;
+  transform: scale(.992);
+}
+
+.phase2-visual .stage-caption {
+  top: 18px;
+  left: 18px;
+  box-shadow: 0 9px 25px rgba(47,56,51,.07);
+}
+
+.phase2-visual .feature-card.has-real-preview {
+  min-height: 390px;
+  padding-bottom: 205px;
+}
+
+.phase2-visual .feature-real-preview {
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  bottom: 24px;
+  height: 172px;
+  overflow: hidden;
+  border: 1px solid rgba(107,63,80,.10);
+  border-radius: 18px;
+  background: #fbfaf7;
+  box-shadow: 0 12px 32px rgba(47,56,51,.07);
+}
+
+.phase2-visual .feature-real-preview .product-preview-frame {
+  width: 760px;
+  height: 480px;
+  transform: scale(.47);
+  transform-origin: left top;
+}
+
+.phase2-visual .feature-card:nth-child(4).has-real-preview .feature-real-preview .product-preview-frame {
+  transform: scale(.50);
+}
+
+.phase2-visual .feature-preview-label {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  bottom: 8px;
+  padding: 5px 7px;
+  border: 1px solid rgba(107,63,80,.10);
+  border-radius: 999px;
+  color: var(--brand);
+  background: rgba(255,255,255,.92);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1020px) {
+  .phase2-visual .hero-real-preview { height: 610px; }
+  .phase2-visual .story-stage { min-height: 590px; }
+}
+
+@media (max-width: 760px) {
+  .phase2-visual .hero-visual { margin-top: 42px; }
+  .phase2-visual .hero-real-preview { height: 610px; border-radius: 22px; }
+  .phase2-visual .real-window-bar { grid-template-columns: 64px 1fr 64px; min-height: 42px; padding: 0 10px; }
+  .phase2-visual .real-window-address { min-width: 0; width: 100%; padding-inline: 8px; font-size: 8px; }
+  .phase2-visual .real-window-status { font-size: 8px; }
+  .phase2-visual .hero-real-preview .product-preview-frame { height: calc(100% - 42px); }
+  .phase2-visual .hero-real-preview::before { right: 10px; bottom: 10px; font-size: 8px; }
+  .phase2-visual .story-stage { min-height: 600px; border-radius: 22px; }
+  .phase2-visual .feature-card.has-real-preview { min-height: 370px; padding-bottom: 190px; }
+  .phase2-visual .feature-real-preview { left: 18px; right: 18px; bottom: 18px; height: 160px; }
+  .phase2-visual .feature-real-preview .product-preview-frame { width: 390px; height: 720px; transform: scale(.42); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase2-visual .real-story-window .product-preview-frame { transition: none !important; }
+}
