@@ -12,6 +12,10 @@ on:
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
+      - 'scripts/test-deferred-email-flow.mjs'
+      - 'scripts/validate-deferred-email-migration.mjs'
+      - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/functions/_shared/**'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
@@ -33,6 +37,10 @@ on:
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
+      - 'scripts/test-deferred-email-flow.mjs'
+      - 'scripts/validate-deferred-email-migration.mjs'
+      - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/functions/_shared/**'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
@@ -70,6 +78,12 @@ jobs:
         run: node scripts/test-commercial-checkout-return.mjs
       - name: Validate Pro checkout before e-mail confirmation
         run: node scripts/test-preconfirm-checkout.mjs
+      - name: Validate deferred email behavior
+        run: node scripts/test-deferred-email-flow.mjs
+      - name: Validate migration on isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pro-checkout-test" @electric-sql/pglite@0.5.8 --ignore-scripts
+          PGLITE_MODULE="$RUNNER_TEMP/pro-checkout-test/node_modules/@electric-sql/pglite/dist/index.js" node scripts/validate-deferred-email-migration.mjs
       - name: Validate existing e-mail signup continuation
         run: node scripts/test-duplicate-signup-flow.mjs
       - name: Validate commercial password recovery

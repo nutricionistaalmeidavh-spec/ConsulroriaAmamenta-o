@@ -1,3 +1,5 @@
+import { sendPaidConfirmation } from '../_shared/post-payment-email.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
@@ -131,6 +133,80 @@ async function fetchAdminUser(supabaseUrl: string, serviceKey: string, userId: s
   return { response, user };
 }
 
+// Password verification stays in Supabase Auth (including its rate limits and hooks).
+// Auth returns email_not_confirmed only after validating the password.
+async function prepareSignup(url: string, key: string, body: Record<string, unknown>) {
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const planCode = String(body.planCode || '');
+  if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
+    return json(400, { error: 'invalid_signup_fields' });
+  }
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+  if (!anonKey) return json(503, { error: 'server_not_configured' });
+  const login = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: 'POST', headers: { apikey: anonKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const auth = await login.json().catch(() => ({}));
+  if (login.ok && auth.access_token) {
+    const meta = auth.user?.app_metadata;
+    if (meta?.checkout_email_after_payment && validNonce(String(meta.checkout_nonce || ''))) {
+      return json(200, { session: auth, userId: auth.user.id, signupNonce: meta.checkout_nonce });
+    }
+    return json(200, { session: auth });
+  }
+  if (login.status === 429) return json(429, { error: 'signup_rate_limited' });
+  let userId = '';
+  if (auth.error_code === 'email_not_confirmed') {
+    const lookup = await rest(url, key, '/rest/v1/rpc/commercial_pending_user_id', {
+      method: 'POST', body: JSON.stringify({ p_email: email }),
+    });
+    const id = await lookup.json().catch(() => null);
+    if (!lookup.ok) return json(503, { error: 'signup_lookup_unavailable' });
+    if (typeof id !== 'string' || !validUuid(id)) return json(400, { error: 'signup_credentials_invalid' });
+    userId = id;
+  } else if (auth.error_code === 'invalid_credentials') {
+    // The admin creation API sends no email and does not confirm the address.
+    // It refuses existing emails: never overwrite an existing user's password.
+    const created = await rest(url, key, '/auth/v1/admin/users', {
+      method: 'POST', body: JSON.stringify({ email, password, email_confirm: false,
+        user_metadata: { signup_source: 'commercial_saas', plan_intent: planCode },
+        app_metadata: { checkout_email_after_payment: true, checkout_nonce: randomSecret() },
+      }),
+    });
+    const user = await created.json().catch(() => null);
+    if (!created.ok || !user?.id) return json(created.status >= 500 ? 503 : 400, { error: 'signup_credentials_invalid' });
+    userId = user.id;
+  } else {
+    // Do not turn CAPTCHA/hook/provider failures into permission to create users.
+    return json(login.status || 400, { error: 'signup_auth_unavailable' });
+  }
+  const { response, user } = await fetchAdminUser(url, key, userId);
+  if (!response.ok) return json(503, { error: 'signup_lookup_unavailable' });
+  let nonce = user?.app_metadata?.checkout_nonce;
+  if (!validNonce(String(nonce || ''))) {
+    nonce = randomSecret();
+    const updated = await rest(url, key, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT', body: JSON.stringify({ app_metadata: {
+        ...user.app_metadata, checkout_email_after_payment: true, checkout_nonce: nonce,
+      } }),
+    });
+    if (!updated.ok) return json(503, { error: 'signup_lookup_unavailable' });
+  }
+  return json(200, { userId, signupNonce: nonce });
+}
+
+async function pendingStatus(url: string, key: string, body: Record<string, unknown>) {
+  const userId = String(body.userId || '');
+  if (!validUuid(userId) || !validNonce(String(body.signupNonce || ''))) return json(401, { error: 'invalid_signup_proof' });
+  const { response, user } = await fetchAdminUser(url, key, userId);
+  if (!response.ok || user?.app_metadata?.checkout_nonce !== body.signupNonce) return json(401, { error: 'invalid_signup_proof' });
+  const result = await sendPaidConfirmation(url, key, userId);
+  return json(result.ok ? 200 : 503, result);
+}
+
 async function createPendingRequest(
   supabaseUrl: string,
   serviceKey: string,
@@ -149,15 +225,32 @@ async function createPendingRequest(
   if (!userResponse.ok || String(user?.id || '') !== userId) return json(404, { error: 'pending_signup_not_found' });
 
   const metadata = user?.user_metadata || {};
-  if (metadata?.signup_source !== 'commercial_saas'
-      || metadata?.plan_intent !== planCode
-      || metadata?.signup_nonce !== signupNonce) {
-    return json(401, { error: 'invalid_signup_proof' });
+  const deferred = user?.app_metadata?.checkout_email_after_payment === true;
+  if (deferred) {
+    if (user.app_metadata.checkout_nonce !== signupNonce) return json(401, { error: 'invalid_signup_proof' });
+  } else {
+    // Keep already-open legacy checkouts compatible during rollout.
+    if (metadata?.signup_source !== 'commercial_saas'
+        || metadata?.plan_intent !== planCode || metadata?.signup_nonce !== signupNonce) {
+      return json(401, { error: 'invalid_signup_proof' });
+    }
+    const createdAt = Date.parse(String(user?.created_at || ''));
+    if (!Number.isFinite(createdAt) || Date.now() - createdAt > 30 * 60 * 1000) return json(410, { error: 'signup_proof_expired' });
   }
 
-  const createdAt = Date.parse(String(user?.created_at || ''));
-  if (!Number.isFinite(createdAt) || Date.now() - createdAt > 30 * 60 * 1000) {
-    return json(410, { error: 'signup_proof_expired' });
+  // Reuse even a legacy pending purchase for this owner, including after a lost response.
+  const priorResponse = await rest(supabaseUrl, serviceKey,
+    `/rest/v1/billing_checkout_requests?owner_id=eq.${encodeURIComponent(userId)}&provider=eq.asaas&status=in.(pending_provider,checkout_created,paid)&select=id,status,plan_code,checkout_url&order=created_at.desc&limit=1`);
+  const priorRows = await priorResponse.json().catch(() => []);
+  if (!priorResponse.ok) return json(503, { error: 'checkout_lookup_failed' });
+  const prior = priorRows[0];
+  if (prior?.status === 'paid') return json(200, { status: 'paid' });
+  if (prior) {
+    if (prior.plan_code !== planCode) return json(409, { error: 'pending_checkout_other_plan' });
+    if (prior.status === 'checkout_created' && validCheckoutUrl(prior.checkout_url, environment)) {
+      return json(200, { status: 'checkout_created', checkoutUrl: prior.checkout_url, requestId: prior.id });
+    }
+    return json(409, { error: 'checkout_in_progress' });
   }
 
   const { planResponse, plan } = await fetchPlan(supabaseUrl, serviceKey, planCode);
@@ -187,7 +280,7 @@ async function createPendingRequest(
         metadata: {
           source,
           environment,
-          signup_flow: 'pre_email_confirmation',
+          signup_flow: deferred ? 'deferred_email_v2' : 'pre_email_confirmation',
           request_secret_hash: requestSecretHash,
         },
       }),
@@ -195,6 +288,7 @@ async function createPendingRequest(
   );
   const requests = await insertResponse.json().catch(() => []);
   const checkoutRequest = Array.isArray(requests) ? requests[0] : null;
+  if (insertResponse.status === 409) return json(409, { error: 'checkout_in_progress' });
   if (!insertResponse.ok || !checkoutRequest) return json(500, { error: 'checkout_request_failed' });
 
   return json(200, {
@@ -301,6 +395,9 @@ Deno.serve(async (req: Request) => {
 
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action || 'create_request');
+
+  if (action === 'prepare_signup') return prepareSignup(supabaseUrl, serviceKey, body);
+  if (action === 'pending_status') return pendingStatus(supabaseUrl, serviceKey, body);
 
   if (action === 'create_pending_request') {
     return createPendingRequest(supabaseUrl, serviceKey, body);

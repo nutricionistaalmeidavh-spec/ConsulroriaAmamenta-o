@@ -251,6 +251,12 @@ async function createCheckout(request, env, environment = 'production') {
   });
 }
 
+async function pendingSignupAction(request, action) {
+  const input = await request.json().catch(() => ({}));
+  const { response, payload } = await callPendingCheckoutRegistry({ ...input, action });
+  return json(response?.status || 502, payload || { error: 'signup_unavailable' });
+}
+
 async function createPreconfirmCheckout(request, env) {
   const config = asaasConfig(env, 'production');
   if (!config.secret) return json(503, { error: 'asaas_not_configured' });
@@ -268,6 +274,8 @@ async function createPreconfirmCheckout(request, env) {
     planCode,
     environment: 'production',
   });
+  if (registered.response?.ok && registered.payload?.status === 'paid') return json(200, { status: 'paid' });
+  if (registered.response?.ok && registered.payload?.checkoutUrl) return json(200, registered.payload);
   if (!registered.response?.ok || !registered.payload?.requestId || !registered.payload?.requestSecret) {
     return json(registered.response?.status || 502, {
       error: registered.payload?.error || 'pending_checkout_registry_failed',
@@ -291,6 +299,7 @@ async function createPreconfirmCheckout(request, env) {
 
   if (!response) return json(503, { error: 'asaas_not_configured' });
   if (!response.ok || !result?.id) {
+    if (response.status >= 500 || response.ok) return json(503, { error: 'checkout_in_progress' });
     await callPendingCheckoutRegistry({
       action: 'mark_pending_failed',
       requestId,
@@ -412,6 +421,8 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return pendingSignupAction(request, 'prepare_signup');
+    if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return pendingSignupAction(request, 'pending_status');
     if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env, 'production');
     if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return createPreconfirmCheckout(request, env);
     if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return createCheckout(request, env, 'production');

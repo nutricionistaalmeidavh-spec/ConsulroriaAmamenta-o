@@ -13,6 +13,7 @@ const API = Object.freeze({
 const SESSION_KEY = 'commercial.saas.session.v1';
 const PLAN_KEY = 'commercial.saas.plan-intent.v1';
 const RETURN_KEY = 'commercial.saas.return.v1';
+const PENDING_SIGNUP_KEY = 'commercial.saas.pending-signup.v2';
 const CHECKOUT_AFTER_LOGIN_KEY = 'commercial.saas.checkout-after-login.v1';
 const modal = document.querySelector('#auth-modal');
 const message = document.querySelector('#form-message');
@@ -191,6 +192,18 @@ function setBusy(form, busy) {
 
 function friendlyError(error) {
   const raw = String(error?.message || '').toLowerCase();
+  const messages = {
+    signup_credentials_invalid: 'Confira seu e-mail e senha. Se já tem conta, use a senha cadastrada ou recupere o acesso.',
+    invalid_signup_fields: 'Informe um e-mail válido e uma senha com pelo menos 8 caracteres.',
+    signup_rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente novamente.',
+    checkout_in_progress: 'Seu pagamento está sendo preparado. Aguarde alguns instantes antes de tentar novamente.',
+    pending_checkout_other_plan: 'Já existe uma compra pendente em outro plano. Selecione o plano dessa compra para continuar.',
+    signup_lookup_unavailable: 'O cadastro está temporariamente indisponível. Tente novamente em instantes.',
+    signup_auth_unavailable: 'Não foi possível validar o cadastro agora. Tente novamente em instantes.',
+  };
+  if (messages[raw]) return messages[raw];
+  if (error?.status === 429 || raw.includes('only request this after')) return 'Aguarde um minuto antes de tentar novamente.';
+
   if (error?.status === 400 && (raw.includes('invalid login') || raw.includes('invalid credentials'))) return 'E-mail ou senha inválidos.';
   if (raw.includes('already registered') || raw.includes('already been registered')) return 'Este e-mail já possui uma conta. Use a opção Entrar.';
   if (raw.includes('password')) return 'Revise a senha. Ela precisa atender aos requisitos de segurança.';
@@ -328,6 +341,7 @@ async function startPreconfirmCheckout(userId, signupNonce, planCode) {
     const firstDetail = payload?.details?.[0]?.description;
     throw new ApiError(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o pagamento.', response.status, payload);
   }
+  if (payload.status === 'paid') { window.location.assign('./compra-concluida.html'); return; }
   if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
   window.location.assign(payload.checkoutUrl);
 }
@@ -438,6 +452,25 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
   setBusy(form, true);
   setMessage('Criando seu acesso…');
   try {
+    if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
+      const response = await fetch('/api/asaas/signup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, planCode: selectedPlan }),
+      });
+      const pending = await response.json().catch(() => ({}));
+      if (!response.ok) throw new ApiError(pending.error || 'Falha ao preparar cadastro.', response.status, pending);
+      if (pending.session?.access_token) saveSession(pending.session);
+      if (pending.session?.access_token && !pending.userId) {
+        sessionStorage.setItem(CHECKOUT_AFTER_LOGIN_KEY, selectedPlan);
+        await routeAuthenticatedSession();
+        return;
+      }
+      if (!pending.userId || !pending.signupNonce) throw new Error('Não foi possível preparar o cadastro.');
+      // A limited purchase proof, never the password or an authenticated clinical session.
+      sessionStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ userId: pending.userId, signupNonce: pending.signupNonce }));
+      await startPreconfirmCheckout(pending.userId, pending.signupNonce, selectedPlan);
+      return;
+    }
     const signupPath = `${API.signup}?redirect_to=${encodeURIComponent(confirmationRedirectUrl())}`;
     const result = await request(signupPath, {
       method: 'POST',
