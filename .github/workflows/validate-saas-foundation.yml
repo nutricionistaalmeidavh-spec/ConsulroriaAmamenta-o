@@ -6,11 +6,13 @@ on:
       - main
       - feature/saas-foundation-phase-0-2
       - feature/pro-checkout-before-email-confirmation
+      - fix/commercial-duplicate-signup-flow
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
+      - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -30,6 +32,7 @@ on:
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
+      - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
@@ -65,6 +68,8 @@ jobs:
         run: node scripts/test-commercial-checkout-return.mjs
       - name: Validate Pro checkout before e-mail confirmation
         run: node scripts/test-preconfirm-checkout.mjs
+      - name: Validate existing e-mail signup continuation
+        run: node scripts/test-duplicate-signup-flow.mjs
       - name: Validate Freemium and Pro plans
         run: node scripts/test-saas-plans.mjs
       - name: Validate server-side SaaS enforcement
