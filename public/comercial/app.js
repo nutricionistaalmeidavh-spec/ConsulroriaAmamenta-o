@@ -16,6 +16,7 @@ const RETURN_KEY = 'commercial.saas.return.v1';
 const modal = document.querySelector('#auth-modal');
 const message = document.querySelector('#form-message');
 const planIntent = document.querySelector('#plan-intent');
+const signupSubmit = document.querySelector('#signup-form [type="submit"]');
 const pageUrl = new URL(window.location.href);
 
 const requestedReturn = pageUrl.searchParams.get('return');
@@ -60,6 +61,30 @@ function clearSession() {
   currentSession = null;
   currentUser = null;
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+function captureAuthCallbackSession() {
+  if (!window.location.hash) return false;
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const accessToken = params.get('access_token');
+  if (!accessToken) return false;
+
+  saveSession({
+    access_token: accessToken,
+    refresh_token: params.get('refresh_token') || '',
+    token_type: params.get('token_type') || 'bearer',
+    expires_in: Number(params.get('expires_in') || 0),
+    user: null,
+  });
+
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+  return true;
+}
+
+function generateSignupNonce() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 async function request(path, { method = 'GET', token = null, body = null, prefer = null } = {}) {
@@ -109,12 +134,20 @@ function showView(viewName) {
   });
 }
 
+function updateSignupSubmitLabel() {
+  if (!signupSubmit) return;
+  signupSubmit.textContent = ['pro_monthly', 'pro_annual'].includes(selectedPlan)
+    ? 'Criar conta e continuar para pagamento'
+    : 'Criar conta grátis';
+}
+
 function openModal(viewName = 'signup', plan = null) {
   if (plan) {
     selectedPlan = plan;
     sessionStorage.setItem(PLAN_KEY, selectedPlan);
   }
   if (planIntent) planIntent.value = selectedPlan;
+  updateSignupSubmitLabel();
 
   previousFocus = document.activeElement;
   modal.hidden = false;
@@ -238,8 +271,6 @@ function confirmationRedirectUrl() {
   if (returnContext === 'sandbox') {
     redirect.searchParams.set('return', 'sandbox');
     redirect.searchParams.set('auto', '1');
-  } else if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
-    redirect.searchParams.set('checkout', '1');
   }
   return redirect.href;
 }
@@ -273,12 +304,39 @@ async function startCheckout(planCode, environment = 'production') {
   window.location.assign(payload.checkoutUrl);
 }
 
+async function startPreconfirmCheckout(userId, signupNonce, planCode) {
+  setMessage('Conta criada. Abrindo pagamento seguro no Asaas…');
+  const response = await fetch('/api/asaas/preauth-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, signupNonce, planCode }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const firstDetail = payload?.details?.[0]?.description;
+    throw new ApiError(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o pagamento.', response.status, payload);
+  }
+  if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
+  window.location.assign(payload.checkoutUrl);
+}
+
 async function continueAfterOnboarding() {
   returnContext = sessionStorage.getItem(RETURN_KEY) || returnContext;
   selectedPlan = sessionStorage.getItem(PLAN_KEY) || selectedPlan;
 
   if (returnContext === 'sandbox') {
     window.location.assign('./sandbox-teste.html?auto=1');
+    return;
+  }
+
+  if (pageUrl.searchParams.get('confirmed') === '1') {
+    showView('complete');
+    setMessage(
+      ['pro_monthly', 'pro_annual'].includes(selectedPlan)
+        ? 'E-mail confirmado e perfil salvo. O acesso Pro será liberado assim que o pagamento for confirmado.'
+        : 'E-mail confirmado e perfil salvo. Seu acesso Freemium está pronto.',
+      'success',
+    );
     return;
   }
 
@@ -333,6 +391,7 @@ document.addEventListener('keydown', (event) => {
 planIntent?.addEventListener('change', () => {
   selectedPlan = planIntent.value;
   sessionStorage.setItem(PLAN_KEY, selectedPlan);
+  updateSignupSubmitLabel();
 });
 
 document.querySelector('#signup-form').addEventListener('submit', async (event) => {
@@ -350,6 +409,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
     return;
   }
 
+  const signupNonce = generateSignupNonce();
   setBusy(form, true);
   setMessage('Criando seu acesso…');
   try {
@@ -362,12 +422,19 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
         data: {
           signup_source: 'commercial_saas',
           plan_intent: selectedPlan,
+          signup_nonce: signupNonce,
         },
       },
     });
 
+    if (result?.access_token) saveSession(result);
+
+    if (['pro_monthly', 'pro_annual'].includes(selectedPlan) && result?.user?.id) {
+      await startPreconfirmCheckout(result.user.id, signupNonce, selectedPlan);
+      return;
+    }
+
     if (result?.access_token) {
-      saveSession(result);
       setMessage('Acesso criado. Vamos configurar seu perfil.', 'success');
       await routeAuthenticatedSession();
     } else {
@@ -438,6 +505,8 @@ document.querySelector('#onboarding-form').addEventListener('submit', async (eve
   }
 });
 
-if (currentSession?.access_token) {
-  getAuthenticatedUser().catch(() => clearSession());
+updateSignupSubmitLabel();
+const capturedAuthCallback = captureAuthCallbackSession();
+if (capturedAuthCallback || currentSession?.access_token) {
+  routeAuthenticatedSession().catch(() => clearSession());
 }
