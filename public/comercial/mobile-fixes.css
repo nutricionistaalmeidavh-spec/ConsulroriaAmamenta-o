@@ -1,0 +1,18 @@
+/* Mobile-only corrections for the commercial landing. */
+.comparison-mobile{display:none}
+
+@media(max-width:760px){
+  .phase2-visual .comparison-table{display:none!important}
+  .phase2-visual .comparison-mobile{display:grid;gap:14px;margin-top:18px}
+  .phase2-visual .comparison-mobile-card{padding:22px;border:1px solid rgba(107,63,80,.12);border-radius:22px;background:#fff;box-shadow:0 12px 34px rgba(47,56,51,.055)}
+  .phase2-visual .comparison-mobile-card.pro{border-color:rgba(107,63,80,.22);background:linear-gradient(180deg,#fff,#fbf6f7)}
+  .phase2-visual .comparison-mobile-card header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .phase2-visual .comparison-mobile-card h3{margin:0;font-size:21px;letter-spacing:-.035em}
+  .phase2-visual .comparison-mobile-card header span{padding:5px 8px;border-radius:999px;color:var(--brand);background:var(--brand-soft);font-size:9px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+  .phase2-visual .comparison-mobile-card dl{display:grid;gap:0;margin:0}
+  .phase2-visual .comparison-mobile-card dl div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 0;border-top:1px solid rgba(47,56,51,.08)}
+  .phase2-visual .comparison-mobile-card dt{min-width:0;color:var(--muted);font-size:12px;line-height:1.35}
+  .phase2-visual .comparison-mobile-card dd{margin:0;color:var(--ink);font-size:13px;font-weight:850;text-align:right}
+  .phase2-visual .comparison-wrap{overflow:visible!important}
+  .phase2-visual .site-footer{overflow:visible}
+}
