@@ -7,8 +7,7 @@ const root = read('index.html');
 const appEntry = read('app/index.html');
 const bootstrap = read('src/bootstrap.js');
 const identityRuntime = read('public/canonical-identity-runtime.js');
-const authService = read('public/clinical-source/core/lib/auth-service.js');
-const config = read('public/clinical-source/config.js');
+const manifest = read('public/manifest.webmanifest');
 
 assert.ok(existsSync('app/index.html'), 'canonical /app entry must exist');
 assert.ok(existsSync('public/debora/index.html'), 'dedicated /debora landing must exist');
@@ -25,17 +24,24 @@ assert.equal(resolveAppIdentity({ pathname: '/app/' }).entryMode, 'app');
 assert.equal(resolveAppIdentity({ pathname: '/app/' }).basePath, '/app/');
 
 assert.match(bootstrap, /CANONICAL_PRODUCT_NAME/, 'bootstrap must consume canonical product identity');
+assert.match(bootstrap, /genericizeClinicalConfig/, 'legacy config must be neutralized only at runtime boundary');
+assert.match(bootstrap, /genericizeRuntimeModule/, 'customer-specific auth defaults must be neutralized without rewriting canonical source');
 assert.match(bootstrap, /genericizeClinicalHtml/, 'legacy clinical markup must be neutralized at the canonical runtime boundary');
 assert.match(bootstrap, /genericizeClinicalShell/, 'legacy clinical shell copy must be neutralized without forking business logic');
 assert.match(bootstrap, /replaceAll\('Débora Lactação', CANONICAL_PRODUCT_NAME\)/, 'customer branding must be replaced by generic product branding');
-assert.doesNotMatch(config, /APP_NAME:\s*['\"]Débora Lactação/, 'generic config must not use Débora as product name');
-assert.match(config, /APP_NAME:\s*['\"]Gestão de Amamentação/, 'generic config must expose canonical product name');
+assert.match(bootstrap, /metadata = \{\}/, 'runtime signup must use neutral metadata');
+assert.match(bootstrap, /COMMERCIAL_SESSION_KEY/, 'canonical app must bridge the authenticated commercial session');
+assert.match(bootstrap, /APP_CONTEXT\.entryMode === 'app'/, 'commercial session may override legacy session only on the /app entry');
 
 assert.match(identityRuntime, /professional_profiles/, 'canonical identity runtime must resolve the professional profile');
 assert.match(identityRuntime, /owner_id=eq\.\$\{encodeURIComponent\(ownerId\)\}/, 'professional profile lookup must be owner-scoped');
 assert.match(identityRuntime, /Authorization:\s*`Bearer \$\{accessToken\}`/, 'profile lookup must use the authenticated session');
 assert.doesNotMatch(identityRuntime, /mothers|clinical_encounters|financial_entries/, 'identity runtime must not read clinical tables');
-assert.doesNotMatch(authService, /display_name:\s*['\"]Débora/, 'generic signup must not create Débora metadata');
+assert.match(identityRuntime, /commercial\.saas\.session\.v1/, 'identity may consume the same authenticated commercial session');
+
+assert.match(manifest, /"name": "Gestão de Amamentação"/, 'installed app name must be customer-neutral');
+assert.match(manifest, /"short_name": "Amamentação"/, 'installed app short name must be customer-neutral');
+assert.doesNotMatch(manifest, /Débora/, 'generic PWA manifest must not use customer name');
 
 for (const file of ['supabase/phase-saas-foundation.sql', 'supabase/phase-saas-enforcement.sql']) {
   const sql = read(file);
