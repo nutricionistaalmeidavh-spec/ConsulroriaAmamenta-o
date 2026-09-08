@@ -1,7 +1,7 @@
 {
-  "name": "Débora Lactação",
-  "short_name": "Débora",
-  "description": "Prontuário, agenda e acompanhamento de consultoria de amamentação.",
+  "name": "Gestão de Amamentação",
+  "short_name": "Amamentação",
+  "description": "Prontuário, agenda e acompanhamento para consultoria de amamentação.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
