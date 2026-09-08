@@ -31,3 +31,81 @@
  .conversion-page .hero-actions .button{white-space:normal}
 }
 @media(prefers-reduced-motion:reduce){.conversion-page .mobile-offer{transition:none}}
+
+/* High-contrast sales surfaces. Clinical previews and auth keep their own colors. */
+.phase2-visual body.conversion-page{background:#211a20;color:#fff8fc}
+.phase2-visual .conversion-page .site-header{background:#2e232c;border-color:#705364;box-shadow:0 10px 35px #0003;backdrop-filter:none}
+.phase2-visual .conversion-page .brand-copy strong,
+.phase2-visual .conversion-page main h1,
+.phase2-visual .conversion-page main h2,
+.phase2-visual .conversion-page main h3{color:#fff8fc}
+.phase2-visual .conversion-page .hero-copy h1 span{color:#efb9d2}
+.phase2-visual .conversion-page .main-nav>a,
+.phase2-visual .conversion-page .brand-copy small,
+.phase2-visual .conversion-page .footer-links,
+.phase2-visual .conversion-page main p,
+.phase2-visual .conversion-page .story-step small,
+.phase2-visual .conversion-page .price span,
+.phase2-visual .conversion-page .price-card li,
+.phase2-visual .conversion-page .comparison-heading small{color:#e2d1dc}
+.phase2-visual .conversion-page .eyebrow,
+.phase2-visual .conversion-page .offer-summary strong,
+.phase2-visual .conversion-page .text-cta,
+.phase2-visual .conversion-page .link-button{color:#efb9d2}
+.phase2-visual .conversion-page .hero-proof span{background:#382b35;border-color:#705364;box-shadow:none;color:#fff8fc}
+.phase2-visual .conversion-page .hero-proof strong{color:#fff8fc}
+.phase2-visual .conversion-page .pain-card,
+.phase2-visual .conversion-page .feature-card,
+.phase2-visual .conversion-page .audience-section,
+.phase2-visual .conversion-page .free-plan-wrap .price-card,
+.phase2-visual .conversion-page .faq-list,
+.phase2-visual .conversion-page .comparison-wrap,
+.phase2-visual .conversion-page .comparison-mobile-card,
+.phase2-visual .conversion-page .comparison-mobile-card.pro{background:#352833;border-color:#705364;color:#fff8fc;box-shadow:0 14px 36px #0002}
+.phase2-visual .conversion-page .pain-card p,
+.phase2-visual .conversion-page .feature-card p,
+.phase2-visual .conversion-page .audience-list p,
+.phase2-visual .conversion-page .faq-list p{font-size:15px;line-height:1.7}
+.phase2-visual .conversion-page .product-story{background:#2b2029;border-color:#705364}
+.phase2-visual .conversion-page .story-shell{background:transparent;border-color:#705364}
+.phase2-visual .conversion-page .story-step{opacity:1}
+.phase2-visual .conversion-page .story-step.is-active{background:#49333f;border-color:#c991ae}
+.phase2-visual .conversion-page .story-step strong{font-size:14px;color:#fff8fc}
+.phase2-visual .conversion-page .story-step small{font-size:13px}
+.phase2-visual .conversion-page .problem-answer,
+.phase2-visual .conversion-page .cta-section{background:#553344;border:1px solid #b77c9a;box-shadow:0 22px 52px #0003}
+.phase2-visual .conversion-page .problem-answer span,
+.phase2-visual .conversion-page .cta-section p{color:#f2dce7}
+.phase2-visual .conversion-page .price-card.pro{background:#49303f;border-color:#efb9d2;box-shadow:0 24px 65px #0005}
+.phase2-visual .conversion-page .price-card.pro .price strong,
+.phase2-visual .conversion-page .price-card.free .price strong{color:#fff8fc}
+.phase2-visual .conversion-page .plan-label{color:#efb9d2}
+.phase2-visual .conversion-page .price-ribbon{background:#efb9d2;color:#291b23}
+.phase2-visual .conversion-page .billing-switch{background:#281c25;border-color:#987086}
+.phase2-visual .conversion-page .billing-switch button{color:#e2d1dc}
+.phase2-visual .conversion-page .billing-switch button.is-active{background:#efb9d2;color:#291b23}
+.phase2-visual .conversion-page .button,
+.phase2-visual .conversion-page .annual-option{background:#efb9d2;border-color:#efb9d2;color:#291b23;box-shadow:0 8px 24px #0003}
+.phase2-visual .conversion-page .button:hover,
+.phase2-visual .conversion-page .annual-option:hover{background:#f7cee2;border-color:#f7cee2;color:#291b23}
+.phase2-visual .conversion-page .annual-option small{color:#49303f}
+.phase2-visual .conversion-page .button.secondary{background:transparent;border-color:#c991ae;color:#fff8fc;box-shadow:none}
+.phase2-visual .conversion-page .comparison-heading,
+.phase2-visual .conversion-page .comparison-head{background:#49333f;color:#fff8fc}
+.phase2-visual .conversion-page .comparison-row,
+.phase2-visual .conversion-page .audience-list article,
+.phase2-visual .conversion-page .faq-list details{border-color:#705364}
+.phase2-visual .conversion-page .comparison-row b,
+.phase2-visual .conversion-page .comparison-row strong,
+.phase2-visual .conversion-page .comparison-mobile-card dd{color:#fff8fc}
+.phase2-visual .conversion-page .comparison-mobile-card dt{color:#e2d1dc}
+.phase2-visual .conversion-page .mobile-offer{background:#2e232c;border-color:#987086;color:#fff8fc}
+.phase2-visual .conversion-page .mobile-offer small{color:#e2d1dc}
+.phase2-visual .conversion-page .site-footer{border-color:#705364}
+.phase2-visual .conversion-page :is(a,button,summary):focus-visible{outline:3px solid #efb9d2;outline-offset:4px}
+/* Form surfaces remain light, with dark text and the original brand button. */
+.phase2-visual .conversion-page .auth-modal{color:#202722;background:#fff}
+.phase2-visual .conversion-page .auth-modal .eyebrow,
+.phase2-visual .conversion-page .auth-modal .link-button{color:#6b3f50}
+.phase2-visual .conversion-page .auth-modal .button{color:#fff;background:#6b3f50;border-color:#6b3f50}
+.phase2-visual .conversion-page .auth-modal .button:hover{background:#563241}
