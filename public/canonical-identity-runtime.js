@@ -46,9 +46,29 @@ function applyProfessionalIdentity(name) {
   }
 }
 
+async function fetchAuthenticatedUser(accessToken) {
+  if (!accessToken || !config.SUPABASE_URL || !config.SUPABASE_PUBLISHABLE_KEY) return null;
+  try {
+    const response = await fetch(`${String(config.SUPABASE_URL).replace(/\/$/, '')}/auth/v1/user`, {
+      headers: {
+        apikey: config.SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok) return null;
+    const user = await response.json();
+    return user?.id ? user : null;
+  } catch {
+    return null;
+  }
+}
+
 async function resolveProfessionalIdentity(session) {
-  const user = session?.user || null;
   const accessToken = session?.access_token || '';
+  let user = session?.user || null;
+  if (!user?.id && accessToken) user = await fetchAuthenticatedUser(accessToken);
+
   const ownerId = user?.id || '';
   const fallback = professionalFallback(user);
 
