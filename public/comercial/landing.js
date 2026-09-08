@@ -13,6 +13,7 @@ loadCss('./phase2.css?v=20260907');
 loadCss('./real-preview.css?v=20260907c');
 loadCss('./logo-motion.css?v=20260907b');
 loadCss('./mobile-fixes.css?v=20260907');
+loadCss('./conversion.css?v=20260908');
 root.classList.add('landing-motion-ready', 'phase2-visual');
 
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
@@ -164,10 +165,10 @@ if (heroVisual) {
     <div class="real-product-frame hero-real-preview" data-real-product-preview="home">
       <div class="real-window-bar" aria-hidden="true">
         <span class="real-window-dots"><i></i><i></i><i></i></span>
-        <span class="real-window-address">app / visão do dia</span>
-        <span class="real-window-status">online</span>
+        <span class="real-window-address">Prévia · dados fictícios</span>
+        <span class="real-window-status">Demonstração</span>
       </div>
-      <div class="hero-preview-viewport">${previewIframe('home', 'Prévia real do painel clínico')}</div>
+      <div class="hero-preview-viewport">${previewIframe('home', 'Prévia demonstrativa do painel clínico')}</div>
       <span class="hero-preview-meta">Visão do dia</span>
       <div class="hero-preview-controls" aria-label="Telas da plataforma">
         ${heroPreviewScreens.map((item, index) => `<button type="button" data-hero-preview="${index}" aria-label="Mostrar ${item.label}"${index === 0 ? ' class="is-active" aria-current="true"' : ''}></button>`).join('')}
@@ -212,7 +213,7 @@ function setHeroPreview(index) {
     heroPreviewFrame.src = previewUrl(item.screen);
     heroPreviewFrame.dataset.previewScreen = item.screen;
     if (heroPreviewMeta) heroPreviewMeta.textContent = item.label;
-    if (heroPreviewAddress) heroPreviewAddress.textContent = item.address;
+    if (heroPreviewAddress) heroPreviewAddress.textContent = 'Prévia · dados fictícios';
     heroPreviewControls.forEach((button, buttonIndex) => {
       const active = buttonIndex === nextIndex;
       button.classList.toggle('is-active', active);
@@ -275,7 +276,7 @@ let storyPreview = null;
 let storyPreviewTimer = null;
 
 if (storyStage && storySteps.length) {
-  storyStage.innerHTML = `<div class="real-story-window" data-real-story-window>${previewIframe(previewScreenByStage[0], 'Prévia real do fluxo clínico')}</div>`;
+  storyStage.innerHTML = `<div class="real-story-window" data-real-story-window>${previewIframe(previewScreenByStage[0], 'Prévia demonstrativa do fluxo clínico')}</div>`;
   storyPreview = storyStage.querySelector('.product-preview-frame');
   stageCaption = document.createElement('div');
   stageCaption.className = 'stage-caption';
@@ -347,7 +348,7 @@ updateStoryFromScroll();
 const featureCards = [...document.querySelectorAll('.feature-card')];
 const featurePreviewMap = [
   { index: 0, screen: 'agenda', label: 'Agenda real' },
-  { index: 1, screen: 'patients', label: 'Pacientes reais' },
+  { index: 1, screen: 'patients', label: 'Pacientes · demonstração' },
   { index: 2, screen: 'appointment', label: 'Prontuário real' },
   { index: 3, screen: 'patient', label: 'Evolução real' },
   { index: 4, screen: 'library', label: 'Biblioteca real' },
@@ -395,7 +396,7 @@ if (proCard) {
       annualCta.hidden = !annual;
       if (annual) {
         annualCta.querySelector('strong').textContent = 'Assinar anual — R$ 499';
-        annualCta.querySelector('small').textContent = 'até 12x no cartão';
+        annualCta.querySelector('small').textContent = 'Economize R$ 99,80 por ano · até 12x no cartão';
       }
       billingButtons.forEach((button) => {
         const active = button.dataset.billing === mode;

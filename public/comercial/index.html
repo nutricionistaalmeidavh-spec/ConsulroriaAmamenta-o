@@ -8,7 +8,7 @@
   <meta name="description" content="Agenda, prontuário, evolução, documentos e gestão em uma plataforma pensada para a rotina de consultoras de amamentação.">
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
+<body class="conversion-page">
   <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
 
   <header class="site-header">
@@ -22,7 +22,7 @@
       <a href="#planos">Planos</a>
       <a href="#faq">FAQ</a>
       <button class="link-button" type="button" data-open="login">Entrar</button>
-      <button class="button small" type="button" data-plan="freemium" data-open="signup">Começar grátis</button>
+      <button class="button small" type="button" data-plan="pro_monthly" data-open="signup">Quero o Pro</button>
     </nav>
   </header>
 
@@ -30,17 +30,13 @@
     <section class="hero" id="inicio">
       <div class="hero-copy" data-reveal>
         <span class="eyebrow">Sua consultoria, em um único fluxo</span>
-        <h1>Menos ferramentas soltas. <span>Mais tempo para acompanhar cada mãe e bebê.</span></h1>
-        <p>Agenda, prontuário, evolução, documentos, materiais e rotina profissional conectados em uma plataforma simples para quem trabalha com amamentação.</p>
+        <h1>Seu atendimento termina. <span>A organização dele não deveria tomar o resto do seu dia.</span></h1>
+        <p>Reúna agenda, prontuários, evolução de mãe e bebê e documentos em um sistema pensado para consultoras de amamentação.</p>
         <div class="hero-actions">
-          <button class="button button-large" type="button" data-plan="freemium" data-open="signup">Começar grátis</button>
+          <button class="button button-large" type="button" data-plan="pro_monthly" data-open="signup">Quero organizar minha consultoria</button>
           <a class="button secondary button-large" href="#produto">Ver como funciona <span aria-hidden="true">↓</span></a>
         </div>
-        <div class="hero-proof" aria-label="Destaques do plano gratuito">
-          <span><strong>R$ 0</strong> para começar</span>
-          <span><strong>Até 3</strong> mães/pacientes</span>
-          <span><strong>Mobile + desktop</strong></span>
-        </div>
+        <p class="offer-summary"><strong>Pro por R$ 49,90/mês</strong> · Pacientes ilimitados e upload de fotos e vídeos.</p><button class="link-button free-alternative" type="button" data-plan="freemium" data-open="signup">Prefiro começar gratuitamente</button><div class="hero-proof" aria-label="Recursos do Pro"><span><strong>Pacientes ilimitados</strong></span><span><strong>Fotos e vídeos</strong></span><span><strong>Celular + computador</strong></span></div>
       </div>
 
       <div class="hero-visual" data-reveal data-reveal-delay="120" aria-label="Prévia visual da plataforma">
@@ -97,17 +93,17 @@
     <section class="section problem-section" id="problema">
       <div class="section-heading centered" data-reveal>
         <span class="eyebrow">A rotina não precisa ser fragmentada</span>
-        <h2>Quando cada parte do atendimento fica em um lugar, o trabalho cresce antes mesmo da agenda crescer.</h2>
-        <p>O sistema foi desenhado para diminuir troca de contexto e manter a história clínica organizada do começo ao acompanhamento.</p>
+        <h2>Quantos lugares você precisa abrir para acompanhar uma única paciente?</h2>
+        <p>Conversas, anotações e arquivos separados tornam cada retorno mais trabalhoso do que precisa ser.</p>
       </div>
       <div class="pain-grid">
-        <article class="pain-card" data-reveal><span class="pain-icon">01</span><h3>Agenda de um lado</h3><p>Horários, formatos e retornos deixam de depender de anotações espalhadas.</p></article>
-        <article class="pain-card" data-reveal data-reveal-delay="80"><span class="pain-icon">02</span><h3>Registros em outro</h3><p>Prontuário e histórico permanecem ligados à paciente e ao atendimento certo.</p></article>
-        <article class="pain-card" data-reveal data-reveal-delay="160"><span class="pain-icon">03</span><h3>Evolução sem contexto</h3><p>Medidas, curvas, documentos e observações passam a contar uma única história.</p></article>
+        <article class="pain-card" data-reveal><span class="pain-icon">01</span><h3>Procurar antes de atender</h3><p>Encontrar horários e informações entre conversas, anotações e arquivos.</p></article>
+        <article class="pain-card" data-reveal data-reveal-delay="80"><span class="pain-icon">02</span><h3>Reconstruir o histórico</h3><p>Preparar um retorno reunindo o que aconteceu desde a última consulta.</p></article>
+        <article class="pain-card" data-reveal data-reveal-delay="160"><span class="pain-icon">03</span><h3>Continuar depois da consulta</h3><p>Encerrar o atendimento e ainda precisar organizar registros e pagamentos.</p></article>
       </div>
       <div class="problem-answer" data-reveal>
         <span>Uma base única</span>
-        <strong>Paciente → atendimento → registro → evolução → plano</strong>
+        <strong>Sua rotina pode crescer sem multiplicar essa desorganização.</strong>
       </div>
     </section>
 
@@ -115,15 +111,15 @@
       <div class="story-shell">
         <div class="story-copy" data-reveal>
           <span class="eyebrow">Veja o fluxo</span>
-          <h2>O atendimento avança. O contexto acompanha.</h2>
-          <p>Em vez de navegar por ferramentas desconectadas, cada etapa conduz naturalmente à próxima.</p>
+          <h2>Da consulta ao acompanhamento: veja tudo no mesmo lugar.</h2>
+          <p>Explore as etapas abaixo. Prévia demonstrativa da interface, com dados fictícios.</p>
           <div class="story-steps">
             <article class="story-step is-active"><span>01</span><div><strong>Abra o dia</strong><small>Agenda, próximos atendimentos e retornos visíveis.</small></div></article>
             <article class="story-step"><span>02</span><div><strong>Entre na paciente</strong><small>Mãe, bebê, histórico e dados clínicos no mesmo espaço.</small></div></article>
             <article class="story-step"><span>03</span><div><strong>Registre o atendimento</strong><small>Prontuário, evolução e documentos vinculados ao contexto correto.</small></div></article>
             <article class="story-step"><span>04</span><div><strong>Continue acompanhando</strong><small>Retornos e evolução sem reconstruir o histórico a cada consulta.</small></div></article>
           </div>
-          <button class="text-cta" type="button" data-plan="freemium" data-open="signup">Experimentar gratuitamente <span aria-hidden="true">→</span></button>
+          <button class="text-cta" type="button" data-plan="pro_monthly" data-open="signup">Quero essa organização na minha rotina <span aria-hidden="true">→</span></button>
         </div>
 
         <div class="story-stage" data-reveal data-reveal-delay="100">
@@ -155,16 +151,16 @@
     <section class="section" id="recursos">
       <div class="section-heading" data-reveal>
         <span class="eyebrow">Tudo conectado</span>
-        <h2>Recursos que acompanham a prática, não apenas o cadastro.</h2>
+        <h2>Uma estrutura completa para acompanhar suas pacientes.</h2>
         <p>Uma estrutura clínica e administrativa para reduzir retrabalho e manter o atendimento legível com o passar do tempo.</p>
       </div>
       <div class="feature-grid">
-        <article class="feature-card feature-large" data-reveal><span class="feature-number">01</span><div><h3>Agenda e rotina do dia</h3><p>Consultas, formatos, horários e status organizados em uma visão objetiva do que precisa acontecer.</p></div><div class="feature-visual agenda-mini"><span></span><span></span><span></span></div></article>
-        <article class="feature-card" data-reveal data-reveal-delay="60"><span class="feature-number">02</span><h3>Paciente + mãe + bebê</h3><p>Dados essenciais e histórico reunidos em um fluxo clínico coerente.</p></article>
-        <article class="feature-card" data-reveal data-reveal-delay="120"><span class="feature-number">03</span><h3>Prontuário e evolução</h3><p>Registros ligados à consulta correta para manter continuidade entre atendimentos.</p></article>
-        <article class="feature-card" data-reveal><span class="feature-number">04</span><h3>Curvas e medidas</h3><p>Acompanhe dados de crescimento e evolução sem separar o número do contexto clínico.</p></article>
+        <article class="feature-card feature-large" data-reveal><span class="feature-number">01</span><div><h3>Saiba o que precisa acontecer hoje.</h3><p>Consultas, formatos, horários e status organizados em uma visão objetiva do que precisa acontecer.</p></div><div class="feature-visual agenda-mini"><span></span><span></span><span></span></div></article>
+        <article class="feature-card" data-reveal data-reveal-delay="60"><span class="feature-number">02</span><h3>Mãe e bebê no mesmo contexto.</h3><p>Dados essenciais e histórico reunidos em um fluxo clínico coerente.</p></article>
+        <article class="feature-card" data-reveal data-reveal-delay="120"><span class="feature-number">03</span><h3>Abra o retorno com o histórico em mãos.</h3><p>Registros ligados à consulta correta para manter continuidade entre atendimentos.</p></article>
+        <article class="feature-card" data-reveal><span class="feature-number">04</span><h3>Acompanhe a evolução ao longo do cuidado.</h3><p>Acompanhe dados de crescimento e evolução sem separar o número do contexto clínico.</p></article>
         <article class="feature-card" data-reveal data-reveal-delay="60"><span class="feature-number">05</span><h3>Documentos e materiais</h3><p>Organize orientações e arquivos usados na prática profissional.</p></article>
-        <article class="feature-card feature-dark" data-reveal data-reveal-delay="120"><span class="feature-number">06</span><h3>Fotos e vídeos</h3><p>No Pro, mídias clínicas entram no mesmo histórico do acompanhamento.</p><span class="pro-chip">PRO</span></article>
+        <article class="feature-card feature-dark" data-reveal data-reveal-delay="120"><span class="feature-number">06</span><h3>Documente além do texto.</h3><p>No Pro, mídias clínicas entram no mesmo histórico do acompanhamento.</p><span class="pro-chip">PRO</span></article>
       </div>
     </section>
 
@@ -176,28 +172,19 @@
       <div class="audience-list" data-reveal data-reveal-delay="100">
         <article><span>01</span><strong>Consultoras de amamentação</strong><p>Rotina clínica, agenda e acompanhamento em um só lugar.</p></article>
         <article><span>02</span><strong>Profissionais materno-infantis</strong><p>Quando o cuidado exige histórico e continuidade entre encontros.</p></article>
-        <article><span>03</span><strong>Clínicas e equipes</strong><p>Estrutura pronta para evoluir com uma operação mais organizada.</p></article>
+        <article><span>03</span><strong>Consultorias em crescimento</strong><p>Pacientes ilimitados no Pro para acompanhar uma rotina que está crescendo.</p></article>
       </div>
     </section>
 
     <section class="section plans-section" id="planos">
       <div class="section-heading centered" data-reveal>
         <span class="eyebrow">Planos simples</span>
-        <h2>Comece sem custo. Migre quando precisar de escala e mídia clínica.</h2>
-        <p>O Freemium entrega o fluxo completo para uma operação pequena. O Pro remove o limite de pacientes e libera upload de fotos e vídeos.</p>
+        <h2>Sua consultoria organizada. Seu próximo passo é o Pro.</h2>
+        <p>Escolha como pagar e comece a reunir seus atendimentos em um só lugar. Pacientes ilimitados e upload de fotos e vídeos no Pro.</p>
       </div>
 
       <div class="pricing-grid">
-        <article class="price-card free" data-reveal>
-          <div class="price-top"><span class="plan-label">Comece grátis</span><h3>Freemium</h3><div class="price"><strong>R$ 0</strong><span>/ para começar</span></div><p>Para testar e usar o fluxo completo com até 3 mães/pacientes.</p></div>
-          <ul>
-            <li>Fluxo completo da plataforma</li>
-            <li>Até 3 mães/pacientes</li>
-            <li>Agenda, prontuário, evolução e documentos</li>
-            <li>Sem upload de fotos e vídeos</li>
-          </ul>
-          <button class="button secondary full" type="button" data-plan="freemium" data-open="signup">Começar grátis</button>
-        </article>
+
 
         <article class="price-card pro" data-reveal data-reveal-delay="100">
           <div class="price-ribbon">Mais completo</div>
@@ -209,12 +196,22 @@
             <li>Biblioteca e documentos sem limite de pacientes</li>
           </ul>
           <div class="pro-actions">
-            <button class="button full" type="button" data-plan="pro_monthly" data-open="signup">Assinar mensal — R$ 49,90</button>
-            <button class="annual-option" type="button" data-plan="pro_annual" data-open="signup"><span><strong>Ou R$ 499/ano</strong><small>até 12x no cartão</small></span><b aria-hidden="true">→</b></button>
+            <button class="button full" type="button" data-plan="pro_monthly" data-open="signup">Quero começar com o Pro — R$ 49,90/mês</button>
+            <button class="annual-option" type="button" data-plan="pro_annual" data-open="signup"><span><strong>Ou R$ 499/ano</strong><small>Economize R$ 99,80 por ano · até 12x no cartão</small></span><b aria-hidden="true">→</b></button>
           </div>
         </article>
       </div>
 
+      <div class="free-plan-wrap">        <article class="price-card free" data-reveal>
+          <div class="price-top"><span class="plan-label">Comece grátis</span><h3>Freemium</h3><div class="price"><strong>R$ 0</strong><span>/ para começar</span></div><p>Para testar e usar o fluxo completo com até 3 mães/pacientes.</p></div>
+          <ul>
+            <li>Fluxo completo da plataforma</li>
+            <li>Até 3 mães/pacientes</li>
+            <li>Agenda, prontuário, evolução e documentos</li>
+            <li>Sem upload de fotos e vídeos</li>
+          </ul>
+          <button class="button secondary full" type="button" data-plan="freemium" data-open="signup">Começar grátis</button>
+        </article></div>
       <div class="comparison-wrap" data-reveal>
         <div class="comparison-heading"><span>Compare os planos</span><small>Escolha pelo momento da sua prática.</small></div>
         <div class="comparison-table" role="table" aria-label="Comparação entre os planos Freemium e Pro">
@@ -226,7 +223,7 @@
           <div class="comparison-row" role="row"><span role="cell">Uso sem limite de pacientes</span><b role="cell">—</b><b role="cell">✓</b></div>
         </div>
       </div>
-      <p class="payment-note" data-reveal>Nos planos Pro, você cria a conta e segue direto para o pagamento. A confirmação do e-mail acontece depois da compra e é obrigatória para liberar o acesso ao sistema.</p>
+      <p class="payment-note" data-reveal>Mensal: R$ 49,90/mês. Anual: R$ 499/ano, com economia de R$ 99,80 em relação a 12 mensalidades. Consulte as condições do parcelamento no checkout.</p>
     </section>
 
     <section class="faq-section" id="faq">
@@ -235,7 +232,7 @@
           <span class="eyebrow">Dúvidas frequentes</span>
           <h2>Antes de começar.</h2>
           <p>As principais informações sobre acesso, planos e funcionamento da plataforma.</p>
-          <button class="text-cta" type="button" data-plan="freemium" data-open="signup">Criar minha conta grátis <span aria-hidden="true">→</span></button>
+          <button class="text-cta" type="button" data-plan="pro_monthly" data-open="signup">Quero começar com o Pro <span aria-hidden="true">→</span></button>
         </div>
         <div class="faq-list" data-reveal data-reveal-delay="80">
           <details><summary>Preciso instalar alguma coisa?<span>+</span></summary><p>Não para usar a versão web. A plataforma foi pensada para funcionar tanto em celular quanto em desktop pelo navegador.</p></details>
@@ -251,8 +248,8 @@
 
     <section class="cta-section" data-reveal>
       <div class="cta-orb" aria-hidden="true"></div>
-      <div><span class="eyebrow">Comece pela organização</span><h2>Sua próxima consulta pode começar com tudo no lugar.</h2><p>Crie sua conta gratuita e use o fluxo completo com até 3 mães/pacientes.</p></div>
-      <button class="button light button-large" type="button" data-plan="freemium" data-open="signup">Começar grátis</button>
+      <div><span class="eyebrow">Comece pela organização</span><h2>Sua próxima paciente pode encontrar uma consultoria mais organizada.</h2><p>Comece a reunir sua rotina em um único lugar. Pro por R$ 49,90/mês.</p></div>
+      <button class="button light button-large" type="button" data-plan="pro_monthly" data-open="signup">Quero começar com o Pro</button>
     </section>
   </main>
 
@@ -262,6 +259,7 @@
     <button class="link-button" type="button" data-open="login">Já tenho conta</button>
   </footer>
 
+  <aside class="mobile-offer" aria-label="Plano Pro" hidden><span><strong>Pro · R$ 49,90/mês</strong><small>Pacientes ilimitados</small></span><button class="button small" type="button" data-plan="pro_monthly" data-open="signup">Começar</button></aside>
   <div class="modal-backdrop" id="auth-modal" hidden>
     <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <button class="modal-close" type="button" data-close aria-label="Fechar">×</button>
@@ -333,7 +331,8 @@
     }
   </script>
   <script src="./config.js?v=20260907-auth3"></script>
-  <script type="module" src="./landing.js?v=20260907-sales1"></script>
+  <script type="module" src="./landing.js?v=20260908-conversion"></script>
+  <script type="module" src="./conversion.js?v=20260908"></script>
   <script type="module" src="./app.js?v=20260907-auth3"></script>
   <script type="module" src="./auth-recovery.js?v=20260907-auth3"></script>
 </body>

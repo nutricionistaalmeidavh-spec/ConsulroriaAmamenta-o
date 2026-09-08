@@ -1,0 +1,33 @@
+/* Conversion layout; scoped to the commercial page. */
+.conversion-page .offer-summary{font-size:16px!important;line-height:1.6;max-width:680px!important;margin:22px auto 10px!important}
+.conversion-page .offer-summary strong{color:var(--brand-strong)}
+.conversion-page .free-alternative{font-size:13px;text-decoration:underline;text-underline-offset:4px;margin:4px auto}
+.conversion-page .hero-actions{gap:12px}
+.conversion-page .hero-actions .secondary{background:transparent;box-shadow:none}
+.phase2-visual .conversion-page .hero-copy h1{font-size:clamp(38px,5.5vw,76px);max-width:1050px;line-height:1.08}
+.phase2-visual .conversion-page .pricing-grid{grid-template-columns:minmax(0,1fr);max-width:760px}
+.phase2-visual .conversion-page .price-card.pro{padding:clamp(24px,5vw,52px);border:2px solid var(--brand);box-shadow:var(--shadow)}
+.conversion-page .price-card.pro .price strong{font-size:clamp(48px,8vw,76px)}
+.conversion-page .annual-option small{white-space:normal;line-height:1.5}
+.conversion-page .free-plan-wrap{max-width:760px;margin:24px auto 0}
+.conversion-page .free-plan-wrap .price-card{padding:26px;border:1px solid var(--border);box-shadow:none}
+.conversion-page .free-plan-wrap .price-top p{margin-bottom:12px}
+.conversion-page .free-plan-wrap .price strong{font-size:30px}
+.conversion-page .free-plan-wrap ul{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+.conversion-page .free-plan-wrap .button{width:auto}
+.conversion-page .hero-preview-meta::after{content:" · dados fictícios";font-weight:400}
+.conversion-page .mobile-offer[hidden]{display:none!important}
+.conversion-page .mobile-offer{display:none}
+.conversion-page .payment-note{max-width:760px;margin:24px auto;line-height:1.6}
+@media(max-width:760px){
+ .conversion-page{padding-bottom:100px}
+ .conversion-page .mobile-offer{position:fixed;inset:auto 0 0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px calc(14px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -8px 30px rgba(47,56,51,.08)}
+ .conversion-page .mobile-offer>span{min-width:0}
+ .conversion-page .mobile-offer strong{font-size:13px;display:block}
+ .conversion-page .mobile-offer small{font-size:11px;color:var(--muted)}
+ .conversion-page .mobile-offer .button{flex-shrink:0}
+ .conversion-page .free-plan-wrap ul{grid-template-columns:1fr}
+ .conversion-page .pro-actions .button{white-space:normal;line-height:1.4}
+ .conversion-page .hero-actions .button{white-space:normal}
+}
+@media(prefers-reduced-motion:reduce){.conversion-page .mobile-offer{transition:none}}
