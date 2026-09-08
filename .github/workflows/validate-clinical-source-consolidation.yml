@@ -5,11 +5,18 @@ on:
     branches:
       - main
       - refactor/clinical-source-consolidation-work
+      - feature/canonical-multiclient-routing
   pull_request:
     paths:
+      - 'index.html'
+      - 'app/**'
       - 'src/bootstrap.js'
+      - 'src/app-identity.js'
       - 'public/clinical-source/**'
+      - 'public/debora/**'
+      - 'public/comercial/**'
       - 'scripts/materialize-clinical-source.mjs'
+      - 'scripts/test-canonical-app-routing.mjs'
       - 'tests/clinical-source-*.test.mjs'
       - '.github/workflows/validate-clinical-source-consolidation.yml'
 
@@ -23,6 +30,8 @@ jobs:
           node-version: 22
       - run: npm install
       - run: node --test tests/clinical-source-*.test.mjs
+      - name: Validate canonical multi-client routing
+        run: node scripts/test-canonical-app-routing.mjs
       - name: Validate current Cloudflare Asaas contract
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
