@@ -61,7 +61,11 @@ for (const file of ['supabase/phase-saas-foundation.sql', 'supabase/phase-saas-e
 
 const deboraLanding = read('public/debora/index.html');
 assert.match(deboraLanding, /Débora/, 'personal landing may use Débora identity');
-assert.match(deboraLanding, /href=["']\/["']/, 'personal landing access CTA must preserve the existing root app URL');
+assert.match(
+  deboraLanding,
+  /(?:href=["']\/["']|\["Área profissional",\s*["']\/["']\])/, 
+  'personal landing access CTA must preserve the existing root app URL'
+);
 assert.doesNotMatch(deboraLanding, /saas_accounts|subscriptions|entitlements|clinical_encounters|mothers\?/, 'personal landing must remain marketing-only');
 
 console.log('canonical multi-client routing contract: ok');
