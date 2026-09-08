@@ -10,8 +10,11 @@ on:
     paths:
       - 'index.html'
       - 'app/**'
+      - 'vite.config.js'
       - 'src/bootstrap.js'
       - 'src/app-identity.js'
+      - 'public/manifest.webmanifest'
+      - 'public/canonical-identity-runtime.js'
       - 'public/clinical-source/**'
       - 'public/debora/**'
       - 'public/comercial/**'
@@ -32,6 +35,19 @@ jobs:
       - run: node --test tests/clinical-source-*.test.mjs
       - name: Validate canonical multi-client routing
         run: node scripts/test-canonical-app-routing.mjs
+      - name: Validate commercial and SaaS regressions
+        run: |
+          node scripts/test-commercial-funnel.mjs
+          node scripts/test-commercial-auth-recovery.mjs
+          node scripts/test-commercial-checkout-return.mjs
+          node scripts/test-commercial-landing.mjs
+          node scripts/test-deferred-email-flow.mjs
+          node scripts/test-preconfirm-checkout.mjs
+          node scripts/test-duplicate-signup-flow.mjs
+          node scripts/test-saas-foundation.mjs
+          node scripts/test-saas-plans.mjs
+          node scripts/test-saas-enforcement.mjs
+          node scripts/test-billing-scaffold.mjs
       - name: Validate current Cloudflare Asaas contract
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
@@ -39,6 +55,10 @@ jobs:
       - run: npm run build
       - name: Verify canonical runtime is published
         run: |
+          test -f dist/index.html
+          test -f dist/app/index.html
+          test -f dist/debora/index.html
+          test -f dist/comercial/index.html
           test -f dist/clinical-source/index.html
           test -f dist/clinical-source/core/app-shell.js
           test -f dist/clinical-source/core/lib/supabase-client.js
