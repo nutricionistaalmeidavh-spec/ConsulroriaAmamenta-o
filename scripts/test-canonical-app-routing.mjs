@@ -66,8 +66,11 @@ assert.match(
   /(?:href=["']\/["']|\["Área profissional",\s*["']\/["']\])/, 
   'personal landing access CTA must preserve the existing root app URL'
 );
-assert.match(deboraLanding, /\/icon\.svg/, 'personal landing must use the approved purple-pink brand mark');
-assert.match(deboraLanding, /#(?:FFFAF7|FEFAF7)/i, 'personal landing must preserve the light off-white visual direction');
+assert.match(deboraLanding, /public\/logo-debora\.jpeg/, 'personal landing must use the original brand image');
+assert.ok(existsSync('public/debora/public/logo-debora.jpeg'));
+assert.ok(existsSync('public/debora/public/debora-hero.jpeg'));
+assert.ok(existsSync('public/debora/public/logo-motion-original.html'));
+assert.match(read('public/debora/style.css'), /#(?:FFFAF7|FEFAF7)/i, 'personal landing must preserve the light off-white visual direction');
 assert.match(deboraLanding, /Como posso/, 'personal landing must preserve the approved services heading');
 assert.match(deboraLanding, /te ajudar/, 'personal landing must preserve the approved italic services accent');
 assert.doesNotMatch(deboraLanding, /--bg-deep\s*:\s*#160f0d/i, 'deprecated dark brown landing must not return');
