@@ -1,3 +1,5 @@
+import './app-entry-bridge.js';
+
 const runtime = window.SAAS_RUNTIME_CONFIG || {};
 const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
 const publishableKey = String(runtime.supabasePublishableKey || '');
