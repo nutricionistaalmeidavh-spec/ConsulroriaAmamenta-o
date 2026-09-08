@@ -8,6 +8,9 @@ const APP_CONTEXT = resolveAppIdentity(window.location);
 window.CANONICAL_APP_CONTEXT = APP_CONTEXT;
 const APP_URL = `${window.location.origin}${APP_CONTEXT.basePath}`;
 const CLINICAL_SOURCE_ROOT = '/clinical-source';
+const LEGACY_CLINICAL_SESSION_KEY = 'debora-lactacao-session';
+const CANONICAL_SESSION_KEY = 'amamentacao-session';
+const COMMERCIAL_SESSION_KEY = 'commercial.saas.session.v1';
 
 const MODULE_PATHS = [
   'lib/supabase-client.js',
@@ -37,6 +40,43 @@ const CLINICAL_RUNTIME_PATHS = [
   'features/clinical-note-feature.css',
   'features/patient-fixes.css',
 ];
+
+function validStoredSession(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.access_token ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function bridgeCompatibleSession() {
+  try {
+    const legacyRaw = sessionStorage.getItem(LEGACY_CLINICAL_SESSION_KEY);
+    const canonicalRaw = sessionStorage.getItem(CANONICAL_SESSION_KEY);
+    const commercialRaw = sessionStorage.getItem(COMMERCIAL_SESSION_KEY);
+    const legacy = validStoredSession(legacyRaw);
+    const canonical = validStoredSession(canonicalRaw);
+    const commercial = validStoredSession(commercialRaw);
+
+    // `/app/` is reached from the commercial funnel. In that context the authenticated
+    // commercial session is authoritative and may safely seed the existing clinical key.
+    if (APP_CONTEXT.entryMode === 'app' && commercial) {
+      sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, commercialRaw);
+      sessionStorage.setItem(CANONICAL_SESSION_KEY, commercialRaw);
+      return;
+    }
+
+    // Root compatibility keeps Débora's already established clinical session untouched.
+    if (legacy && !canonical) sessionStorage.setItem(CANONICAL_SESSION_KEY, legacyRaw);
+    else if (!legacy && canonical) sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, canonicalRaw);
+  } catch {
+    // Restricted browser contexts may block sessionStorage. Login remains available.
+  }
+}
+
+bridgeCompatibleSession();
 
 function installAuthRedirectGuard() {
   if (window.__deboraAuthRedirectGuard) return;
@@ -281,6 +321,26 @@ async function loadLegacyRuntime() {
   return runtime;
 }
 
+function genericizeClinicalConfig(source) {
+  return source.replace("APP_NAME: 'Débora Lactação'", `APP_NAME: '${CANONICAL_PRODUCT_NAME}'`);
+}
+
+function genericizeRuntimeModule(path, source) {
+  if (path === 'lib/auth-service.js') {
+    return source.replace(
+      "signUp: (email, password) => client.signUp(String(email || '').trim(), String(password || ''), { display_name: 'Débora' }),",
+      "signUp: (email, password, metadata = {}) => client.signUp(String(email || '').trim(), String(password || ''), metadata),",
+    );
+  }
+  if (path === 'lib/supabase-client.js') {
+    return source.replace(
+      "async function signUp(email, password, metadata = { display_name: 'Débora' }) {",
+      'async function signUp(email, password, metadata = {}) {',
+    );
+  }
+  return source;
+}
+
 function genericizeClinicalHtml(source) {
   return source
     .replaceAll('Débora Lactação', CANONICAL_PRODUCT_NAME)
@@ -295,12 +355,11 @@ function genericizeClinicalHtml(source) {
 
 function genericizeClinicalShell(source) {
   let shell = `const CANONICAL_PRODUCT_NAME = globalThis.CANONICAL_APP_CONTEXT?.productName || 'Gestão de Amamentação';\nconst currentProfessionalName = () => globalThis.CANONICAL_PROFESSIONAL_NAME || 'Profissional';\n${source}`;
-  shell = shell
+  return shell
     .replaceAll("titles[screen] || 'Débora Lactação'", 'titles[screen] || CANONICAL_PRODUCT_NAME')
     .replace("setText('[data-home-date]', `${greeting}, Débora ♥`);", "setText('[data-home-date]', `${greeting}, ${currentProfessionalName()} ♥`);")
     .replace("createCarePlanPdf({ title: 'Débora Lactação',", 'createCarePlanPdf({ title: CANONICAL_PRODUCT_NAME,')
     .replace('`debora-lactacao-backup-${new Date().toISOString().slice(0,10)}.json`', '`gestao-amamentacao-backup-${new Date().toISOString().slice(0,10)}.json`');
-  return shell;
 }
 
 async function boot() {
@@ -314,7 +373,7 @@ async function boot() {
   const moduleUrls = {};
 
   for (const path of MODULE_PATHS) {
-    moduleUrls[path] = moduleUrl(runtime[`core/${path}`]);
+    moduleUrls[path] = moduleUrl(genericizeRuntimeModule(path, runtime[`core/${path}`]));
   }
 
   let shell = genericizeClinicalShell(runtime['core/app-shell.js']);
@@ -330,7 +389,7 @@ async function boot() {
   const clinicalUrl = moduleUrl(runtime['features/clinical-note-feature.js']);
   const patientUrl = '/patient-fixes-v2.js';
   const css = runtime['styles.css'];
-  const config = runtime['config.js'];
+  const config = genericizeClinicalConfig(runtime['config.js']);
 
   let html = genericizeClinicalHtml(runtime['index.html']);
   html = html
