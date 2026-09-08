@@ -66,6 +66,11 @@ assert.match(
   /(?:href=["']\/["']|\["Área profissional",\s*["']\/["']\])/, 
   'personal landing access CTA must preserve the existing root app URL'
 );
+assert.match(deboraLanding, /\/icon\.svg/, 'personal landing must use the approved purple-pink brand mark');
+assert.match(deboraLanding, /#(?:FFFAF7|FEFAF7)/i, 'personal landing must preserve the light off-white visual direction');
+assert.match(deboraLanding, /Como posso/, 'personal landing must preserve the approved services heading');
+assert.match(deboraLanding, /te ajudar/, 'personal landing must preserve the approved italic services accent');
+assert.doesNotMatch(deboraLanding, /--bg-deep\s*:\s*#160f0d/i, 'deprecated dark brown landing must not return');
 assert.doesNotMatch(deboraLanding, /saas_accounts|subscriptions|entitlements|clinical_encounters|mothers\?/, 'personal landing must remain marketing-only');
 
 console.log('canonical multi-client routing contract: ok');
