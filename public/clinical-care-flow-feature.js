@@ -36,6 +36,7 @@ export function buildCarePlanInstructions(plan={}){
 export function isMotherShareAllowed(item={}){
   const kind=norm(item.kind);
   const title=norm(item.title);
+  if(item.published===false)return false;
   if(['evaluation','referral','anamnesis'].includes(kind))return false;
   if(/prontuario|anamnese|encaminhamento|avaliacao completa/.test(title))return false;
   if(kind==='care_plan'||kind==='orientation')return true;
@@ -63,7 +64,8 @@ export function buildMotherSafeEncounterShare(encounter={}){
 
 const browser=typeof window!=='undefined'&&typeof document!=='undefined';
 if(!browser){}else{
-  const state={hydratedEncounter:'',portalFiltering:false,portalVerified:new Set(),portalLoadedKey:'',timer:null};
+  const state={hydrationCache:new Map(),hydrationLoading:'',portalFiltering:false,portalVerified:new Set(),portalLoadedKey:'',timer:null};
+  if(location.hash.startsWith('#mae'))document.documentElement.dataset.ccfPortalFilter='pending';
 
   function tokenWalk(value){
     if(!value)return null;
@@ -149,19 +151,20 @@ if(!browser){}else{
     if(!window.DeboraReferrals?.openNew){toast('Módulo de encaminhamentos ainda está carregando.','warning');return}
     window.DeboraEncounter?.flush?.().catch(()=>{}).finally(()=>window.DeboraReferrals.openNew(motherId,event.currentTarget).catch(error=>toast(error.message||'Não foi possível criar o encaminhamento.','error')));
   }
+  function applyHydratedEncounter(enc){
+    const feeding=asObject(enc.feeding_assessment),byBaby=asObject(feeding.byBaby);
+    for(const card of document.querySelectorAll('[data-feeding-assessment-editor] .baby-clinical-card')){
+      const babyId=card.querySelector('[data-baby-id]')?.dataset.babyId||'';const source=asObject(byBaby[babyId]||feeding);
+      for(const key of ['beforeFeed','afterFeed']){const field=card.querySelector(`[data-encounter-field="${key}"]`);if(field&&!field.value&&clean(source[key]))field.value=clean(source[key])}
+      updateFeedingChecklist(card);
+    }
+    const plan=asObject(enc.care_plan);for(const key of ['priorityGuidance','feedingPositioning','expressionSupplement','routine','warningSigns']){const field=document.querySelector(`[data-wizard-step="6"] [data-encounter-field="${key}"]`);if(field&&!field.value&&clean(plan[key]))field.value=clean(plan[key])}
+  }
   async function hydrateAdditiveFields(){
-    const encounterId=window.DeboraEncounter?.getEncounterId?.()||'';if(!encounterId||state.hydratedEncounter===encounterId)return;const token=professionalToken();if(!token)return;
-    try{
-      const rows=await rest(`clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=id,feeding_assessment,care_plan&limit=1`,token),enc=rows?.[0];if(!enc)return;
-      const feeding=asObject(enc.feeding_assessment),byBaby=asObject(feeding.byBaby);
-      for(const card of document.querySelectorAll('[data-feeding-assessment-editor] .baby-clinical-card')){
-        const babyId=card.querySelector('[data-baby-id]')?.dataset.babyId||'';const source=asObject(byBaby[babyId]||feeding);
-        for(const key of ['beforeFeed','afterFeed']){const field=card.querySelector(`[data-encounter-field="${key}"]`);if(field&&!field.value&&clean(source[key]))field.value=clean(source[key])}
-        updateFeedingChecklist(card);
-      }
-      const plan=asObject(enc.care_plan);for(const key of ['priorityGuidance','feedingPositioning','expressionSupplement','routine','warningSigns']){const field=document.querySelector(`[data-wizard-step="6"] [data-encounter-field="${key}"]`);if(field&&!field.value&&clean(plan[key]))field.value=clean(plan[key])}
-      state.hydratedEncounter=encounterId;
-    }catch(error){console.warn('Complementos do plano não puderam ser restaurados',error)}
+    const encounterId=window.DeboraEncounter?.getEncounterId?.()||'';if(!encounterId)return;const token=professionalToken();if(!token)return;
+    const cached=state.hydrationCache.get(encounterId);if(cached){applyHydratedEncounter(cached);return}
+    if(state.hydrationLoading===encounterId)return;state.hydrationLoading=encounterId;
+    try{const rows=await rest(`clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=id,feeding_assessment,care_plan&limit=1`,token),enc=rows?.[0];if(!enc)return;state.hydrationCache.set(encounterId,enc);applyHydratedEncounter(enc)}catch(error){console.warn('Complementos do plano não puderam ser restaurados',error)}finally{if(state.hydrationLoading===encounterId)state.hydrationLoading=''}
   }
   function hardenProfessionalPanel(){
     const select=document.querySelector('#mf-kind');if(select&&!select.dataset.ccfHardened){select.dataset.ccfHardened='1';for(const option of [...select.options])if(!['care_plan','orientation','document','appointment'].includes(option.value))option.remove();const note=document.createElement('small');note.className='ccf-publish-note';note.textContent='A Área da Mãe recebe somente plano de cuidado, orientações, termos e próximo retorno. Prontuário, anamnese, avaliações e encaminhamentos permanecem privados.';select.closest('.mf-grid')?.after(note)}
@@ -170,7 +173,7 @@ if(!browser){}else{
     const token=professionalToken();if(!token)return toast('Sessão profissional não encontrada.','error');
     try{const rows=await rest(`clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=id,occurred_at,care_plan&limit=1`,token),enc=rows?.[0];if(!enc)throw new Error('Atendimento não encontrado.');const share=buildMotherSafeEncounterShare(enc);const kind=document.querySelector('#mf-kind'),title=document.querySelector('#mf-title'),body=document.querySelector('#mf-body');if(kind)kind.value=share.kind;if(title)title.value=share.title;if(body)body.value=share.body;toast('Resumo seguro preparado. Revise antes de publicar.','success')}catch(error){toast(error.message||'Não foi possível preparar o resumo.','error')}
   }
-  function validatePublish(){const item={kind:document.querySelector('#mf-kind')?.value||'',title:document.querySelector('#mf-title')?.value||''};if(isMotherShareAllowed(item))return true;toast('Este tipo de conteúdo deve permanecer somente na área profissional.','error');return false}
+  function validatePublish(){const item={kind:document.querySelector('#mf-kind')?.value||'',title:document.querySelector('#mf-title')?.value||'',published:true};if(isMotherShareAllowed(item))return true;toast('Este tipo de conteúdo deve permanecer somente na área profissional.','error');return false}
   async function filterMotherPortal(){
     if(state.portalFiltering)return;const shell=document.querySelector('.mp-shell');if(!shell)return;const token=motherToken();if(!token)return;
     const key=token.slice(-24);if(state.portalLoadedKey===key&&document.documentElement.dataset.ccfPortalFilter==='ready'){applyPortalFilter();return}
@@ -195,6 +198,6 @@ if(!browser){}else{
     if(event.target.closest?.('#mf-publish')&&!validatePublish()){event.preventDefault();event.stopImmediatePropagation()}
   },true);
   new MutationObserver(()=>{clearTimeout(state.timer);state.timer=setTimeout(mountAll,45)}).observe(document.documentElement,{subtree:true,childList:true});
-  window.addEventListener('hashchange',()=>{state.portalLoadedKey='';setTimeout(mountAll,0)});
+  window.addEventListener('hashchange',()=>{state.portalLoadedKey='';if(location.hash.startsWith('#mae'))document.documentElement.dataset.ccfPortalFilter='pending';setTimeout(mountAll,0)});
   mountAll();
 }
