@@ -65,6 +65,7 @@ test('phase 6: mother portal allowlist excludes professional record, anamnesis a
   assert.equal(feature.isMotherShareAllowed({ kind: 'orientation', title: 'Orientações' }), true);
   assert.equal(feature.isMotherShareAllowed({ kind: 'document', title: 'Termo de consentimento' }), true);
   assert.equal(feature.isMotherShareAllowed({ kind: 'appointment', title: 'Próximo retorno' }), true);
+  assert.equal(feature.isMotherShareAllowed({ kind: 'care_plan', title: 'Plano antigo', published: false }), false);
   assert.equal(feature.isMotherShareAllowed({ kind: 'evaluation', title: 'Avaliação completa' }), false);
   assert.equal(feature.isMotherShareAllowed({ kind: 'document', title: 'Prontuário completo' }), false);
   assert.equal(feature.isMotherShareAllowed({ kind: 'referral', title: 'Encaminhamento pediatria' }), false);
