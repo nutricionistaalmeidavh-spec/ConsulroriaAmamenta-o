@@ -19,11 +19,16 @@ test('initial maternal history module is wired additively in both application en
   assert.match(readFileSync(resolve(root, 'app/index.html'), 'utf8'), /initial-maternal-history-feature\.js/);
 });
 
-test('initial maternal history is restricted to Consulta inicial in the UI contract', () => {
+test('initial maternal history is restricted to Consulta inicial in the UI and collection contracts', () => {
   assert.equal(feature.isInitialMaternalHistoryVisible('Consulta inicial'), true);
   assert.equal(feature.isInitialMaternalHistoryVisible('Retorno'), false);
   assert.equal(feature.isInitialMaternalHistoryVisible('Acompanhamento'), false);
   assert.equal(feature.isInitialMaternalHistoryVisible('Pré-natal'), false);
+  assert.equal(feature.initialMaternalHistorySection('Consulta inicial'), 'maternal_assessment');
+  assert.equal(feature.initialMaternalHistorySection('Retorno'), '');
+  assert.equal(feature.initialMaternalHistorySection('Acompanhamento'), '');
+  assert.equal(feature.initialMaternalHistorySection('Pré-natal'), '');
+  assert.match(source, /delete field\.dataset\.section/);
 });
 
 test('medication rows serialize into the existing maternal assessment JSON without a new table', () => {
@@ -67,10 +72,10 @@ test('step 3 mounts a collapsible progressive-disclosure history using existing 
     'pregnancyComplications','pregnancyComplicationsDetails','breastSurgeryHistory','breastSurgeryDetails',
     'previousBreastfeedingHistory','previousBreastfeedingDetails'
   ]) {
-    const generated = source.includes(`selectField('${field}'`) || source.includes(`detailTextarea('${field}'`) || source.includes(`data-encounter-field=\"${field}\"`);
+    const generated = source.includes(`selectField('${field}'`) || source.includes(`detailTextarea('${field}'`) || source.includes(`data-encounter-field="${field}"`);
     assert.equal(generated, true, `${field} must be mounted as a maternal_assessment encounter field`);
   }
-  assert.match(source, /data-section=\"maternal_assessment\"/);
+  assert.match(source, /data-section="maternal_assessment"/);
   assert.match(source, /data-ccf-history-detail/);
   assert.match(source, /data-ccf-add-med/);
   assert.match(source, /O sistema não avalia compatibilidade ou risco/);
