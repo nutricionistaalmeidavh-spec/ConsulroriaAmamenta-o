@@ -5,11 +5,18 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const featurePath = resolve(root, 'public/clinical-care-flow-feature.js');
+const featurePath = resolve(root, 'public/initial-maternal-history-feature.js');
+const careFlowPath = resolve(root, 'public/clinical-care-flow-feature.js');
 const feature = await import(`${pathToFileURL(featurePath).href}?initial-history=${Date.now()}`);
+const careFlow = await import(`${pathToFileURL(careFlowPath).href}?initial-history-safe=${Date.now()}`);
 const source = readFileSync(featurePath, 'utf8');
-const css = readFileSync(resolve(root, 'public/clinical-care-flow-feature.css'), 'utf8');
+const css = readFileSync(resolve(root, 'public/initial-maternal-history-feature.css'), 'utf8');
 const html = readFileSync(resolve(root, 'public/clinical-source/index.html'), 'utf8');
+
+test('initial maternal history module is wired additively in both application entries', () => {
+  assert.match(readFileSync(resolve(root, 'index.html'), 'utf8'), /initial-maternal-history-feature\.js/);
+  assert.match(readFileSync(resolve(root, 'app/index.html'), 'utf8'), /initial-maternal-history-feature\.js/);
+});
 
 test('initial maternal history is restricted to Consulta inicial in the UI contract', () => {
   assert.equal(feature.isInitialMaternalHistoryVisible('Consulta inicial'), true);
@@ -64,12 +71,13 @@ test('step 3 mounts a collapsible progressive-disclosure history using existing 
   assert.match(source, /data-section=["']maternal_assessment["']/);
   assert.match(source, /data-ccf-history-detail/);
   assert.match(source, /data-ccf-add-med/);
+  assert.match(source, /O sistema não avalia compatibilidade ou risco/);
   assert.match(css, /\.ccf-history-card/);
   assert.match(css, /\.ccf-medication-row/);
 });
 
 test('maternal history stays private and is not included in mother portal safe summaries', () => {
-  const share = feature.buildMotherSafeEncounterShare({
+  const share = careFlow.buildMotherSafeEncounterShare({
     maternal_assessment: {
       chronicConditionsDetails: 'NÃO EXPOR DOENÇA',
       medications: 'NÃO EXPOR MEDICAÇÃO',
