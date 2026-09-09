@@ -6,6 +6,10 @@ export function isInitialMaternalHistoryVisible(appointmentType=''){
   return norm(appointmentType)==='consulta inicial';
 }
 
+export function initialMaternalHistorySection(appointmentType=''){
+  return isInitialMaternalHistoryVisible(appointmentType)?'maternal_assessment':'';
+}
+
 export function serializeMedicationRows(rows=[]){
   return (Array.isArray(rows)?rows:[])
     .map(row=>({name:clean(row?.name),dose:clean(row?.dose),frequency:clean(row?.frequency)}))
@@ -103,7 +107,12 @@ if(browser){
     }
   }
   function updateVisibility(panel){
-    panel.hidden=!isInitialMaternalHistoryVisible(selectedAppointmentType());
+    const section=initialMaternalHistorySection(selectedAppointmentType());
+    panel.hidden=!section;
+    for(const field of panel.querySelectorAll('[data-encounter-field]')){
+      if(section)field.dataset.section=section;
+      else delete field.dataset.section;
+    }
   }
   function refresh({forceMedication=false}={}){
     ensureCss();const panel=mountMaternalHistory();if(!panel)return;
