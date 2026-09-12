@@ -1,5 +1,8 @@
+import {createSingleFlight} from './runtime-guards.js';
+
 const DOC=window.DeboraDocuments;
-let layer=null,lastTrigger=null,current=null,summaryTimer=null;
+let layer=null,lastTrigger=null,current=null,summaryTimer=null,expectedSummaryKey='';
+const summaryFlight=createSingleFlight();
 
 const esc=value=>DOC.escapeHTML(value??'');
 const norm=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
@@ -58,8 +61,21 @@ function setQuick(el,label,key,handler){if(!el)return;el.removeAttribute?.('href
 function findQuick(screen,label){return [...screen.querySelectorAll('button,a')].find(el=>!el.closest('[data-prh-card],[data-pw-recent],.pw-layer')&&norm(el.textContent)===norm(label))}
 function wireQuickActions(motherId){const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;const phone=findQuick(screen,'Ligar'),photo=findQuick(screen,'Adicionar foto'),route=findQuick(screen,'Rota');setQuick(phone,'Álbum','album',trigger=>open('album',motherId,trigger));setQuick(photo,'Encaminhar','referral',trigger=>window.DeboraReferrals?.openNew(motherId,trigger).catch(e=>DOC.toast(e.message||'Não foi possível criar o encaminhamento.','error')));setQuick(route,'Mais ações','more',trigger=>openSecondaryActions(motherId,trigger).catch(e=>DOC.toast(e.message||'Não foi possível abrir as ações.','error')));const whatsapp=findQuick(screen,'WhatsApp'),weight=findQuick(screen,'Registrar peso');if(whatsapp)whatsapp.dataset.pwQuick='WhatsApp';if(weight)weight.dataset.pwQuick='Registrar peso'}
 
-async function mountRecent(motherId){const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;const active=DOC.currentBabyId()||'',key=`${motherId}|${active}`,existing=screen.querySelector('[data-pw-recent]');if(existing?.dataset.pwKey===key)return;existing?.remove();const data=await encounterData(motherId),rows=data.rows.filter(row=>!active||row.baby_id===active||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===active)).slice(0,3),card=document.createElement('section');card.className='pw-recent';card.dataset.pwRecent='1';card.dataset.pwKey=key;card.innerHTML=`<div class="pw-recent-head"><div><small>REGISTRO CLÍNICO</small><h2>Prontuários recentes</h2></div><button type="button" data-pw-all-records>Ver todos</button></div>${rows.length?`<div class="pw-recent-list">${rows.map(row=>`<button type="button" data-pw-open-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join('')}</div>`:'<div class="pw-empty compact"><span>Nenhum prontuário neste recorte.</span></div>'}`;card.querySelector('[data-pw-all-records]').onclick=event=>open('records',motherId,event.currentTarget);card.querySelectorAll('[data-pw-open-record]').forEach(btn=>btn.onclick=async()=>{try{await window.DeboraClinicalNote?.openEncounter(btn.dataset.pwOpenRecord,{direction:'history'})}catch(e){DOC.toast(e.message||'Não foi possível abrir o prontuário.','error')}});const hub=screen.querySelector('[data-prh-card]'),hiddenRecords=screen.querySelector('[data-pf-prontuario]');if(hub)hub.after(card);else if(hiddenRecords)hiddenRecords.before(card);else screen.appendChild(card)}
-function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId)return;wireQuickActions(motherId);mountRecent(motherId).catch(()=>{})},120)}
+async function mountRecent(motherId){
+  const active=DOC.currentBabyId()||'',key=`${motherId}|${active}`;
+  expectedSummaryKey=key;
+  return summaryFlight(key,async()=>{
+    const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;
+    const existing=screen.querySelector('[data-pw-recent]');if(existing?.dataset.pwKey===key)return;
+    const data=await encounterData(motherId);
+    const currentScreen=document.querySelector('[data-screen="patient"]');
+    if(expectedSummaryKey!==key||DOC.currentMotherId()!==motherId||(DOC.currentBabyId()||'')!==active||currentScreen!==screen||!screen.isConnected)return;
+    const afterAwait=screen.querySelector('[data-pw-recent]');if(afterAwait?.dataset.pwKey===key)return;afterAwait?.remove();
+    const rows=data.rows.filter(row=>!active||row.baby_id===active||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===active)).slice(0,3),card=document.createElement('section');card.className='pw-recent';card.dataset.pwRecent='1';card.dataset.pwKey=key;card.innerHTML=`<div class="pw-recent-head"><div><small>REGISTRO CLÍNICO</small><h2>Prontuários recentes</h2></div><button type="button" data-pw-all-records>Ver todos</button></div>${rows.length?`<div class="pw-recent-list">${rows.map(row=>`<button type="button" data-pw-open-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join('')}</div>`:'<div class="pw-empty compact"><span>Nenhum prontuário neste recorte.</span></div>'}`;card.querySelector('[data-pw-all-records]').onclick=event=>open('records',motherId,event.currentTarget);card.querySelectorAll('[data-pw-open-record]').forEach(btn=>btn.onclick=async()=>{try{await window.DeboraClinicalNote?.openEncounter(btn.dataset.pwOpenRecord,{direction:'history'})}catch(e){DOC.toast(e.message||'Não foi possível abrir o prontuário.','error')}});const hub=screen.querySelector('[data-prh-card]'),hiddenRecords=screen.querySelector('[data-pf-prontuario]');if(hub)hub.after(card);else if(hiddenRecords)hiddenRecords.before(card);else screen.appendChild(card)
+  });
+}
+function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId){expectedSummaryKey='';return}wireQuickActions(motherId);mountRecent(motherId).catch(()=>{})},120)}
 window.addEventListener('debora:patient-context',scheduleSummary);window.addEventListener('debora:clinical-document-finalized',scheduleSummary);window.addEventListener('debora:record-exported',scheduleSummary);new MutationObserver(scheduleSummary).observe(document.documentElement,{subtree:true,childList:true});setTimeout(scheduleSummary,250);
+for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,scheduleSummary);
 
 window.DeboraPatientWorkspace={open,close,refresh:scheduleSummary};
