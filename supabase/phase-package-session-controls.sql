@@ -8,6 +8,8 @@ alter table public.care_package_sessions
   add column if not exists request_key uuid,
   add column if not exists notes text not null default '';
 
+select set_config('app.billing_write_context','trusted',true);
+
 update public.care_package_sessions
 set source='appointment'
 where source is null or btrim(source)='';
@@ -15,6 +17,47 @@ where source is null or btrim(source)='';
 alter table public.care_package_sessions
   alter column source set default 'appointment',
   alter column source set not null;
+
+create or replace function public.guard_care_package_session_integrity()
+returns trigger
+language plpgsql
+set search_path to 'public','pg_temp'
+as $$
+declare
+  v_ctx text:=coalesce(current_setting('app.billing_write_context',true),'');
+begin
+  if v_ctx<>'trusted' then raise exception 'Alteração de sessão de plano deve usar o fluxo protegido do sistema'; end if;
+  if tg_op='DELETE' then return old; end if;
+
+  if not exists(
+    select 1 from public.care_packages p
+    where p.id=new.package_id and p.owner_id=new.owner_id and p.mother_id=new.mother_id
+  ) then
+    raise exception 'Sessão aponta para plano/paciente incompatível';
+  end if;
+
+  if new.source='manual' then
+    if new.encounter_id is not null or new.appointment_id is not null then
+      raise exception 'Baixa manual não pode apontar para atendimento ou prontuário';
+    end if;
+  else
+    if new.encounter_id is null or not exists(
+      select 1 from public.clinical_encounters e
+      where e.id=new.encounter_id and e.owner_id=new.owner_id and e.mother_id=new.mother_id
+    ) then
+      raise exception 'Sessão aponta para prontuário incompatível';
+    end if;
+    if new.appointment_id is not null and not exists(
+      select 1 from public.appointments a
+      where a.id=new.appointment_id and a.owner_id=new.owner_id and a.mother_id=new.mother_id
+    ) then
+      raise exception 'Sessão aponta para agendamento incompatível';
+    end if;
+  end if;
+
+  return new;
+end
+$$;
 
 do $$
 begin
