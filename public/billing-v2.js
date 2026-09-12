@@ -43,6 +43,13 @@ function bvValidate(s){
   if(s.mode==='package_active'&&!s.packageId)throw new Error('Selecione um plano ativo.');
   return s;
 }
+function bvAssertPackageFinalized(expected,result){
+  if(!expected||!['package_active','package_new'].includes(expected.mode))return result;
+  if(!result||!['package_active','package_new'].includes(result.billing_mode))throw new Error('O atendimento foi finalizado sem manter o vínculo com o plano selecionado.');
+  if(expected.mode==='package_active'&&expected.packageId&&result.package_id!==expected.packageId)throw new Error('O atendimento foi finalizado em um plano diferente do selecionado.');
+  if(!Number.isFinite(Number(result.sessions_used))||!Number.isFinite(Number(result.sessions_remaining)))throw new Error('O plano não confirmou o consumo da consulta finalizada.');
+  return result;
+}
 function bvSyncValue(){
   const mode=bvMode(),input=bvValueInput(),field=input?.closest('label');
   if(!input)return;
@@ -151,8 +158,9 @@ async function bvMount(force=false){
   }finally{bvBusy=false}
 }
 async function bvBeforeStart(mid){
-  await bvMount(true);
   if(mid!==bvMotherId())throw new Error('Paciente da cobrança não corresponde ao atendimento.');
+  const host=document.querySelector('[data-billing-v2]'),appointmentId=bvAppointmentId()||'';
+  if(!host||host.dataset.motherId!==mid||host.dataset.appointmentId!==appointmentId)await bvMount(true);
   return bvValidate(bvSelection());
 }
 async function bvBindAppointment(mid,appointmentId,encounterId,selection=null){
@@ -173,7 +181,9 @@ async function bvBindAppointment(mid,appointmentId,encounterId,selection=null){
   return row;
 }
 async function bvFinalize(mid,appointmentId,encounterId){
+  const expected=bvReadDraft();
   const result=await bvRpc('finalize_encounter_billing',{p_appointment_id:appointmentId,p_encounter_id:encounterId});
+  if(expected?.appointmentId===appointmentId)bvAssertPackageFinalized(expected,result);
   bvClearDraft();
   if(result?.billing_mode==='package_active'||result?.billing_mode==='package_new'){
     const left=Number(result.sessions_remaining??0);
@@ -205,10 +215,12 @@ function bvPlanMarkup(bundle){
     const price=item.pricing_mode==='additional'&&Number(item.amount_cents||0)>0?'Adicional · '+bvMoney(item.amount_cents):'Incluído no plano';
     return '<div class="bv-plan-item"><div><strong>'+String(item.label||'Serviço')+'</strong><span>'+Number(item.quantity_used||0)+' de '+Number(item.quantity_total||0)+' utilizados · '+price+'</span></div>'+(remain>0?'<button type="button" class="ui-button" data-bv-use-item="'+item.id+'">Registrar uso</button>':'<span class="pill completed">Concluído</span>')+'</div>';
   }).join(''):'<div class="bv-plan-no-items">Nenhum serviço adicional incluído ainda.</div>';
+  const sessionAction=left>0&&pkg.status==='active'?'<button type="button" class="ui-button ui-button-primary" data-bv-use-session="'+pkg.id+'">Registrar consulta concluída</button>':'<span class="pill completed">Consultas concluídas</span>';
   return '<article class="detail-card bv-plan-card" data-bv-plan-id="'+pkg.id+'">'+
     '<div class="section-heading"><div><span class="section-kicker">PLANO / PACOTE</span><h2>'+String(pkg.service_label||'Plano de acompanhamento')+'</h2></div><span class="pill '+pay.tone+'">'+pay.label+'</span></div>'+
     '<div class="bv-plan-metrics"><div><small>Valor do plano</small><strong>'+bvMoney(pkg.total_cents)+'</strong></div><div><small>Consultas</small><strong>'+used+' / '+total+'</strong><span>'+left+' restante'+(left===1?'':'s')+'</span></div></div>'+
     '<div class="bv-plan-progress" aria-label="'+pct+'% das consultas utilizadas"><i style="width:'+pct+'%"></i></div>'+
+    '<div class="bv-plan-session-actions">'+sessionAction+'</div>'+
     '<small class="bv-plan-payment">'+pay.meta+'</small>'+
     '<div class="bv-plan-items-head"><strong>Serviços incluídos depois</strong><button type="button" class="ui-button ui-button-primary" data-bv-add-item="'+pkg.id+'">+ Adicionar serviço</button></div>'+
     '<div class="bv-plan-items">'+itemRows+'</div>'+
@@ -250,6 +262,18 @@ async function bvSubmitPlanItem(form){
     bvClosePlanDialog();await bvMountPatientPlan(true);bvToast('Serviço adicionado ao plano.','success');
   }catch(error){form.dataset.bvBusy='';if(submit)submit.disabled=false;throw error}
 }
+async function bvUsePackageSession(packageId,button){
+  if(button?.disabled)return;
+  if(!window.confirm('Registrar uma consulta concluída neste plano?'))return;
+  const requestKey=button?.dataset.bvRequestKey||(button?button.dataset.bvRequestKey=bvUuid():bvUuid());
+  if(button)button.disabled=true;
+  try{
+    const result=await bvRpc('consume_care_package_session_manual',{p_package_id:packageId,p_notes:'Baixa manual registrada no Financeiro',p_request_key:requestKey});
+    await bvMountPatientPlan(true);
+    const left=Number(result?.sessions_remaining??0);
+    bvToast(left?'Consulta concluída. '+left+' restante'+(left===1?'':'s')+' no plano.':'Consulta concluída. O plano não possui consultas restantes.','success');
+  }catch(error){if(button)button.disabled=false;throw error}
+}
 async function bvUsePlanItem(itemId,button){
   if(button?.disabled)return;
   if(!window.confirm('Registrar uma utilização deste serviço no plano?'))return;
@@ -267,6 +291,6 @@ new MutationObserver(bvSchedule).observe(document.documentElement,{subtree:true,
 window.addEventListener('hashchange',bvSchedule);
 window.addEventListener('focus',bvSchedule);
 document.addEventListener('change',e=>{if(e.target.matches('[data-appointment-patient]'))setTimeout(()=>bvMount(true).catch(()=>{}),0)});
-document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),close=e.target.closest('[data-bv-close-dialog]');if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem,use).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
+document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),session=e.target.closest('[data-bv-use-session]'),close=e.target.closest('[data-bv-close-dialog]');if(session){e.preventDefault();bvUsePackageSession(session.dataset.bvUseSession,session).catch(err=>bvToast(err.message||String(err),'error'))}else if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem,use).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
 document.addEventListener('submit',e=>{if(e.target.matches('[data-bv-plan-form]')){e.preventDefault();bvSubmitPlanItem(e.target).catch(err=>bvToast(err.message||String(err),'error'))}});
 bvSchedule();
