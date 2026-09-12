@@ -8,6 +8,8 @@
 .bv-plan-metrics span{font-size:10px;color:var(--p8-sage-deep,#58705d)}
 .bv-plan-progress{height:7px;border-radius:999px;background:#eee5eb;overflow:hidden;margin:12px 0 7px}
 .bv-plan-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--p8-lilac,#a779ae),var(--p8-lilac-deep,#8f6198))}
+.bv-plan-session-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:9px 0 10px}
+.bv-plan-session-actions .ui-button{min-height:40px}
 .bv-plan-payment{display:block;margin-bottom:15px}
 .bv-plan-items-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:13px;border-top:1px solid var(--p8-border,#e9e0e5)}
 .bv-plan-items-head>strong{font-size:13px;color:var(--p8-ink,#332b34)}
@@ -27,6 +29,8 @@
 @media(max-width:720px){
   .bv-plan-card{padding:15px;margin:12px 0 16px}
   .bv-plan-metrics{grid-template-columns:1fr 1fr}
+  .bv-plan-session-actions{align-items:stretch;flex-direction:column}
+  .bv-plan-session-actions .ui-button{width:100%;min-height:44px}
   .bv-plan-items-head{align-items:stretch;flex-direction:column}
   .bv-plan-items-head .ui-button{width:100%;min-height:44px}
   .bv-plan-item{align-items:stretch;flex-direction:column}
