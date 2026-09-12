@@ -8,10 +8,12 @@ async function start(){
     css('./record-export-feature.css','phase68-export');
     css('./patient-records-hub.css','phase68-hub');
     css('./patient-workspace.css','phase68-workspace');
+    css('./package-audit-feature.css','phase68-package-audit');
     await import('./referral-finalization.js');
     await import('./record-export-feature.js');
     await import('./patient-workspace.js');
     await import('./patient-records-hub.js');
+    await import('./package-audit-feature.js');
   }catch(error){phase68Started=false;console.error('Falha ao carregar fases clínicas 6-8',error);setTimeout(start,1000)}
 }
 start();
