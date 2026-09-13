@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /clinical-source/
+Disallow: /comercial/product-preview
+Disallow: /comercial/sandbox-teste.html
+
+Sitemap: https://deboralactacao.com/sitemap.xml

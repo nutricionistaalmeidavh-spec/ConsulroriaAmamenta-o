@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light">
+  <title>Painel SEO | Débora Lactação</title>
+  <link rel="stylesheet" href="/admin/seo/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ArtiSys SEO</p>
+        <h1>Painel SEO</h1>
+        <p class="muted">Dados reais do Google Search Console para deboralactacao.com.</p>
+      </div>
+      <button id="refreshButton" class="button secondary" type="button" hidden>Atualizar</button>
+    </header>
+
+    <section id="authPanel" class="panel auth-panel">
+      <h2>Acesso administrativo</h2>
+      <p>Informe a chave administrativa SEO. Ela fica somente nesta sessão do navegador.</p>
+      <form id="authForm">
+        <label for="tokenInput">Chave SEO</label>
+        <input id="tokenInput" name="token" type="password" autocomplete="off" required>
+        <button class="button" type="submit">Abrir painel</button>
+      </form>
+      <p id="authError" class="error" role="alert"></p>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="metrics" aria-label="Métricas principais">
+        <article class="metric"><span>Cliques</span><strong id="metricClicks">—</strong></article>
+        <article class="metric"><span>Impressões</span><strong id="metricImpressions">—</strong></article>
+        <article class="metric"><span>CTR</span><strong id="metricCtr">—</strong></article>
+        <article class="metric"><span>Posição média</span><strong id="metricPosition">—</strong></article>
+      </div>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">Auditoria automática</p><h2>Oportunidades prioritárias</h2></div>
+          <span id="auditCount" class="pill">0</span>
+        </div>
+        <div id="auditList" class="audit-list"></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="section-heading"><div><p class="eyebrow">Google</p><h2>Principais buscas</h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Busca</th><th>Cliques</th><th>Imp.</th><th>CTR</th><th>Pos.</th></tr></thead><tbody id="queriesBody"></tbody></table></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading"><div><p class="eyebrow">Google</p><h2>Principais páginas</h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Página</th><th>Cliques</th><th>Imp.</th><th>CTR</th><th>Pos.</th></tr></thead><tbody id="pagesBody"></tbody></table></div>
+        </section>
+      </div>
+
+      <footer class="statusbar"><span id="periodLabel">—</span><span id="statusText">—</span></footer>
+    </section>
+  </main>
+  <script type="module" src="/admin/seo/app.js"></script>
+</body>
+</html>
