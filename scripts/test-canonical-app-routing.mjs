@@ -10,6 +10,9 @@ const identityRuntime = read('public/canonical-identity-runtime.js');
 const manifest = read('public/manifest.webmanifest');
 const commercialBridge = read('public/comercial/app-entry-bridge.js');
 const recovery = read('public/comercial/auth-recovery.js');
+const worker = read('worker/index.js');
+const wrangler = read('wrangler.jsonc');
+const postPaymentEmail = read('supabase/functions/_shared/post-payment-email.ts');
 
 assert.ok(existsSync('app/index.html'), 'canonical /app entry must exist');
 assert.ok(existsSync('public/debora/index.html'), 'dedicated /debora landing must exist');
@@ -31,6 +34,36 @@ assert.deepEqual(resolveAppIdentity({ pathname: '/', hostname: 'app.deboralactac
   basePath: '/',
 });
 
+assert.ok(existsSync('src/public-host-routing.js'), 'custom domain routing helper must exist');
+const { resolvePublicHostRoute } = await import('../src/public-host-routing.js');
+assert.deepEqual(resolvePublicHostRoute('https://deboralactacao.com/?utm_source=ig'), {
+  type: 'rewrite',
+  pathname: '/debora/index.html',
+});
+assert.deepEqual(resolvePublicHostRoute('https://deboralactacao.com/debora/?utm_source=ig'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/?utm_source=ig',
+  status: 308,
+});
+assert.deepEqual(resolvePublicHostRoute('https://www.deboralactacao.com/contato?x=1'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/contato?x=1',
+  status: 308,
+});
+assert.deepEqual(resolvePublicHostRoute('https://app.deboralactacao.com/'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/app/',
+  status: 308,
+});
+assert.deepEqual(resolvePublicHostRoute('https://comercial.deboralactacao.com/?utm_campaign=ig'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/comercial/?utm_campaign=ig',
+  status: 308,
+});
+assert.deepEqual(resolvePublicHostRoute('https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/debora/'), {
+  type: 'passthrough',
+});
+
 assert.match(bootstrap, /CANONICAL_PRODUCT_NAME/, 'bootstrap must consume canonical product identity');
 assert.match(bootstrap, /genericizeClinicalConfig/, 'legacy config must be neutralized only at runtime boundary');
 assert.match(bootstrap, /genericizeRuntimeModule/, 'customer-specific auth defaults must be neutralized without rewriting canonical source');
@@ -48,7 +81,7 @@ assert.match(identityRuntime, /auth\/v1\/user/, 'identity runtime must hydrate u
 assert.doesNotMatch(identityRuntime, /mothers|clinical_encounters|financial_entries/, 'identity runtime must not read clinical tables');
 assert.match(identityRuntime, /commercial\.saas\.session\.v1/, 'identity may consume the same authenticated commercial session');
 
-assert.match(commercialBridge, /CANONICAL_APP_URL = '\/app\/'/, 'completed commercial accounts must enter /app/');
+assert.match(commercialBridge, /CANONICAL_APP_URL = '\/app\/'/, 'completed commercial accounts must stay on the canonical same-origin /app entry');
 assert.match(commercialBridge, /commercial\.saas\.session\.v1/, 'handoff must use the existing authenticated commercial session');
 assert.match(commercialBridge, /debora-lactacao-session/, 'handoff must seed the existing clinical session key for compatibility');
 assert.match(commercialBridge, /amamentacao-session/, 'handoff must also seed the canonical session key');
@@ -65,14 +98,23 @@ for (const file of ['supabase/phase-saas-foundation.sql', 'supabase/phase-saas-e
   assert.doesNotMatch(sql, /delete\s+from\s+(mothers|babies|appointments|clinical_encounters)/i, `${file} must not delete clinical rows`);
 }
 
+assert.match(worker, /resolvePublicHostRoute/, 'worker must apply the custom-domain routing helper');
+assert.match(worker, /env\.ASSETS\.fetch\(rewriteAssetRequest/, 'apex landing must be served by an internal asset rewrite, not a browser redirect');
+assert.match(wrangler, /"pattern": "deboralactacao\.com"/, 'apex custom domain must be declared in Wrangler');
+assert.match(wrangler, /"pattern": "www\.deboralactacao\.com"/, 'www alias must be declared in Wrangler');
+assert.match(wrangler, /"pattern": "app\.deboralactacao\.com"/, 'app alias must be declared in Wrangler');
+assert.match(wrangler, /"pattern": "comercial\.deboralactacao\.com"/, 'commercial alias must be declared in Wrangler');
+assert.match(postPaymentEmail, /https:\/\/deboralactacao\.com\/comercial\/index\.html\?confirmed=1/, 'paid email redirect must use the custom domain');
+assert.doesNotMatch(postPaymentEmail, /workers\.dev/, 'paid email redirect must not depend on the technical workers.dev hostname');
+
 const deboraLanding = read('public/debora/index.html');
 assert.match(deboraLanding, /Débora/, 'personal landing may use Débora identity');
-assert.match(
-  deboraLanding,
-  /(?:href=["']\/["']|\["Área profissional",\s*["']\/["']\])/, 
-  'personal landing access CTA must preserve the existing root app URL'
-);
-assert.match(deboraLanding, /public\/logo-debora\.jpeg/, 'personal landing must use the original brand image');
+assert.match(deboraLanding, /href=["']\/app\/["']/, 'personal landing access CTA must point to same-origin /app/');
+assert.match(deboraLanding, /\/debora\/public\/logo-debora\.jpeg/, 'personal landing must use root-safe logo paths');
+assert.match(deboraLanding, /\/debora\/public\/debora-hero\.jpeg/, 'personal landing must use root-safe hero paths');
+assert.match(deboraLanding, /href=["']\/debora\/style\.css["']/, 'personal landing stylesheet must remain valid when mounted at domain root');
+assert.match(deboraLanding, /src=["']\/debora\/script\.js["']/, 'personal landing script must remain valid when mounted at domain root');
+assert.match(read('public/debora/script.js'), /fetch\('\/debora\/public\/logo-motion-original\.html'\)/, 'brand motion asset must use a root-safe path');
 assert.ok(existsSync('public/debora/public/logo-debora.jpeg'));
 assert.ok(existsSync('public/debora/public/debora-hero.jpeg'));
 assert.ok(existsSync('public/debora/public/logo-motion-original.html'));
