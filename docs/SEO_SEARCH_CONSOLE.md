@@ -2,17 +2,19 @@
 
 ## Separação de autenticações
 
-A conexão administrativa do Search Console é independente do login Google usado por profissionais, pacientes ou outros usuários do produto.
+A administração de SEO é independente do login usado por profissionais, pacientes, membros ou qualquer outro usuário do produto.
 
-- o usuário do sistema autentica normalmente via Supabase;
-- o Worker valida se esse usuário está na allowlist SEO;
-- o Worker usa, no servidor, o OAuth administrativo da ArtiSys para consultar o Search Console;
-- Client Secret, refresh token e access token nunca são enviados ao navegador.
+- a conta Google administrativa autoriza o Search Console;
+- o Worker guarda Client Secret, refresh token e uma chave administrativa própria como secrets;
+- a API SEO exige essa chave administrativa da ArtiSys;
+- nenhuma conta Supabase/Membra/Débora é necessária para administrar SEO;
+- Client Secret, refresh token, access token e chave administrativa nunca são enviados em respostas da API.
 
-## Endpoint
+## Endpoint administrativo
 
 ```text
 GET /api/seo/google/overview
+Authorization: Bearer <ARTISYS_SEO_ADMIN_TOKEN>
 ```
 
 O endpoint aceita opcionalmente:
@@ -49,11 +51,11 @@ Os valores acima são apenas o formato do contrato; o Worker retorna dados reais
 
 A rota exige:
 
-1. Bearer token válido do Supabase do produto;
-2. usuário presente em `ARTISYS_SEO_ALLOWED_USER_IDS` ou `ARTISYS_SEO_ALLOWED_EMAILS`;
+1. `ARTISYS_SEO_ADMIN_TOKEN` configurado como secret do Worker;
+2. o mesmo token no header Bearer da requisição administrativa;
 3. credenciais Google configuradas como secrets do Worker.
 
-Sem allowlist configurada, o endpoint permanece fechado (`503 seo_admin_not_configured`).
+Sem token administrativo configurado, o endpoint permanece fechado (`503 seo_admin_not_configured`). Sem Bearer token responde `401`; token incorreto responde `403`.
 
 ## Secrets do Worker
 
@@ -61,34 +63,31 @@ Sem allowlist configurada, o endpoint permanece fechado (`503 seo_admin_not_conf
 ARTISYS_GOOGLE_CLIENT_ID
 ARTISYS_GOOGLE_CLIENT_SECRET
 ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN
-ARTISYS_SEO_ALLOWED_EMAILS
-```
-
-Opcionalmente, a allowlist pode usar:
-
-```text
-ARTISYS_SEO_ALLOWED_USER_IDS
+ARTISYS_SEO_ADMIN_TOKEN
 ```
 
 O domínio padrão do produto é `deboralactacao.com`; `ARTISYS_SEO_SITE_URL` pode sobrescrever esse valor se necessário.
 
 ## Provisionamento sem copiar segredos
 
-Depois que o OAuth local do `artisys-seo` estiver concluído, no checkout deste repo:
+Depois que o OAuth local do `artisys-seo` estiver concluído, execute no checkout deste repo:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\provision-seo-search-console.ps1 -AllowedEmail "seu-email-de-login-no-sistema"
+powershell -ExecutionPolicy Bypass -File .\scripts\provision-seo-search-console.ps1
 ```
 
 O script:
 
 - lê `%LOCALAPPDATA%\ArtiSys\SEO\google-search-console-token.json`;
 - lê Client ID/Secret do remote rclone `artisys-qa-drive`;
+- valida o refresh token diretamente no Google;
+- confirma acesso a `sc-domain:deboralactacao.com`;
+- cria ou reutiliza uma chave administrativa forte em `%LOCALAPPDATA%\ArtiSys\SEO\debora-seo-admin-token.txt`;
 - cria um JSON temporário fora do repo;
-- envia os secrets em lote ao Cloudflare via Wrangler;
+- envia os quatro secrets em lote ao Cloudflare via Wrangler;
 - remove o arquivo temporário mesmo em caso de erro.
 
-Nenhum valor secreto é commitado.
+O valor da chave administrativa não é exibido no terminal e nenhum segredo é commitado.
 
 ## Teste isolado
 
@@ -96,7 +95,7 @@ Nenhum valor secreto é commitado.
 npm run test:seo
 ```
 
-Os testes cobrem autenticação obrigatória, default-deny, allowlist, consulta real modelada do Search Console e ausência de vazamento de secrets na resposta.
+Os testes cobrem default-deny, ausência de Bearer token, token administrativo inválido, consulta real modelada do Search Console, independência do login do produto e ausência de vazamento de secrets na resposta.
 
 ## Origem do core
 
