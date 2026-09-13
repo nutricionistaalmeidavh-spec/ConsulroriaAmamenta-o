@@ -87,7 +87,7 @@ O script:
 - envia os quatro secrets em lote ao Cloudflare via Wrangler;
 - remove o arquivo temporário mesmo em caso de erro.
 
-O valor da chave administrativa não é exibido no terminal e nenhum segredo é commitado.
+O valor da chave administrativa não é exibido no terminal e nenhum segredo é commitado. A conta Google administrativa pode ser a conta que já possui a propriedade no Search Console; isso não cria nem exige um usuário correspondente dentro do produto.
 
 ## Teste isolado
 
