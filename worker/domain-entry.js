@@ -12,8 +12,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // SEO is a protected administrative API backed by ArtiSys SEO. It is handled
-    // before the generic API bridge so it never changes existing checkout/webhook behavior.
+    // SEO uses a dedicated ArtiSys administrative token and is independent from
+    // product/member authentication. Keep it isolated from checkout/webhook APIs.
     if (url.pathname === '/api/seo/google/overview' && request.method === 'GET') {
       return handleSeoGoogleOverview(request, env);
     }
