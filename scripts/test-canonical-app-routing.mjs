@@ -10,12 +10,13 @@ const identityRuntime = read('public/canonical-identity-runtime.js');
 const manifest = read('public/manifest.webmanifest');
 const commercialBridge = read('public/comercial/app-entry-bridge.js');
 const recovery = read('public/comercial/auth-recovery.js');
-const worker = read('worker/index.js');
+const domainEntry = read('worker/domain-entry.js');
 const wrangler = read('wrangler.jsonc');
 const postPaymentEmail = read('supabase/functions/_shared/post-payment-email.ts');
 
 assert.ok(existsSync('app/index.html'), 'canonical /app entry must exist');
 assert.ok(existsSync('public/debora/index.html'), 'dedicated /debora landing must exist');
+assert.ok(existsSync('worker/domain-entry.js'), 'custom-domain worker entry must exist');
 assert.match(root, /src\/bootstrap\.js/, 'root compatibility entry must keep the canonical bootstrap');
 assert.match(appEntry, /src\/bootstrap\.js/, '/app must use the exact same canonical bootstrap');
 
@@ -98,8 +99,10 @@ for (const file of ['supabase/phase-saas-foundation.sql', 'supabase/phase-saas-e
   assert.doesNotMatch(sql, /delete\s+from\s+(mothers|babies|appointments|clinical_encounters)/i, `${file} must not delete clinical rows`);
 }
 
-assert.match(worker, /resolvePublicHostRoute/, 'worker must apply the custom-domain routing helper');
-assert.match(worker, /env\.ASSETS\.fetch\(rewriteAssetRequest/, 'apex landing must be served by an internal asset rewrite, not a browser redirect');
+assert.match(domainEntry, /resolvePublicHostRoute/, 'custom-domain worker entry must apply the host routing helper');
+assert.match(domainEntry, /env\.ASSETS\.fetch\(rewriteAssetRequest/, 'apex landing must be served by an internal asset rewrite, not a browser redirect');
+assert.match(domainEntry, /url\.pathname\.startsWith\('\/api\/'\)/, 'API routes must bypass public-host redirects');
+assert.match(wrangler, /"main": "worker\/domain-entry\.js"/, 'Wrangler must publish the custom-domain entry worker');
 assert.match(wrangler, /"pattern": "deboralactacao\.com"/, 'apex custom domain must be declared in Wrangler');
 assert.match(wrangler, /"pattern": "www\.deboralactacao\.com"/, 'www alias must be declared in Wrangler');
 assert.match(wrangler, /"pattern": "app\.deboralactacao\.com"/, 'app alias must be declared in Wrangler');
