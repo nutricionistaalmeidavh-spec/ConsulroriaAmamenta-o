@@ -2,6 +2,9 @@ import { createGoogleRefreshTokenProvider } from './vendor/artisys-seo/google-to
 import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.mjs';
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
+const SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
@@ -14,6 +17,27 @@ function json(status, body) {
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function bearerToken(request) {
+  const header = request.headers.get('authorization') || '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1] : '';
+}
+
+async function authenticateProductUser(request, fetchImpl) {
+  const token = bearerToken(request);
+  if (!token) return null;
+  const response = await fetchImpl(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+    },
+  });
+  if (!response.ok) return null;
+  const user = await response.json().catch(() => null);
+  return user?.id ? user : null;
 }
 
 export function parseSeoAllowedUserIds(value) {
@@ -57,9 +81,11 @@ function resolvePeriod(request, now) {
 }
 
 export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
-  const authenticateUser = dependencies.authenticateUser;
-  if (typeof authenticateUser !== 'function') return json(500, { error: 'seo_auth_dependency_missing' });
+  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
 
+  const authenticateUser = dependencies.authenticateUser
+    ?? ((input) => authenticateProductUser(input, fetchImpl));
   const user = await authenticateUser(request);
   if (!user?.id) return json(401, { error: 'unauthorized' });
 
@@ -76,9 +102,6 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
   } catch {
     return json(400, { error: 'invalid_period' });
   }
-
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
 
   try {
     const getAccessToken = createGoogleRefreshTokenProvider({
