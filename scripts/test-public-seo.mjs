@@ -11,6 +11,7 @@ const sitemap = read('public/sitemap.xml');
 const dashboard = read('public/admin/seo/index.html');
 const dashboardApp = read('public/admin/seo/app.js');
 const worker = read('worker/domain-entry.js');
+const seoWorker = read('worker/seo-search-console.js');
 
 assert.match(landing, /<link\s+rel="canonical"\s+href="https:\/\/deboralactacao\.com\/"/i, 'landing must declare apex canonical');
 assert.match(landing, /<meta\s+name="robots"\s+content="index,follow,max-image-preview:large"/i, 'landing must explicitly allow indexing');
@@ -34,9 +35,15 @@ assert.doesNotMatch(sitemap, /\/api\//i);
 
 assert.match(dashboard, /<meta\s+name="robots"\s+content="noindex,nofollow"/i, 'admin dashboard must not be indexed');
 assert.match(dashboard, /Painel SEO/i);
+assert.match(dashboard, /Entrar com Google/i, 'SEO dashboard must use Google sign-in');
+assert.doesNotMatch(dashboard, /Chave SEO/i, 'legacy admin key must not be exposed in the UI');
+assert.match(dashboardApp, /provider[^\n]*google|provider=google/i, 'dashboard must start Google OAuth through the existing Supabase provider');
 assert.match(dashboardApp, /\/api\/seo\/google\/overview/);
 assert.match(dashboardApp, /sessionStorage/);
 assert.doesNotMatch(dashboardApp, /localStorage/);
+assert.match(seoWorker, /\/auth\/v1\/user/, 'SEO API must validate the Supabase access token server-side');
+assert.match(seoWorker, /nutricionistaalmeidavh@gmail\.com/i, 'SEO API must restrict OAuth access to the owner e-mail');
+assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as emergency fallback');
 
 assert.match(worker, /x-robots-tag/i, 'private paths must receive X-Robots-Tag');
 
