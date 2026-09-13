@@ -2,16 +2,18 @@ import { createGoogleRefreshTokenProvider } from './vendor/artisys-seo/google-to
 import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.mjs';
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
-const DEFAULT_SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 const DEFAULT_SEO_ADMIN_EMAIL = 'nutricionistaalmeidavh@gmail.com';
+const OWNER_SSO_REDEEM_URL = 'https://obra-na-mao-comercial.nutricionistaalmeidavh.workers.dev/api/artisys-sso/redeem';
+const SEO_SESSION_COOKIE = 'artisys-seo-session';
+const SEO_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-function json(status, body) {
+function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      ...extraHeaders,
     },
   });
 }
@@ -26,16 +28,87 @@ function bearerToken(request) {
   return match ? match[1] : '';
 }
 
+function cookieValue(request, name) {
+  const raw = request.headers.get('cookie') || '';
+  for (const part of raw.split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) {
+      try { return decodeURIComponent(rest.join('=')); } catch { return rest.join('='); }
+    }
+  }
+  return '';
+}
+
 function constantTimeTextEqual(left, right) {
   const encoder = new TextEncoder();
   const a = encoder.encode(String(left));
   const b = encoder.encode(String(right));
   const length = Math.max(a.length, b.length);
   let diff = a.length ^ b.length;
-  for (let index = 0; index < length; index += 1) {
-    diff |= (a[index] ?? 0) ^ (b[index] ?? 0);
-  }
+  for (let index = 0; index < length; index += 1) diff |= (a[index] ?? 0) ^ (b[index] ?? 0);
   return diff === 0;
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '');
+}
+
+function stringToBase64Url(value) {
+  return bytesToBase64Url(new TextEncoder().encode(value));
+}
+
+function base64UrlToString(value) {
+  const padded = value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (value.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+async function hmac(secret, value) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(value));
+  return bytesToBase64Url(new Uint8Array(signature));
+}
+
+function nowMilliseconds(dependencies = {}) {
+  const value = typeof dependencies.now === 'function' ? dependencies.now() : Date.now();
+  if (value instanceof Date) return value.getTime();
+  return Number(value);
+}
+
+function adminEmail(env) {
+  return (text(env?.ARTISYS_SEO_ADMIN_EMAIL) || DEFAULT_SEO_ADMIN_EMAIL).toLowerCase();
+}
+
+function signingSecret(env) {
+  return text(env?.ARTISYS_SEO_ADMIN_TOKEN);
+}
+
+async function createSeoSessionToken(email, env, dependencies = {}) {
+  const secret = signingSecret(env);
+  if (!secret) return '';
+  const expiresAt = nowMilliseconds(dependencies) + SEO_SESSION_MAX_AGE_SECONDS * 1000;
+  const payload = stringToBase64Url(`${email.toLowerCase()}|${expiresAt}`);
+  return `${payload}.${await hmac(secret, payload)}`;
+}
+
+async function verifySeoSessionToken(token, env, dependencies = {}) {
+  const secret = signingSecret(env);
+  if (!secret || !token) return false;
+  const [payload, signature, extra] = String(token).split('.');
+  if (!payload || !signature || extra !== undefined) return false;
+  const expected = await hmac(secret, payload);
+  if (!constantTimeTextEqual(signature, expected)) return false;
+  let decoded;
+  try { decoded = base64UrlToString(payload); } catch { return false; }
+  const splitAt = decoded.lastIndexOf('|');
+  if (splitAt < 1) return false;
+  const email = decoded.slice(0, splitAt).toLowerCase();
+  const expiresAt = Number(decoded.slice(splitAt + 1));
+  return email === adminEmail(env) && Number.isFinite(expiresAt) && expiresAt > nowMilliseconds(dependencies);
 }
 
 function googleConfig(env) {
@@ -46,60 +119,53 @@ function googleConfig(env) {
   return { clientId, clientSecret, refreshToken };
 }
 
-function supabaseAuthConfig(env) {
-  return {
-    url: text(env?.ARTISYS_SUPABASE_URL) || DEFAULT_SUPABASE_URL,
-    publishableKey: text(env?.ARTISYS_SUPABASE_PUBLISHABLE_KEY) || DEFAULT_SUPABASE_PUBLISHABLE_KEY,
-    adminEmail: (text(env?.ARTISYS_SEO_ADMIN_EMAIL) || DEFAULT_SEO_ADMIN_EMAIL).toLowerCase(),
-  };
-}
-
-function hasGoogleIdentity(user) {
-  const primary = text(user?.app_metadata?.provider).toLowerCase();
-  const providers = Array.isArray(user?.app_metadata?.providers) ? user.app_metadata.providers : [];
-  const identities = Array.isArray(user?.identities) ? user.identities : [];
-  return primary === 'google'
-    || providers.some((provider) => String(provider).toLowerCase() === 'google')
-    || identities.some((identity) => String(identity?.provider || '').toLowerCase() === 'google');
-}
-
-async function authorizeSeoRequest(request, env, fetchImpl) {
+async function authorizeSeoRequest(request, env, dependencies = {}) {
+  const configuredAdminToken = signingSecret(env);
   const presentedToken = bearerToken(request);
-  if (!presentedToken) return { ok: false, response: json(401, { error: 'unauthorized' }) };
-
-  const configuredAdminToken = text(env?.ARTISYS_SEO_ADMIN_TOKEN);
-  if (configuredAdminToken && constantTimeTextEqual(presentedToken, configuredAdminToken)) {
+  if (configuredAdminToken && presentedToken && constantTimeTextEqual(presentedToken, configuredAdminToken)) {
     return { ok: true, method: 'admin_token' };
   }
 
-  const auth = supabaseAuthConfig(env);
+  const sessionToken = cookieValue(request, SEO_SESSION_COOKIE);
+  if (sessionToken && await verifySeoSessionToken(sessionToken, env, dependencies)) {
+    return { ok: true, method: 'artisys_owner_sso', email: adminEmail(env) };
+  }
+
+  return { ok: false, response: json(401, { error: 'unauthorized' }) };
+}
+
+export async function handleSeoGoogleSession(request, env, dependencies = {}) {
+  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
+  if (!signingSecret(env)) return json(503, { error: 'seo_admin_not_configured' });
+
+  let body;
+  try { body = await request.json(); } catch { return json(400, { error: 'invalid_request' }); }
+  const code = text(body?.code);
+  if (!/^[a-f0-9]{64}$/i.test(code)) return json(401, { error: 'invalid_sso_code' });
+
   let response;
   try {
-    response = await fetchImpl(`${auth.url}/auth/v1/user`, {
-      headers: {
-        apikey: auth.publishableKey,
-        authorization: `Bearer ${presentedToken}`,
-      },
+    response = await fetchImpl(OWNER_SSO_REDEEM_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code }),
     });
   } catch {
-    return { ok: false, response: json(403, { error: 'forbidden' }) };
+    return json(502, { error: 'owner_sso_unavailable' });
   }
 
-  if (!response.ok) return { ok: false, response: json(403, { error: 'forbidden' }) };
+  let payload;
+  try { payload = await response.json(); } catch { payload = {}; }
+  if (!response.ok) return json(response.status === 401 ? 401 : 502, { error: 'owner_sso_rejected' });
 
-  let user;
-  try {
-    user = await response.json();
-  } catch {
-    return { ok: false, response: json(403, { error: 'forbidden' }) };
-  }
+  const email = text(payload?.email).toLowerCase();
+  if (payload?.target !== 'debora-seo' || email !== adminEmail(env)) return json(403, { error: 'forbidden' });
 
-  const email = text(user?.email).toLowerCase();
-  if (email !== auth.adminEmail || !hasGoogleIdentity(user)) {
-    return { ok: false, response: json(403, { error: 'forbidden' }) };
-  }
-
-  return { ok: true, method: 'google_oauth', email };
+  const token = await createSeoSessionToken(email, env, dependencies);
+  if (!token) return json(503, { error: 'seo_admin_not_configured' });
+  const cookie = `${SEO_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SEO_SESSION_MAX_AGE_SECONDS}`;
+  return json(200, { ok: true, email }, { 'set-cookie': cookie });
 }
 
 function isoDate(date) {
@@ -124,9 +190,7 @@ function resolvePeriod(request, now) {
   const startParam = text(url.searchParams.get('startDate'));
   const endParam = text(url.searchParams.get('endDate'));
   if (!startParam && !endParam) return defaultPeriod(now);
-  if (!startParam || !endParam || !validIsoDate(startParam) || !validIsoDate(endParam) || startParam > endParam) {
-    throw new RangeError('invalid_period');
-  }
+  if (!startParam || !endParam || !validIsoDate(startParam) || !validIsoDate(endParam) || startParam > endParam) throw new RangeError('invalid_period');
   return { startDate: startParam, endDate: endParam };
 }
 
@@ -147,24 +211,18 @@ export function buildSearchConsoleAudit(googleSearch) {
   for (const row of queries) {
     if (row.impressions >= 50 && row.ctr < 0.025) {
       opportunities.push({
-        type: 'low_ctr_query',
-        priority: row.impressions >= 150 ? 'high' : 'medium',
-        label: 'CTR baixo',
+        type: 'low_ctr_query', priority: row.impressions >= 150 ? 'high' : 'medium', label: 'CTR baixo',
         title: `Melhorar clique para “${row.query}”`,
         recommendation: 'Revisar título e descrição da página para responder melhor à intenção desta busca, sem alterar o conteúdo clínico sem aprovação.',
-        query: row.query,
-        ...opportunityBase(row),
+        query: row.query, ...opportunityBase(row),
       });
     }
     if (row.impressions >= 30 && row.position >= 4 && row.position <= 20) {
       opportunities.push({
-        type: 'ranking_opportunity',
-        priority: row.position <= 10 ? 'high' : 'medium',
-        label: 'Perto da 1ª página',
+        type: 'ranking_opportunity', priority: row.position <= 10 ? 'high' : 'medium', label: 'Perto da 1ª página',
         title: `Ganhar posição para “${row.query}”`,
         recommendation: 'Reforçar a relevância semântica da landing para esta intenção e acompanhar a evolução da posição média.',
-        query: row.query,
-        ...opportunityBase(row),
+        query: row.query, ...opportunityBase(row),
       });
     }
   }
@@ -172,13 +230,10 @@ export function buildSearchConsoleAudit(googleSearch) {
   for (const row of pages) {
     if (row.impressions >= 100 && row.ctr < 0.025) {
       opportunities.push({
-        type: 'low_ctr_page',
-        priority: row.impressions >= 300 ? 'high' : 'medium',
-        label: 'Página com CTR baixo',
+        type: 'low_ctr_page', priority: row.impressions >= 300 ? 'high' : 'medium', label: 'Página com CTR baixo',
         title: 'Melhorar apresentação da página no Google',
         recommendation: 'Reavaliar title, description e alinhamento com as buscas que geram impressões para esta página.',
-        page: row.page,
-        ...opportunityBase(row),
+        page: row.page, ...opportunityBase(row),
       });
     }
   }
@@ -203,7 +258,7 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
 
-  const authorization = await authorizeSeoRequest(request, env, fetchImpl);
+  const authorization = await authorizeSeoRequest(request, env, dependencies);
   if (!authorization.ok) return authorization.response;
 
   const config = googleConfig(env);
@@ -211,7 +266,8 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
 
   let period;
   try {
-    period = resolvePeriod(request, dependencies.now ? new Date(dependencies.now()) : new Date());
+    const now = dependencies.now ? new Date(nowMilliseconds(dependencies)) : new Date();
+    period = resolvePeriod(request, now);
   } catch {
     return json(400, { error: 'invalid_period' });
   }
@@ -233,9 +289,6 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
     return json(200, { ok: true, googleSearch, audit });
   } catch (error) {
     const upstreamStatus = Number.isInteger(error?.status) ? error.status : undefined;
-    return json(502, {
-      error: 'search_console_unavailable',
-      ...(upstreamStatus ? { upstreamStatus } : {}),
-    });
+    return json(502, { error: 'search_console_unavailable', ...(upstreamStatus ? { upstreamStatus } : {}) });
   }
 }
