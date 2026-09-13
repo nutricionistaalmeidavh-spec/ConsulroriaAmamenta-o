@@ -1,7 +1,10 @@
-const TOKEN_KEY = 'artisysSeoAdminToken';
+const SESSION_KEY = 'artisysSeoGoogleSession';
+const SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const OAUTH_REDIRECT = `${window.location.origin}/admin/seo/`;
+
 const authPanel = document.querySelector('#authPanel');
-const authForm = document.querySelector('#authForm');
-const tokenInput = document.querySelector('#tokenInput');
+const googleLoginButton = document.querySelector('#googleLoginButton');
 const authError = document.querySelector('#authError');
 const dashboard = document.querySelector('#dashboard');
 const refreshButton = document.querySelector('#refreshButton');
@@ -65,9 +68,93 @@ function render(data) {
   statusText.textContent = 'Dados atualizados do Search Console';
 }
 
+function readSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.accessToken ? parsed : null;
+  } catch {
+    sessionStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+}
+
+function saveSession(session) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
+function consumeOAuthCallback() {
+  if (!window.location.hash) return;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  const expiresIn = Number(params.get('expires_in') || 3600);
+  const errorDescription = params.get('error_description');
+
+  if (accessToken) {
+    saveSession({
+      accessToken,
+      refreshToken: refreshToken || '',
+      expiresAt: Date.now() + Math.max(60, expiresIn) * 1000,
+    });
+    history.replaceState({}, document.title, OAUTH_REDIRECT);
+    return;
+  }
+
+  if (errorDescription) {
+    authError.textContent = decodeURIComponent(errorDescription.replaceAll('+', ' '));
+    history.replaceState({}, document.title, OAUTH_REDIRECT);
+  }
+}
+
+async function refreshSessionIfNeeded(session) {
+  if (!session?.accessToken) return null;
+  if (!session.expiresAt || session.expiresAt > Date.now() + 60_000) return session;
+  if (!session.refreshToken) return null;
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ refresh_token: session.refreshToken }),
+  });
+  if (!response.ok) return null;
+
+  const payload = await response.json();
+  return saveSession({
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token || session.refreshToken,
+    expiresAt: Date.now() + Number(payload.expires_in || 3600) * 1000,
+  });
+}
+
+function startGoogleLogin() {
+  const url = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+  url.searchParams.set('provider', 'google');
+  url.searchParams.set('redirect_to', OAUTH_REDIRECT);
+  window.location.assign(url.toString());
+}
+
 async function loadDashboard() {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  if (!token) {
+  let session = readSession();
+  if (session) {
+    try {
+      session = await refreshSessionIfNeeded(session);
+    } catch {
+      session = null;
+    }
+  }
+
+  if (!session?.accessToken) {
+    clearSession();
     authPanel.hidden = false;
     dashboard.hidden = true;
     refreshButton.hidden = true;
@@ -80,13 +167,13 @@ async function loadDashboard() {
 
   try {
     const response = await fetch('/api/seo/google/overview', {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${session.accessToken}` },
       cache: 'no-store',
     });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401 || response.status === 403) {
-      sessionStorage.removeItem(TOKEN_KEY);
-      throw new Error('Chave administrativa inválida.');
+      clearSession();
+      throw new Error('Esta conta Google não tem permissão para acessar o painel SEO.');
     }
     if (!response.ok) throw new Error(payload.error || `Falha HTTP ${response.status}`);
     render(payload);
@@ -103,14 +190,7 @@ async function loadDashboard() {
   }
 }
 
-authForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const token = tokenInput.value.trim();
-  if (!token) return;
-  sessionStorage.setItem(TOKEN_KEY, token);
-  tokenInput.value = '';
-  loadDashboard();
-});
-
+googleLoginButton.addEventListener('click', startGoogleLogin);
 refreshButton.addEventListener('click', loadDashboard);
+consumeOAuthCallback();
 loadDashboard();
