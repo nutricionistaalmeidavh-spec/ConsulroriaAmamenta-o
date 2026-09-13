@@ -35,16 +35,20 @@ assert.doesNotMatch(sitemap, /\/api\//i);
 
 assert.match(dashboard, /<meta\s+name="robots"\s+content="noindex,nofollow"/i, 'admin dashboard must not be indexed');
 assert.match(dashboard, /Painel SEO/i);
-assert.match(dashboard, /Entrar com Google/i, 'SEO dashboard must use Google sign-in');
+assert.match(dashboard, /Entrar com Google/i, 'SEO dashboard must use the existing ArtiSys Google sign-in');
 assert.doesNotMatch(dashboard, /Chave SEO/i, 'legacy admin key must not be exposed in the UI');
-assert.match(dashboardApp, /provider[^\n]*google|provider=google/i, 'dashboard must start Google OAuth through the existing Supabase provider');
+assert.doesNotMatch(dashboardApp, /provider[^\n]*google|provider=google/i, 'dashboard must not call the disabled Supabase Google provider');
+assert.match(dashboardApp, /obra-na-mao-comercial\.nutricionistaalmeidavh\.workers\.dev\/api\/artisys-sso\/start/i, 'dashboard must reuse the existing ArtiSys Google OAuth broker');
+assert.match(dashboardApp, /artisys_sso_code/i, 'dashboard must redeem the one-time owner SSO code');
+assert.match(dashboardApp, /\/api\/seo\/google\/session/i, 'dashboard must establish an HttpOnly SEO admin session');
 assert.match(dashboardApp, /\/api\/seo\/google\/overview/);
-assert.match(dashboardApp, /sessionStorage/);
 assert.doesNotMatch(dashboardApp, /localStorage/);
-assert.match(seoWorker, /\/auth\/v1\/user/, 'SEO API must validate the Supabase access token server-side');
-assert.match(seoWorker, /nutricionistaalmeidavh@gmail\.com/i, 'SEO API must restrict OAuth access to the owner e-mail');
-assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as emergency fallback');
+assert.match(seoWorker, /artisys-seo-session/i, 'SEO API must support its own HttpOnly admin session');
+assert.match(seoWorker, /nutricionistaalmeidavh@gmail\.com/i, 'SEO API must restrict access to the owner e-mail');
+assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as emergency fallback and signing key');
+assert.match(seoWorker, /api\/artisys-sso\/redeem/i, 'SEO session exchange must redeem the broker code server-side');
 
+assert.match(worker, /\/api\/seo\/google\/session/i, 'worker must route the SEO SSO session exchange');
 assert.match(worker, /x-robots-tag/i, 'private paths must receive X-Robots-Tag');
 
 console.log('Public SEO contract OK');
