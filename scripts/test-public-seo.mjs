@@ -21,9 +21,10 @@ assert.match(landing, /"@type"\s*:\s*"Person"/i, 'JSON-LD must describe Débora'
 assert.match(landing, /"@type"\s*:\s*"FAQPage"/i, 'JSON-LD must describe visible FAQ content');
 
 assert.match(robots, /User-agent:\s*\*/i);
-assert.match(robots, /Disallow:\s*\/app\//i);
-assert.match(robots, /Disallow:\s*\/admin\//i);
 assert.match(robots, /Disallow:\s*\/api\//i);
+assert.doesNotMatch(robots, /Disallow:\s*\/app\//i, 'noindex HTML pages must remain crawlable so crawlers can see the directive');
+assert.doesNotMatch(robots, /Disallow:\s*\/admin\//i, 'admin HTML must rely on noindex rather than crawler blocking');
+assert.doesNotMatch(robots, /Disallow:\s*\/clinical-source\//i, 'internal HTML must rely on noindex rather than crawler blocking');
 assert.match(robots, /Sitemap:\s*https:\/\/deboralactacao\.com\/sitemap\.xml/i);
 
 assert.match(sitemap, /<loc>https:\/\/deboralactacao\.com\/<\/loc>/i);
