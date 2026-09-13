@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
   [string]$AllowedEmail = $env:ARTISYS_SEO_ALLOWED_EMAIL,
-  [string]$RemoteName = 'artisys-qa-drive'
+  [string]$RemoteName = 'artisys-qa-drive',
+  [string]$SearchConsoleSite = 'sc-domain:deboralactacao.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,31 @@ $clientSecret = [string]$remote.client_secret
 if (-not $clientId -or -not $clientSecret) {
   throw "O remote '$RemoteName' não possui client_id/client_secret próprios."
 }
+
+Write-Step 'Validando o refresh token no Google antes de alterar o Worker.'
+$tokenResponse = Invoke-RestMethod -Method Post `
+  -Uri 'https://oauth2.googleapis.com/token' `
+  -ContentType 'application/x-www-form-urlencoded' `
+  -Body @{
+    client_id = $clientId
+    client_secret = $clientSecret
+    refresh_token = $refreshToken
+    grant_type = 'refresh_token'
+  }
+$accessToken = [string]$tokenResponse.access_token
+if (-not $accessToken) { throw 'O Google não retornou access_token. Refaça a autorização OAuth.' }
+
+Write-Step "Confirmando acesso à propriedade $SearchConsoleSite."
+$sitesResponse = Invoke-RestMethod -Method Get `
+  -Uri 'https://www.googleapis.com/webmasters/v3/sites' `
+  -Headers @{ Authorization = "Bearer $accessToken"; Accept = 'application/json' }
+$siteEntries = @($sitesResponse.siteEntry)
+$matchedSite = $siteEntries | Where-Object { [string]$_.siteUrl -eq $SearchConsoleSite } | Select-Object -First 1
+if (-not $matchedSite) {
+  $visible = @($siteEntries | ForEach-Object { [string]$_.siteUrl } | Where-Object { $_ }) -join ', '
+  throw "OAuth válido, mas a conta autorizada não possui acesso a '$SearchConsoleSite'. Propriedades visíveis: $visible"
+}
+Write-Step "OAuth e Search Console confirmados ($($matchedSite.permissionLevel))."
 
 $npx = Get-Command 'npx.cmd' -ErrorAction SilentlyContinue
 if (-not $npx) { $npx = Get-Command 'npx' -ErrorAction SilentlyContinue }
