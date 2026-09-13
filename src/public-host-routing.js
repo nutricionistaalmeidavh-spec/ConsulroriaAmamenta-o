@@ -35,7 +35,10 @@ export function resolvePublicHostRoute(urlLike) {
   if (hostname !== PUBLIC_APEX_HOST) return Object.freeze({ type: 'passthrough' });
 
   if (url.pathname === '/') {
-    return Object.freeze({ type: 'rewrite', pathname: '/debora/index.html' });
+    // Use the directory URL expected by Workers Static Assets. Requesting the
+    // explicit index file is canonicalized to /debora/, leaking a 307 to the
+    // browser and creating a loop with the public /debora/ -> / redirect below.
+    return Object.freeze({ type: 'rewrite', pathname: '/debora/' });
   }
 
   if (url.pathname === '/debora' || url.pathname === '/debora/') {
