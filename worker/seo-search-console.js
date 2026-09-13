@@ -2,9 +2,6 @@ import { createGoogleRefreshTokenProvider } from './vendor/artisys-seo/google-to
 import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.mjs';
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
-const SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
-
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
@@ -25,44 +22,16 @@ function bearerToken(request) {
   return match ? match[1] : '';
 }
 
-async function authenticateProductUser(request, fetchImpl) {
-  const token = bearerToken(request);
-  if (!token) return null;
-  const response = await fetchImpl(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      authorization: `Bearer ${token}`,
-      accept: 'application/json',
-    },
-  });
-  if (!response.ok) return null;
-  const user = await response.json().catch(() => null);
-  return user?.id ? user : null;
-}
-
-function parseList(value, normalize = (item) => item) {
-  return new Set(text(value).split(/[\s,;]+/).map((item) => normalize(item.trim())).filter(Boolean));
-}
-
-export function parseSeoAllowedUserIds(value) {
-  return parseList(value);
-}
-
-export function parseSeoAllowedEmails(value) {
-  return parseList(value, (item) => item.toLowerCase());
-}
-
-export function isSeoUserAllowed(user, env) {
-  if (!user?.id) return false;
-  const ids = parseSeoAllowedUserIds(env?.ARTISYS_SEO_ALLOWED_USER_IDS);
-  const emails = parseSeoAllowedEmails(env?.ARTISYS_SEO_ALLOWED_EMAILS);
-  const email = text(user.email).toLowerCase();
-  return ids.has(String(user.id)) || Boolean(email && emails.has(email));
-}
-
-function hasSeoAdminConfig(env) {
-  return parseSeoAllowedUserIds(env?.ARTISYS_SEO_ALLOWED_USER_IDS).size > 0
-    || parseSeoAllowedEmails(env?.ARTISYS_SEO_ALLOWED_EMAILS).size > 0;
+function constantTimeTextEqual(left, right) {
+  const encoder = new TextEncoder();
+  const a = encoder.encode(String(left));
+  const b = encoder.encode(String(right));
+  const length = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let index = 0; index < length; index += 1) {
+    diff |= (a[index] ?? 0) ^ (b[index] ?? 0);
+  }
+  return diff === 0;
 }
 
 function googleConfig(env) {
@@ -102,16 +71,15 @@ function resolvePeriod(request, now) {
 }
 
 export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
+  const configuredAdminToken = text(env?.ARTISYS_SEO_ADMIN_TOKEN);
+  if (!configuredAdminToken) return json(503, { error: 'seo_admin_not_configured' });
+
+  const presentedAdminToken = bearerToken(request);
+  if (!presentedAdminToken) return json(401, { error: 'unauthorized' });
+  if (!constantTimeTextEqual(presentedAdminToken, configuredAdminToken)) return json(403, { error: 'forbidden' });
+
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
-
-  const authenticateUser = dependencies.authenticateUser
-    ?? ((input) => authenticateProductUser(input, fetchImpl));
-  const user = await authenticateUser(request);
-  if (!user?.id) return json(401, { error: 'unauthorized' });
-
-  if (!hasSeoAdminConfig(env)) return json(503, { error: 'seo_admin_not_configured' });
-  if (!isSeoUserAllowed(user, env)) return json(403, { error: 'forbidden' });
 
   const config = googleConfig(env);
   if (!config) return json(503, { error: 'seo_google_not_configured' });
