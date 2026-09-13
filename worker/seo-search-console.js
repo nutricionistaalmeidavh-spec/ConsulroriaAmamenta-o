@@ -70,6 +70,75 @@ function resolvePeriod(request, now) {
   return { startDate: startParam, endDate: endParam };
 }
 
+function opportunityBase(row) {
+  return {
+    clicks: Number(row?.clicks || 0),
+    impressions: Number(row?.impressions || 0),
+    ctr: Number(row?.ctr || 0),
+    position: Number.isFinite(row?.position) ? row.position : null,
+  };
+}
+
+export function buildSearchConsoleAudit(googleSearch) {
+  const opportunities = [];
+  const queries = Array.isArray(googleSearch?.topQueries) ? googleSearch.topQueries : [];
+  const pages = Array.isArray(googleSearch?.topPages) ? googleSearch.topPages : [];
+
+  for (const row of queries) {
+    if (row.impressions >= 50 && row.ctr < 0.025) {
+      opportunities.push({
+        type: 'low_ctr_query',
+        priority: row.impressions >= 150 ? 'high' : 'medium',
+        label: 'CTR baixo',
+        title: `Melhorar clique para “${row.query}”`,
+        recommendation: 'Revisar título e descrição da página para responder melhor à intenção desta busca, sem alterar o conteúdo clínico sem aprovação.',
+        query: row.query,
+        ...opportunityBase(row),
+      });
+    }
+    if (row.impressions >= 30 && row.position >= 4 && row.position <= 20) {
+      opportunities.push({
+        type: 'ranking_opportunity',
+        priority: row.position <= 10 ? 'high' : 'medium',
+        label: 'Perto da 1ª página',
+        title: `Ganhar posição para “${row.query}”`,
+        recommendation: 'Reforçar a relevância semântica da landing para esta intenção e acompanhar a evolução da posição média.',
+        query: row.query,
+        ...opportunityBase(row),
+      });
+    }
+  }
+
+  for (const row of pages) {
+    if (row.impressions >= 100 && row.ctr < 0.025) {
+      opportunities.push({
+        type: 'low_ctr_page',
+        priority: row.impressions >= 300 ? 'high' : 'medium',
+        label: 'Página com CTR baixo',
+        title: 'Melhorar apresentação da página no Google',
+        recommendation: 'Reavaliar title, description e alinhamento com as buscas que geram impressões para esta página.',
+        page: row.page,
+        ...opportunityBase(row),
+      });
+    }
+  }
+
+  opportunities.sort((left, right) => {
+    const priority = { high: 2, medium: 1 };
+    return (priority[right.priority] - priority[left.priority]) || (right.impressions - left.impressions);
+  });
+
+  return Object.freeze({
+    summary: Object.freeze({
+      opportunityCount: opportunities.length,
+      highPriorityCount: opportunities.filter((item) => item.priority === 'high').length,
+      queryCount: queries.length,
+      pageCount: pages.length,
+    }),
+    opportunities: Object.freeze(opportunities.slice(0, 12).map((item) => Object.freeze(item))),
+  });
+}
+
 export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
   const configuredAdminToken = text(env?.ARTISYS_SEO_ADMIN_TOKEN);
   if (!configuredAdminToken) return json(503, { error: 'seo_admin_not_configured' });
@@ -104,7 +173,8 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
       ...period,
       rowLimit: 10,
     });
-    return json(200, { ok: true, googleSearch });
+    const audit = buildSearchConsoleAudit(googleSearch);
+    return json(200, { ok: true, googleSearch, audit });
   } catch (error) {
     const upstreamStatus = Number.isInteger(error?.status) ? error.status : undefined;
     return json(502, {

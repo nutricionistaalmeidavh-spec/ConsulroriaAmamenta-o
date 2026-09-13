@@ -15,20 +15,25 @@ on:
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
-      - 'supabase/phase-pro-checkout-deferred-email.sql'
-      - 'supabase/functions/_shared/**'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-public-seo.mjs'
+      - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/functions/_shared/**'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
       - 'supabase/phase-saas-billing.sql'
       - 'supabase/functions/saas-checkout/**'
       - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
+      - 'public/debora/**'
+      - 'public/admin/seo/**'
+      - 'public/robots.txt'
+      - 'public/sitemap.xml'
       - 'worker/**'
       - 'wrangler.jsonc'
       - '.github/workflows/validate-saas-foundation.yml'
@@ -41,20 +46,25 @@ on:
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
-      - 'supabase/phase-pro-checkout-deferred-email.sql'
-      - 'supabase/functions/_shared/**'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-public-seo.mjs'
+      - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/functions/_shared/**'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
       - 'supabase/phase-saas-billing.sql'
       - 'supabase/functions/saas-checkout/**'
       - 'supabase/functions/saas-billing-webhook/**'
       - 'public/comercial/**'
+      - 'public/debora/**'
+      - 'public/admin/seo/**'
+      - 'public/robots.txt'
+      - 'public/sitemap.xml'
       - 'worker/**'
       - 'wrangler.jsonc'
       - '.github/workflows/validate-saas-foundation.yml'
@@ -100,5 +110,12 @@ jobs:
         run: node scripts/test-billing-scaffold.mjs
       - name: Validate Cloudflare Asaas worker contract
         run: node scripts/test-cloudflare-asaas.mjs
+      - name: Validate SEO API contract
+        run: node --test worker/seo-*.test.mjs
+      - name: Validate public SEO contract
+        run: node scripts/test-public-seo.mjs
       - name: Syntax-check Cloudflare worker
-        run: node --check worker/index.js
+        run: |
+          node --check worker/index.js
+          node --check worker/domain-entry.js
+          node --check worker/seo-search-console.js

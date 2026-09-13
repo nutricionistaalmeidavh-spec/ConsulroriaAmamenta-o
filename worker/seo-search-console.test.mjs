@@ -87,6 +87,36 @@ test('SEO overview returns Search Console metrics with the dedicated admin token
   assert.equal(calls.filter((call) => call.url === 'https://oauth2.googleapis.com/token').length, 1);
 });
 
+test('SEO overview derives actionable audit opportunities from Search Console rows', async () => {
+  const fetchImpl = async (url, options = {}) => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600 }), { status: 200 });
+    }
+    const payload = JSON.parse(options.body || '{}');
+    if (Array.isArray(payload.dimensions) && payload.dimensions.length === 0) {
+      return new Response(JSON.stringify({ rows: [{ clicks: 20, impressions: 1000, ctr: 0.02, position: 9.1 }] }), { status: 200 });
+    }
+    if (payload.dimensions?.[0] === 'query') {
+      return new Response(JSON.stringify({ rows: [
+        { keys: ['dor ao amamentar'], clicks: 2, impressions: 220, ctr: 0.009, position: 8.4 },
+        { keys: ['consultora amamentação'], clicks: 5, impressions: 120, ctr: 0.041, position: 12.2 },
+      ] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ rows: [
+      { keys: ['https://deboralactacao.com/'], clicks: 18, impressions: 900, ctr: 0.02, position: 8.9 },
+    ] }), { status: 200 });
+  };
+
+  const response = await handleSeoGoogleOverview(request(), baseEnv(), { fetch: fetchImpl });
+  const result = await body(response);
+
+  assert.equal(response.status, 200);
+  assert.ok(Array.isArray(result.audit?.opportunities));
+  assert.ok(result.audit.opportunities.some((item) => item.type === 'low_ctr_query' && item.query === 'dor ao amamentar'));
+  assert.ok(result.audit.opportunities.some((item) => item.type === 'ranking_opportunity' && item.query === 'consultora amamentação'));
+  assert.equal(typeof result.audit.summary?.opportunityCount, 'number');
+});
+
 test('SEO overview reports missing Google secret configuration without exposing details', async () => {
   const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_GOOGLE_CLIENT_SECRET: '' }), {
     fetch: async () => { throw new Error('must not run'); },
