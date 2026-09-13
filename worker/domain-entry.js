@@ -1,5 +1,5 @@
 import coreWorker from './index.js';
-import { handleSeoGoogleOverview } from './seo-search-console.js';
+import { handleSeoGoogleOverview, handleSeoGoogleSession } from './seo-search-console.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
@@ -28,8 +28,12 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // SEO uses a dedicated ArtiSys administrative token and is independent from
-    // product/member authentication. Keep it isolated from checkout/webhook APIs.
+    // SEO administration is isolated from product/member accounts. The owner
+    // authenticates through the existing ArtiSys Google OAuth broker, then this
+    // domain keeps only a signed HttpOnly SEO session.
+    if (url.pathname === '/api/seo/google/session' && request.method === 'POST') {
+      return withNoIndex(await handleSeoGoogleSession(request, env));
+    }
     if (url.pathname === '/api/seo/google/overview' && request.method === 'GET') {
       return withNoIndex(await handleSeoGoogleOverview(request, env));
     }
