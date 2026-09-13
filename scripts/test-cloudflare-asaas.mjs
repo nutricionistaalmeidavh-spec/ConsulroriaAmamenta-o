@@ -10,7 +10,7 @@ const billingFunction = readFileSync('supabase/functions/saas-billing-webhook/in
 
 assert.match(wrangler, /"main"\s*:\s*"worker\/domain-entry\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
-assert.match(wrangler, /"run_worker_first"\s*:\s*\["\/api\/\*"\]/);
+assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
 assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 assert.doesNotMatch(wrangler, /"secrets"\s*:/);
