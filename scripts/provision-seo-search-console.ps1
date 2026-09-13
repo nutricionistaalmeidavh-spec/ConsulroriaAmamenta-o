@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-  [string]$AllowedEmail = $env:ARTISYS_SEO_ALLOWED_EMAIL,
   [string]$RemoteName = 'artisys-qa-drive',
   [string]$SearchConsoleSite = 'sc-domain:deboralactacao.com'
 )
@@ -12,20 +11,43 @@ function Write-Step([string]$Message) {
   Write-Host "[Débora SEO] $Message"
 }
 
-if (-not $AllowedEmail) {
-  $AllowedEmail = Read-Host 'E-mail do usuário do sistema autorizado a ver o painel SEO'
-}
-if (-not $AllowedEmail -or $AllowedEmail -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
-  throw 'Informe um e-mail válido em -AllowedEmail ou ARTISYS_SEO_ALLOWED_EMAIL.'
+function New-AdminToken {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    $rng.Dispose()
+  }
+  return [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
-$tokenPath = Join-Path $env:LOCALAPPDATA 'ArtiSys\SEO\google-search-console-token.json'
+$seoDir = Join-Path $env:LOCALAPPDATA 'ArtiSys\SEO'
+if (-not (Test-Path $seoDir)) {
+  New-Item -ItemType Directory -Path $seoDir -Force | Out-Null
+}
+
+$tokenPath = Join-Path $seoDir 'google-search-console-token.json'
 if (-not (Test-Path $tokenPath)) {
   throw "Token do Search Console não encontrado em $tokenPath. Execute primeiro o OAuth do artisys-seo."
 }
 $token = Get-Content $tokenPath -Raw | ConvertFrom-Json
 $refreshToken = [string]$token.refresh_token
 if (-not $refreshToken) { throw 'O arquivo OAuth não contém refresh_token. Refaça a autorização.' }
+
+$adminTokenPath = Join-Path $seoDir 'debora-seo-admin-token.txt'
+$adminToken = ''
+if (Test-Path $adminTokenPath) {
+  $adminToken = (Get-Content $adminTokenPath -Raw).Trim()
+}
+if (-not $adminToken -or $adminToken.Length -lt 32) {
+  $adminToken = New-AdminToken
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($adminTokenPath, $adminToken, $utf8NoBom)
+  Write-Step 'Chave administrativa própria do SEO criada e salva localmente sem exibir o valor.'
+} else {
+  Write-Step 'Chave administrativa própria do SEO encontrada localmente.'
+}
 
 $rclone = Get-Command 'rclone.exe' -ErrorAction SilentlyContinue
 if (-not $rclone) { $rclone = Get-Command 'rclone' -ErrorAction SilentlyContinue }
@@ -81,13 +103,13 @@ try {
     ARTISYS_GOOGLE_CLIENT_ID = $clientId
     ARTISYS_GOOGLE_CLIENT_SECRET = $clientSecret
     ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN = $refreshToken
-    ARTISYS_SEO_ALLOWED_EMAILS = $AllowedEmail.Trim().ToLowerInvariant()
+    ARTISYS_SEO_ADMIN_TOKEN = $adminToken
   }
   $json = $payload | ConvertTo-Json -Compress
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
   [System.IO.File]::WriteAllText($tempFile, $json, $utf8NoBom)
 
-  Write-Step 'Enviando secrets ao Cloudflare Worker sem exibir os valores.'
+  Write-Step 'Enviando credenciais administrativas ao Cloudflare Worker sem exibir os valores.'
   Push-Location $repoRoot
   try {
     & $npx.Source wrangler secret bulk $tempFile --config $wranglerConfig
@@ -96,7 +118,9 @@ try {
     Pop-Location
   }
 
-  Write-Step 'Secrets do Search Console provisionados no Worker.'
+  Write-Step 'Search Console provisionado no Worker.'
+  Write-Step 'Nenhuma conta da Débora/Membra é necessária para administrar o SEO.'
+  Write-Step "Chave administrativa local: $adminTokenPath"
   Write-Step 'A rota protegida é /api/seo/google/overview.'
 } finally {
   if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
