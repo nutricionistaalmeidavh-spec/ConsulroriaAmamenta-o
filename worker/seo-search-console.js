@@ -40,8 +40,29 @@ async function authenticateProductUser(request, fetchImpl) {
   return user?.id ? user : null;
 }
 
+function parseList(value, normalize = (item) => item) {
+  return new Set(text(value).split(/[\s,;]+/).map((item) => normalize(item.trim())).filter(Boolean));
+}
+
 export function parseSeoAllowedUserIds(value) {
-  return new Set(text(value).split(/[\s,;]+/).map((item) => item.trim()).filter(Boolean));
+  return parseList(value);
+}
+
+export function parseSeoAllowedEmails(value) {
+  return parseList(value, (item) => item.toLowerCase());
+}
+
+export function isSeoUserAllowed(user, env) {
+  if (!user?.id) return false;
+  const ids = parseSeoAllowedUserIds(env?.ARTISYS_SEO_ALLOWED_USER_IDS);
+  const emails = parseSeoAllowedEmails(env?.ARTISYS_SEO_ALLOWED_EMAILS);
+  const email = text(user.email).toLowerCase();
+  return ids.has(String(user.id)) || Boolean(email && emails.has(email));
+}
+
+function hasSeoAdminConfig(env) {
+  return parseSeoAllowedUserIds(env?.ARTISYS_SEO_ALLOWED_USER_IDS).size > 0
+    || parseSeoAllowedEmails(env?.ARTISYS_SEO_ALLOWED_EMAILS).size > 0;
 }
 
 function googleConfig(env) {
@@ -89,9 +110,8 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
   const user = await authenticateUser(request);
   if (!user?.id) return json(401, { error: 'unauthorized' });
 
-  const allowedUserIds = parseSeoAllowedUserIds(env?.ARTISYS_SEO_ALLOWED_USER_IDS);
-  if (allowedUserIds.size === 0) return json(503, { error: 'seo_admin_not_configured' });
-  if (!allowedUserIds.has(String(user.id))) return json(403, { error: 'forbidden' });
+  if (!hasSeoAdminConfig(env)) return json(503, { error: 'seo_admin_not_configured' });
+  if (!isSeoUserAllowed(user, env)) return json(403, { error: 'forbidden' });
 
   const config = googleConfig(env);
   if (!config) return json(503, { error: 'seo_google_not_configured' });
