@@ -57,7 +57,9 @@ try {
     ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN = $refreshToken
     ARTISYS_SEO_ALLOWED_EMAILS = $AllowedEmail.Trim().ToLowerInvariant()
   }
-  $payload | ConvertTo-Json -Compress | Set-Content -Path $tempFile -Encoding utf8NoBOM
+  $json = $payload | ConvertTo-Json -Compress
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($tempFile, $json, $utf8NoBom)
 
   Write-Step 'Enviando secrets ao Cloudflare Worker sem exibir os valores.'
   Push-Location $repoRoot
