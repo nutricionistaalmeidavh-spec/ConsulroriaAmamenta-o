@@ -37,9 +37,10 @@ assert.deepEqual(resolveAppIdentity({ pathname: '/', hostname: 'app.deboralactac
 
 assert.ok(existsSync('src/public-host-routing.js'), 'custom domain routing helper must exist');
 const { resolvePublicHostRoute } = await import('../src/public-host-routing.js');
+const { default: domainWorker } = await import('../worker/domain-entry.js');
 assert.deepEqual(resolvePublicHostRoute('https://deboralactacao.com/?utm_source=ig'), {
   type: 'rewrite',
-  pathname: '/debora/index.html',
+  pathname: '/debora/',
 });
 assert.deepEqual(resolvePublicHostRoute('https://deboralactacao.com/debora/?utm_source=ig'), {
   type: 'redirect',
@@ -51,7 +52,17 @@ assert.deepEqual(resolvePublicHostRoute('https://www.deboralactacao.com/contato?
   location: 'https://deboralactacao.com/contato?x=1',
   status: 308,
 });
+assert.deepEqual(resolvePublicHostRoute('https://www.deboralactacao.com/'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/',
+  status: 308,
+});
 assert.deepEqual(resolvePublicHostRoute('https://app.deboralactacao.com/'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/app/',
+  status: 308,
+});
+assert.deepEqual(resolvePublicHostRoute('https://app.deboralactacao.com/app/'), {
   type: 'redirect',
   location: 'https://deboralactacao.com/app/',
   status: 308,
@@ -61,9 +72,26 @@ assert.deepEqual(resolvePublicHostRoute('https://comercial.deboralactacao.com/?u
   location: 'https://deboralactacao.com/comercial/?utm_campaign=ig',
   status: 308,
 });
+assert.deepEqual(resolvePublicHostRoute('https://comercial.deboralactacao.com/comercial/'), {
+  type: 'redirect',
+  location: 'https://deboralactacao.com/comercial/',
+  status: 308,
+});
 assert.deepEqual(resolvePublicHostRoute('https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/debora/'), {
   type: 'passthrough',
 });
+
+let rewrittenAssetUrl;
+const apexResponse = await domainWorker.fetch(new Request('https://deboralactacao.com/?utm_source=ig'), {
+  ASSETS: {
+    fetch(request) {
+      rewrittenAssetUrl = request.url;
+      return new Response('debora landing', { status: 200 });
+    },
+  },
+});
+assert.equal(apexResponse.status, 200, 'apex must return the landing response without exposing an asset redirect');
+assert.equal(rewrittenAssetUrl, 'https://deboralactacao.com/debora/?utm_source=ig', 'apex must use the canonical asset directory URL');
 
 assert.match(bootstrap, /CANONICAL_PRODUCT_NAME/, 'bootstrap must consume canonical product identity');
 assert.match(bootstrap, /genericizeClinicalConfig/, 'legacy config must be neutralized only at runtime boundary');
