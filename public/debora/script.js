@@ -2,7 +2,7 @@ document.querySelectorAll('a[href^="#"]').forEach(link=>link.addEventListener('c
 
 async function mountOriginalBrandMotion(){
   const host=document.querySelector('#brandMotion');if(!host)return;
-  const source=await fetch('public/logo-motion-original.html').then(r=>r.text());
+  const source=await fetch('/debora/public/logo-motion-original.html').then(r=>r.text());
   const original=new DOMParser().parseFromString(source,'text/html');
   const shadow=host.attachShadow({mode:'open'}),style=original.querySelector('style')?.textContent||'',stage=original.querySelector('.stage');
   if(!stage)return;
