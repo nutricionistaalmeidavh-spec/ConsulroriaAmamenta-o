@@ -23,14 +23,10 @@ export function createGoogleRefreshTokenProvider(options) {
 
   let cachedAccessToken = null;
   let expiresAt = 0;
+  let refreshInFlight = null;
   const refreshSkewMs = 60_000;
 
-  return async function getAccessToken() {
-    const currentTime = Number(now());
-    if (cachedAccessToken && Number.isFinite(currentTime) && currentTime < (expiresAt - refreshSkewMs)) {
-      return cachedAccessToken;
-    }
-
+  async function refreshAccessToken(currentTime) {
     const body = new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
@@ -62,5 +58,19 @@ export function createGoogleRefreshTokenProvider(options) {
     cachedAccessToken = accessToken;
     expiresAt = currentTime + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn * 1000 : 3_600_000);
     return cachedAccessToken;
+  }
+
+  return async function getAccessToken() {
+    const currentTime = Number(now());
+    if (cachedAccessToken && Number.isFinite(currentTime) && currentTime < (expiresAt - refreshSkewMs)) {
+      return cachedAccessToken;
+    }
+
+    if (!refreshInFlight) {
+      refreshInFlight = refreshAccessToken(currentTime).finally(() => {
+        refreshInFlight = null;
+      });
+    }
+    return refreshInFlight;
   };
 }
