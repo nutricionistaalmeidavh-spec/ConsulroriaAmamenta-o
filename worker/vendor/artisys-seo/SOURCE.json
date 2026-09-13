@@ -3,7 +3,7 @@
   "package": "@artisys/seo",
   "sourceRepository": "nutricionistaalmeidavh-spec/utilidades",
   "sourceBranch": "feat/artisys-seo",
-  "sourceCommit": "d00e530ce79d5824b61eebfebb62bda95f8a10df",
+  "sourceCommit": "5da17811ed0f1ea7e6dd0f279cbb25f557f74f5c",
   "files": [
     "google-token.mjs",
     "search-console.mjs",
