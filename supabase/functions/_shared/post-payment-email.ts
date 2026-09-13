@@ -11,7 +11,7 @@ export async function sendPaidConfirmation(url: string, key: string, ownerId: st
   if (user.email_confirmed_at) return { ok: true, status: 'email_confirmed' };
   if (!user.app_metadata?.checkout_email_after_payment) return { ok: true, status: 'legacy_confirmation' };
   if (user.app_metadata?.checkout_confirmation_sent_at) return { ok: true, status: 'email_sent' };
-  const redirect = 'https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev/comercial/index.html?confirmed=1&plan=' + encodeURIComponent(paid[0].plan_code);
+  const redirect = 'https://deboralactacao.com/comercial/index.html?confirmed=1&plan=' + encodeURIComponent(paid[0].plan_code);
   const sent = await fetch(`${url}/auth/v1/resend?redirect_to=${encodeURIComponent(redirect)}`, {
     method: 'POST', headers, body: JSON.stringify({ type: 'signup', email: user.email }),
   });

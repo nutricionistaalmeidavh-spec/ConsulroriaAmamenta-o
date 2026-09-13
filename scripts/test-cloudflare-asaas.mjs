@@ -8,7 +8,7 @@ const planHtml = readFileSync('public/comercial/plano.html', 'utf8');
 const checkoutFunction = readFileSync('supabase/functions/saas-checkout/index.ts', 'utf8');
 const billingFunction = readFileSync('supabase/functions/saas-billing-webhook/index.ts', 'utf8');
 
-assert.match(wrangler, /"main"\s*:\s*"worker\/index\.js"/);
+assert.match(wrangler, /"main"\s*:\s*"worker\/domain-entry\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*\["\/api\/\*"\]/);
 assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
