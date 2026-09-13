@@ -24,6 +24,12 @@ assert.deepEqual(resolveAppIdentity({ pathname: '/' }), {
 });
 assert.equal(resolveAppIdentity({ pathname: '/app/' }).entryMode, 'app');
 assert.equal(resolveAppIdentity({ pathname: '/app/' }).basePath, '/app/');
+assert.deepEqual(resolveAppIdentity({ pathname: '/', hostname: 'app.deboralactacao.com' }), {
+  productName: 'Gestão de Amamentação',
+  productShortName: 'Amamentação',
+  entryMode: 'app',
+  basePath: '/',
+});
 
 assert.match(bootstrap, /CANONICAL_PRODUCT_NAME/, 'bootstrap must consume canonical product identity');
 assert.match(bootstrap, /genericizeClinicalConfig/, 'legacy config must be neutralized only at runtime boundary');
