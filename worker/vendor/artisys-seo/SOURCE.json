@@ -1,0 +1,13 @@
+{
+  "module": "artisys-seo",
+  "package": "@artisys/seo",
+  "sourceRepository": "nutricionistaalmeidavh-spec/utilidades",
+  "sourceBranch": "feat/artisys-seo",
+  "sourceCommit": "d00e530ce79d5824b61eebfebb62bda95f8a10df",
+  "files": [
+    "google-token.mjs",
+    "search-console.mjs",
+    "search-console-overview.mjs"
+  ],
+  "purpose": "Cloudflare Worker Search Console read-only integration for Débora Lactação"
+}
