@@ -2,6 +2,10 @@ import { createGoogleRefreshTokenProvider } from './vendor/artisys-seo/google-to
 import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.mjs';
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
+const DEFAULT_SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const DEFAULT_SEO_ADMIN_EMAIL = 'nutricionistaalmeidavh@gmail.com';
+
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
@@ -40,6 +44,62 @@ function googleConfig(env) {
   const refreshToken = text(env?.ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN);
   if (!clientId || !clientSecret || !refreshToken) return null;
   return { clientId, clientSecret, refreshToken };
+}
+
+function supabaseAuthConfig(env) {
+  return {
+    url: text(env?.ARTISYS_SUPABASE_URL) || DEFAULT_SUPABASE_URL,
+    publishableKey: text(env?.ARTISYS_SUPABASE_PUBLISHABLE_KEY) || DEFAULT_SUPABASE_PUBLISHABLE_KEY,
+    adminEmail: (text(env?.ARTISYS_SEO_ADMIN_EMAIL) || DEFAULT_SEO_ADMIN_EMAIL).toLowerCase(),
+  };
+}
+
+function hasGoogleIdentity(user) {
+  const primary = text(user?.app_metadata?.provider).toLowerCase();
+  const providers = Array.isArray(user?.app_metadata?.providers) ? user.app_metadata.providers : [];
+  const identities = Array.isArray(user?.identities) ? user.identities : [];
+  return primary === 'google'
+    || providers.some((provider) => String(provider).toLowerCase() === 'google')
+    || identities.some((identity) => String(identity?.provider || '').toLowerCase() === 'google');
+}
+
+async function authorizeSeoRequest(request, env, fetchImpl) {
+  const presentedToken = bearerToken(request);
+  if (!presentedToken) return { ok: false, response: json(401, { error: 'unauthorized' }) };
+
+  const configuredAdminToken = text(env?.ARTISYS_SEO_ADMIN_TOKEN);
+  if (configuredAdminToken && constantTimeTextEqual(presentedToken, configuredAdminToken)) {
+    return { ok: true, method: 'admin_token' };
+  }
+
+  const auth = supabaseAuthConfig(env);
+  let response;
+  try {
+    response = await fetchImpl(`${auth.url}/auth/v1/user`, {
+      headers: {
+        apikey: auth.publishableKey,
+        authorization: `Bearer ${presentedToken}`,
+      },
+    });
+  } catch {
+    return { ok: false, response: json(403, { error: 'forbidden' }) };
+  }
+
+  if (!response.ok) return { ok: false, response: json(403, { error: 'forbidden' }) };
+
+  let user;
+  try {
+    user = await response.json();
+  } catch {
+    return { ok: false, response: json(403, { error: 'forbidden' }) };
+  }
+
+  const email = text(user?.email).toLowerCase();
+  if (email !== auth.adminEmail || !hasGoogleIdentity(user)) {
+    return { ok: false, response: json(403, { error: 'forbidden' }) };
+  }
+
+  return { ok: true, method: 'google_oauth', email };
 }
 
 function isoDate(date) {
@@ -140,15 +200,11 @@ export function buildSearchConsoleAudit(googleSearch) {
 }
 
 export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
-  const configuredAdminToken = text(env?.ARTISYS_SEO_ADMIN_TOKEN);
-  if (!configuredAdminToken) return json(503, { error: 'seo_admin_not_configured' });
-
-  const presentedAdminToken = bearerToken(request);
-  if (!presentedAdminToken) return json(401, { error: 'unauthorized' });
-  if (!constantTimeTextEqual(presentedAdminToken, configuredAdminToken)) return json(403, { error: 'forbidden' });
-
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
+
+  const authorization = await authorizeSeoRequest(request, env, fetchImpl);
+  if (!authorization.ok) return authorization.response;
 
   const config = googleConfig(env);
   if (!config) return json(503, { error: 'seo_google_not_configured' });
