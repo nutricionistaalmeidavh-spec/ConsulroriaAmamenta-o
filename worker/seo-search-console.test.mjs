@@ -4,7 +4,7 @@ import { handleSeoGoogleOverview } from './seo-search-console.js';
 
 function baseEnv(overrides = {}) {
   return {
-    ARTISYS_SEO_ALLOWED_USER_IDS: 'admin-123',
+    ARTISYS_SEO_ADMIN_TOKEN: 'seo-admin-secret',
     ARTISYS_GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
     ARTISYS_GOOGLE_CLIENT_SECRET: 'client-secret',
     ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN: 'refresh-secret',
@@ -13,29 +13,18 @@ function baseEnv(overrides = {}) {
   };
 }
 
-function request() {
-  return new Request('https://deboralactacao.com/api/seo/google/overview?startDate=2026-08-01&endDate=2026-08-31');
+function request(adminToken = 'seo-admin-secret') {
+  const headers = adminToken === null ? {} : { authorization: `Bearer ${adminToken}` };
+  return new Request('https://deboralactacao.com/api/seo/google/overview?startDate=2026-08-01&endDate=2026-08-31', { headers });
 }
 
 async function body(response) {
   return response.json();
 }
 
-test('SEO overview requires an authenticated product user before touching Google', async () => {
+test('SEO overview is closed when the dedicated admin token is not configured', async () => {
   let googleCalls = 0;
-  const response = await handleSeoGoogleOverview(request(), baseEnv(), {
-    authenticateUser: async () => null,
-    fetch: async () => { googleCalls += 1; throw new Error('must not run'); },
-  });
-  assert.equal(response.status, 401);
-  assert.deepEqual(await body(response), { error: 'unauthorized' });
-  assert.equal(googleCalls, 0);
-});
-
-test('SEO overview is closed when the admin allowlist is not configured', async () => {
-  let googleCalls = 0;
-  const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_SEO_ALLOWED_USER_IDS: '' }), {
-    authenticateUser: async () => ({ id: 'admin-123' }),
+  const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_SEO_ADMIN_TOKEN: '' }), {
     fetch: async () => { googleCalls += 1; throw new Error('must not run'); },
   });
   assert.equal(response.status, 503);
@@ -43,10 +32,19 @@ test('SEO overview is closed when the admin allowlist is not configured', async 
   assert.equal(googleCalls, 0);
 });
 
-test('SEO overview rejects authenticated users outside the allowlist', async () => {
+test('SEO overview requires the dedicated ArtiSys admin bearer token', async () => {
   let googleCalls = 0;
-  const response = await handleSeoGoogleOverview(request(), baseEnv(), {
-    authenticateUser: async () => ({ id: 'patient-999' }),
+  const response = await handleSeoGoogleOverview(request(null), baseEnv(), {
+    fetch: async () => { googleCalls += 1; throw new Error('must not run'); },
+  });
+  assert.equal(response.status, 401);
+  assert.deepEqual(await body(response), { error: 'unauthorized' });
+  assert.equal(googleCalls, 0);
+});
+
+test('SEO overview rejects an invalid dedicated admin token', async () => {
+  let googleCalls = 0;
+  const response = await handleSeoGoogleOverview(request('wrong-token'), baseEnv(), {
     fetch: async () => { googleCalls += 1; throw new Error('must not run'); },
   });
   assert.equal(response.status, 403);
@@ -54,10 +52,11 @@ test('SEO overview rejects authenticated users outside the allowlist', async () 
   assert.equal(googleCalls, 0);
 });
 
-test('SEO overview returns real Search Console metrics for an allowed user without leaking secrets', async () => {
+test('SEO overview returns Search Console metrics with the dedicated admin token and never uses product auth', async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
+    assert.equal(String(url).includes('/auth/v1/user'), false);
     if (url === 'https://oauth2.googleapis.com/token') {
       return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600, token_type: 'Bearer' }), { status: 200 });
     }
@@ -71,10 +70,7 @@ test('SEO overview returns real Search Console metrics for an allowed user witho
     return new Response(JSON.stringify({ rows: [{ keys: ['https://deboralactacao.com/'], clicks: 10, impressions: 220, ctr: 10 / 220, position: 5.2 }] }), { status: 200 });
   };
 
-  const response = await handleSeoGoogleOverview(request(), baseEnv(), {
-    authenticateUser: async () => ({ id: 'admin-123' }),
-    fetch: fetchImpl,
-  });
+  const response = await handleSeoGoogleOverview(request(), baseEnv(), { fetch: fetchImpl });
   const result = await body(response);
 
   assert.equal(response.status, 200);
@@ -84,6 +80,7 @@ test('SEO overview returns real Search Console metrics for an allowed user witho
   assert.equal(result.googleSearch.metrics.clicks, 12);
   assert.equal(result.googleSearch.topQueries[0].query, 'consultoria amamentação');
   assert.equal(result.googleSearch.topPages[0].page, 'https://deboralactacao.com/');
+  assert.equal(JSON.stringify(result).includes('seo-admin-secret'), false);
   assert.equal(JSON.stringify(result).includes('client-secret'), false);
   assert.equal(JSON.stringify(result).includes('refresh-secret'), false);
   assert.equal(JSON.stringify(result).includes('access-token'), false);
@@ -92,7 +89,6 @@ test('SEO overview returns real Search Console metrics for an allowed user witho
 
 test('SEO overview reports missing Google secret configuration without exposing details', async () => {
   const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_GOOGLE_CLIENT_SECRET: '' }), {
-    authenticateUser: async () => ({ id: 'admin-123' }),
     fetch: async () => { throw new Error('must not run'); },
   });
   assert.equal(response.status, 503);
