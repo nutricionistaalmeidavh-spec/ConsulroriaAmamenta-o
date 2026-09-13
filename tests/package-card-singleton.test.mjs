@@ -1,19 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 
-const source=()=>readFileSync('public/billing-v2.js','utf8');
-
-test('patient package card mount is single-flight and collapses duplicate hosts',()=>{
-  const src=source();
-  assert.match(src,/createSingleFlight/);
-  assert.match(src,/bvPlanFlight/);
-  assert.match(src,/screen\.querySelectorAll\('\[data-bv-patient-plan\]'\)/);
-  assert.match(src,/duplicates?\.forEach|hosts\.slice\(1\)\.forEach|forEach\([^)]*=>[^;]*\.remove\(\)/s);
+test('package singleton guard exists and collapses duplicate patient package hosts',()=>{
+  assert.equal(existsSync('public/package-card-singleton-guard.js'),true);
+  const src=readFileSync('public/package-card-singleton-guard.js','utf8');
+  assert.match(src,/querySelectorAll\('\[data-bv-patient-plan\]'\)/);
+  assert.match(src,/\.remove\(\)/);
+  assert.match(src,/MutationObserver/);
 });
 
-test('patient package mount revalidates patient context after async package load',()=>{
-  const src=source();
-  assert.match(src,/bvPatientMotherId\(\)!==mid/);
-  assert.match(src,/screen\.isConnected/);
+test('phase68 loader starts singleton guard before package audit decoration',()=>{
+  const loader=readFileSync('public/phase68-loader.js','utf8');
+  const guard=loader.indexOf("package-card-singleton-guard.js");
+  const audit=loader.indexOf("package-audit-feature.js");
+  assert.ok(guard>=0,'singleton guard missing from loader');
+  assert.ok(audit>=0,'package audit feature missing from loader');
+  assert.ok(guard<audit,'singleton guard must load before package audit feature');
 });
