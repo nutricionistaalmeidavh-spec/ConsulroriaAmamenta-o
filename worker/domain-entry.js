@@ -41,6 +41,12 @@ export default {
       return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
     }
 
+    // A migrated saas_accounts row is an explicit commercial marker. Promote it into
+    // the central Artisys license authority before the first Cloudflare license read.
+    if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
+      await ensureExplicitCommercialMarker(request, env);
+    }
+
     // CLINICAL_DB is the cutover switch. Without the binding this returns null and
     // the current Supabase-backed runtime remains available as an immediate rollback.
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
