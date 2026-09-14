@@ -1,8 +1,10 @@
 import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
+import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
+const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me','/api/clinical/mothers','/api/clinical/media/upload']);
 
 function rewriteAssetRequest(request, pathname) {
   const target = new URL(request.url);
@@ -36,6 +38,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/')) {
+      if (COMMERCIAL_GATED_PATHS.has(url.pathname)) await ensureExplicitCommercialMarker(request, env);
       return withNoIndex(await coreWorker.fetch(request, env, ctx));
     }
 
