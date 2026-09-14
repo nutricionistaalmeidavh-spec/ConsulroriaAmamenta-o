@@ -30,11 +30,11 @@ $NpxCmd = (Get-Command npx.cmd -ErrorAction Stop).Source
 function Set-WranglerSecret([string]$Name, [string]$Value, [string]$Config, [switch]$UseLocalWrangler) {
   if ([string]::IsNullOrWhiteSpace($Value)) { throw "Secret $Name está vazio." }
   if ($UseLocalWrangler) {
-    $Value | & $script:NpxCmd wrangler secret put $Name --config $Config
+    $Value | & $script:NpxCmd wrangler versions secret put $Name --config $Config
   } else {
-    $Value | & $script:NpxCmd --yes 'wrangler@4' secret put $Name --config $Config
+    $Value | & $script:NpxCmd --yes 'wrangler@4' versions secret put $Name --config $Config
   }
-  Assert-Exit "Configuração do secret $Name"
+  Assert-Exit "Configuração versionada do secret $Name"
 }
 
 function Ensure-CloudflareLogin([switch]$UseLocalWrangler) {
