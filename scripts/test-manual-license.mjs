@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { pathToFileURL } from 'node:url';
 
 const migration = readFileSync('supabase/phase-saas-manual-license.sql', 'utf8');
+const activation = readFileSync('supabase/phase-saas-manual-license-activation.sql', 'utf8');
 const edge = readFileSync('supabase/functions/saas-manual-license/index.ts', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
 const onboarding = readFileSync('public/comercial/app.js', 'utf8');
@@ -27,11 +28,13 @@ assert.ok(migration.includes('revoke all on table public.manual_license_grants f
 assert.ok(migration.includes('grant all on table public.manual_license_grants to service_role'));
 assert.ok(migration.includes('revoke all on function public.claim_manual_license() from public, anon'));
 assert.ok(migration.includes('grant execute on function public.claim_manual_license() to authenticated, service_role'));
+assert.ok(activation.includes('saas_accounts_manual_license_activation'));
+assert.ok(activation.includes("'manual_marketplace'"));
 assert.ok(edge.includes('x-artisys-license-secret'));
-assert.ok(edge.includes("MANUAL_PLAN_CODE"));
+assert.ok(edge.includes('MANUAL_PLAN_CODE'));
 assert.ok(edge.includes("provider: 'manual_marketplace'"));
-assert.ok(plan.includes("/rest/v1/rpc/claim_manual_license"));
 assert.ok(plan.includes("['pro_monthly', 'pro_annual', 'pro_6m']"));
-assert.ok(onboarding.includes("/rest/v1/rpc/claim_manual_license"));
+assert.ok(plan.includes('current_period_end'));
+assert.ok(!onboarding.includes('/rest/v1/rpc/claim_manual_license'), 'onboarding must stay decoupled from manual licensing');
 
 console.log('manual six-month licensing contract: OK');
