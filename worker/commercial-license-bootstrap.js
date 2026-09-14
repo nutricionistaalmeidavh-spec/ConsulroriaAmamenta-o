@@ -1,3 +1,5 @@
+import { authenticateClinicalRequest, hasOwnedRecord } from './cloudflare-clinical-runtime.js';
+
 const SUPABASE_URL='https://zxowxdfhtksevhnjmeyu.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 
@@ -19,12 +21,24 @@ async function licenseCall(env,body){
   if(!response.ok)return null;return response.json().catch(()=>null);
 }
 
-// Existing clinical accounts are intentionally not registered. Only a user that already
-// owns a row in saas_accounts (created by the commercial funnel) is promoted into D1.
+// Existing clinical accounts remain unmanaged. Only an account that was explicitly
+// commercial (saas_accounts) is promoted into the central Artisys license D1.
 export async function ensureExplicitCommercialMarker(request,env){
-  const token=bearer(request),user=await userForToken(token);if(!user)return;
+  let user=null,explicitCommercial=false,source='supabase_saas_account';
+
+  if(env.CLINICAL_DB){
+    user=await authenticateClinicalRequest(request,env);
+    if(!user?.id||!user?.email)return;
+    explicitCommercial=await hasOwnedRecord(env,'saas_accounts',user.id);
+    source='migrated_saas_account';
+  }else{
+    const token=bearer(request);
+    user=await userForToken(token);
+    if(!user)return;
+    explicitCommercial=await isSaasAccount(token,user.id);
+  }
+
   const access=await licenseCall(env,{action:'resolve',productCode:'debora-lactacao',email:user.email});
-  if(access?.commercial===true)return;
-  if(!await isSaasAccount(token,user.id))return;
-  await licenseCall(env,{action:'register',productCode:'debora-lactacao',email:user.email,source:'supabase_saas_account'});
+  if(access?.commercial===true||!explicitCommercial)return;
+  await licenseCall(env,{action:'register',productCode:'debora-lactacao',email:user.email,source});
 }
