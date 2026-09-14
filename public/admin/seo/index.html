@@ -21,9 +21,14 @@
 
     <section id="authPanel" class="panel auth-panel">
       <h2>Acesso administrativo</h2>
-      <p>Entre com a conta Google autorizada para administrar o SEO.</p>
-      <button id="googleLoginButton" class="button" type="button">Entrar com Google</button>
-      <p class="muted">Acesso permitido somente para nutricionistaalmeidavh@gmail.com.</p>
+      <p>Entre com seu e-mail administrativo e a senha do painel SEO.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" value="nutricionistaalmeidavh@gmail.com" autocomplete="username" required>
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button id="loginButton" class="button" type="submit">Entrar</button>
+      </form>
       <p id="authError" class="error" role="alert"></p>
     </section>
 
