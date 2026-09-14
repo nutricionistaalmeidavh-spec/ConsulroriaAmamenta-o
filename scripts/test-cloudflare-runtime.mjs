@@ -39,14 +39,18 @@ assert.match(commercialBootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\
 assert.match(commercialBootstrap, /source='migrated_saas_account'/);
 assert.match(configOverlay, /window\.location\.origin/);
 assert.match(configOverlay, /BACKEND_MODE:\s*'cloudflare'/);
-assert.match(commercialConfig, /window\.location\.origin/);
 assert.match(materializer, /overlay\('config\.js'\)/);
 assert.match(materializer, /cloudflare-d1-r2-runtime-with-legacy-auth-bridge/);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_credentials/);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_refresh_sessions/);
 assert.match(clientOverlay, /sessionStorage = globalThis\.localStorage/);
 
-// Legacy feature modules still containing the old Supabase origin are redirected
+// Commercial checkout remains on its proven transition path while clinical data
+// and clinical auth move to Cloudflare. Cloudflare accepts those legacy tokens.
+assert.match(commercialConfig, /zxowxdfhtksevhnjmeyu\.supabase\.co/);
+assert.match(runtime, /allowLegacy = true/);
+
+// Legacy clinical feature modules still containing the old Supabase origin are redirected
 // before bootstrap/feature execution, preventing direct browser clinical reads/writes.
 assert.match(bridge, /LEGACY_SUPABASE_ORIGIN/);
 assert.match(bridge, /\/auth\/v1\//);
