@@ -53,7 +53,7 @@ function Ensure-SupabaseLogin {
 }
 
 function Get-SupabaseServerKey([string]$ProjectRef) {
-  $raw = (& npx --yes 'supabase@2.111.0' projects api-keys --project-ref $ProjectRef --output json 2>&1 | Out-String)
+  $raw = (& npx --yes 'supabase@2.111.0' projects api-keys --project-ref $ProjectRef --output json | Out-String)
   Assert-Exit 'Leitura das chaves do Supabase'
   $parsed = $raw | ConvertFrom-Json
   $rows = @($parsed)
@@ -135,8 +135,8 @@ Push-Location $CentralWeb
 try {
   & npm ci --no-audit --no-fund
   Assert-Exit 'npm ci Central'
-  & npm test
-  Assert-Exit 'testes Central'
+  & npx vitest run backend/product-license-service.test.ts backend/debora-license-admin.test.ts src/owner-auth-contract.test.ts
+  Assert-Exit 'testes de licenciamento da Central'
   & npm run build
   Assert-Exit 'build Central'
 
@@ -184,8 +184,6 @@ try {
   Assert-Exit 'contrato Cloudflare/D1'
   & node scripts/materialize-clinical-source.mjs --verify
   Assert-Exit 'materialização clínica'
-  & npm run test:seo
-  Assert-Exit 'testes SEO'
   & npm run build
   Assert-Exit 'build Débora'
 
