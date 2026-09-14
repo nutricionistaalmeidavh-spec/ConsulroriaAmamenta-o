@@ -1,24 +1,33 @@
 # Débora Lactação — Roadmap
 
-## Estado desta migração
-- Fonte copiada do AppDeploy: versão 1788188962225.
-- Objetivo atual: criar uma cópia funcional no Cloudflare Workers sem desativar o AppDeploy.
-- Nesta etapa, não incorporar melhorias funcionais ou visuais discutidas em outros chats do projeto.
+## Estado atual
+- GitHub é a fonte canônica do projeto.
+- Frontend e Worker são publicados no Cloudflare.
+- Dados clínicos foram copiados e validados no D1 `debora-lactacao-clinical`.
+- Arquivos clínicos usam o R2 `debora-lactacao-clinical`.
+- O cutover final preserva o Supabase somente como rollback e ponte temporária para sessões/senhas antigas.
+- O licenciamento comercial permanece centralizado na autoridade Artisys e no painel administrativo.
 
-## Próximas etapas após validar a cópia no Cloudflare
-1. Consolidar o GitHub como fonte canônica.
-2. Revisar autenticação e redirects multi-host (AppDeploy + Workers).
-3. Reaplicar, em ordem controlada, as melhorias já discutidas para:
-   - identidade visual e alinhamento com a landing page;
-   - agenda e origem real dos atendimentos;
-   - fluxo plano/individual e pagamento;
-   - prontuário e histórico clínico;
-   - remoção da opção de excluir paciente da interface;
-   - limpeza do paciente de teste;
-   - consistência de dashboard e métricas;
-   - demais melhorias já definidas no projeto.
-4. Validar mobile/PWA, service worker, autenticação, Supabase, biblioteca, curvas e agenda.
-5. Só considerar desligar o AppDeploy após homologação completa da versão Cloudflare.
+## Cutover Cloudflare
+1. Validar a migração D1/R2 já concluída.
+2. Aplicar o schema de autenticação Cloudflare.
+3. Materializar o runtime clínico canônico.
+4. Rodar os gates locais de regressão.
+5. Sincronizar o segredo da autoridade de licenças entre Central Artisys e Débora.
+6. Publicar o Worker com bindings D1/R2.
+7. Validar health check, contagens e licenciamento.
+8. Manter a origem anterior intacta até a homologação funcional final.
+
+## Homologação funcional
+- login e persistência de sessão;
+- pacientes e bebês;
+- agenda;
+- atendimento, rascunho e prontuário;
+- documentos, fotos, vídeos e PDFs;
+- financeiro e pacotes;
+- limites Freemium/Pro;
+- liberação, renovação e revogação pelo painel administrativo;
+- PWA/service worker sem cache de rotas privadas.
 
 ## Regra
-Mudanças futuras devem ser aplicadas sobre a cópia validada no Cloudflare sem alterar retroativamente o snapshot desta migração.
+Nenhuma migração ou cutover apaga automaticamente a origem anterior. Remoção definitiva só deve ocorrer após homologação completa da versão Cloudflare.
