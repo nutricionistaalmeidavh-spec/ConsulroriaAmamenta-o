@@ -154,7 +154,9 @@ export function createSupabaseClient(config, {
 
   async function storageRequest(path, { method = 'GET', body, headers = {} } = {}) {
     const normalized = path.replace(/^\//, '');
-    if (method === 'POST' && normalized.startsWith('object/clinical-media/')) {
+    const contentType = String(headers['Content-Type'] || headers['content-type'] || '').toLowerCase();
+    const proGatedMedia = contentType.startsWith('image/') || contentType.startsWith('video/');
+    if (method === 'POST' && normalized.startsWith('object/clinical-media/') && proGatedMedia) {
       const storagePath = normalized.slice('object/clinical-media/'.length);
       return workerRequest(`/api/clinical/media/upload?path=${encodeURIComponent(storagePath).replace(/%2F/g, '/')}`, {
         method: 'POST', body, headers, raw: true
