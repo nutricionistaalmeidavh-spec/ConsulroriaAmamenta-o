@@ -36,6 +36,9 @@ export default {
     if (url.pathname === '/api/seo/google/overview' && request.method === 'GET') {
       return withNoIndex(await handleSeoGoogleOverview(request, env));
     }
+    if (url.pathname === '/api/license/register-commercial') {
+      return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+    }
 
     if (url.pathname.startsWith('/api/')) {
       if (COMMERCIAL_GATED_PATHS.has(url.pathname)) await ensureExplicitCommercialMarker(request, env);
