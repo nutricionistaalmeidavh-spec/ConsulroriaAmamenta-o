@@ -5,6 +5,49 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Invoke-NativeCapture([string]$FilePath, [string[]]$Arguments) {
+  $old = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = (& $FilePath @Arguments 2>&1 | Out-String)
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $old
+  }
+  return [pscustomobject]@{ ExitCode = $exitCode; Output = $output }
+}
+
+function Ensure-CloudflareInteractiveLogin {
+  $npx = (Get-Command npx.cmd -ErrorAction Stop).Source
+  $probe = Invoke-NativeCapture $npx @('--yes','wrangler@4','whoami')
+  $needsLogin = $probe.ExitCode -ne 0 -or $probe.Output -match '(?i)not logged|not authenticated|credentials were found|login required|could not authenticate'
+  if (-not $needsLogin) {
+    Write-Host 'Cloudflare autenticado.' -ForegroundColor Green
+    return
+  }
+
+  Write-Host "`n==> Autenticação Cloudflare necessária" -ForegroundColor Cyan
+  Write-Host 'O Wrangler abrirá o navegador para autorizar esta máquina.' -ForegroundColor Yellow
+
+  $old = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    & $npx --yes wrangler@4 login
+    $loginExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $old
+  }
+  if ($loginExit -ne 0) {
+    throw "Login do Cloudflare não foi concluído (exit $loginExit)."
+  }
+
+  $verify = Invoke-NativeCapture $npx @('--yes','wrangler@4','whoami')
+  if ($verify.ExitCode -ne 0 -or $verify.Output -match '(?i)not logged|not authenticated|credentials were found|login required|could not authenticate') {
+    throw 'O Cloudflare ainda não está autenticado após o login. Nenhuma migração foi aplicada.'
+  }
+  Write-Host 'Cloudflare autenticado e validado.' -ForegroundColor Green
+}
+
 $source = Join-Path $PSScriptRoot 'migrate-supabase-to-cloudflare.ps1'
 if (-not (Test-Path $source)) {
   throw "Migrador ausente: $source"
@@ -79,6 +122,10 @@ try {
   Write-Host 'Paginação PostgREST compatível com Windows PowerShell validada.' -ForegroundColor Green
   Write-Host 'Coleções PowerShell normalizadas para 0, 1 ou N registros.' -ForegroundColor Green
   Write-Host "Raiz do repositório validada: $repoRoot" -ForegroundColor DarkGreen
+
+  if ($Apply) {
+    Ensure-CloudflareInteractiveLogin
+  }
 
   $argsList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $temp)
   if ($Apply) { $argsList += '-Apply' }
