@@ -15,6 +15,8 @@ const schema = readFileSync(resolve(root, 'cloudflare', 'runtime-schema.sql'), '
 const bridge = readFileSync(resolve(root, 'src', 'cloudflare-fetch-bridge.js'), 'utf8');
 const index = readFileSync(resolve(root, 'index.html'), 'utf8');
 const commercialConfig = readFileSync(resolve(root, 'public', 'comercial', 'config.js'), 'utf8');
+const serviceWorker = readFileSync(resolve(root, 'public', 'sw.js'), 'utf8');
+const canonicalIdentity = readFileSync(resolve(root, 'public', 'canonical-identity-runtime.js'), 'utf8');
 
 assert.match(runtime, /auth\/v1\/token/);
 assert.match(runtime, /rest\/v1\//);
@@ -44,6 +46,7 @@ assert.match(materializer, /cloudflare-d1-r2-runtime-with-legacy-auth-bridge/);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_credentials/);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_refresh_sessions/);
 assert.match(clientOverlay, /sessionStorage = globalThis\.localStorage/);
+assert.match(canonicalIdentity, /\[localStorage, sessionStorage\]/);
 
 // Commercial checkout remains on its proven transition path while clinical data
 // and clinical auth move to Cloudflare. Cloudflare accepts those legacy tokens.
@@ -60,6 +63,10 @@ assert.match(bridge, /localStorage\.setItem\(SESSION_KEY, legacy\)/);
 const bridgePos = index.indexOf('/src/cloudflare-fetch-bridge.js');
 const bootstrapPos = index.indexOf('/src/bootstrap.js');
 assert.ok(bridgePos >= 0 && bootstrapPos >= 0 && bridgePos < bootstrapPos, 'fetch bridge must load before bootstrap');
+
+// Same-origin clinical APIs carry sensitive health data and must never enter the PWA cache.
+for (const prefix of ['/api/','/auth/','/rest/','/storage/']) assert.ok(serviceWorker.includes(`'${prefix}'`), `service worker missing private prefix ${prefix}`);
+assert.doesNotMatch(serviceWorker, /appdeploy/i);
 
 const imported = await import(pathToFileURL(runtimePath).href);
 assert.equal(typeof imported.handleCloudflareClinicalRuntime, 'function');
