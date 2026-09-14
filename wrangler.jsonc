@@ -11,6 +11,12 @@
     { "pattern": "app.deboralactacao.com", "custom_domain": true },
     { "pattern": "comercial.deboralactacao.com", "custom_domain": true }
   ],
+  "services": [
+    {
+      "binding": "ARTISYS_LICENSING",
+      "service": "obra-na-mao-comercial"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -45,13 +45,13 @@
     },
     "core/lib/repositories.js": {
       "promoted": true,
-      "source": "base:lib/repositories.js",
-      "sha256": "11708b55d27ab9a18f4ff6b1d955defc228e6efebfe281e2a8c459a2d199fcf0"
+      "source": "cloudflare-license-authority:core/lib/repositories.js",
+      "sha256": "726d316f326e347a86dc09ca828efa916277aa06c9107616135e45f4303ea653"
     },
     "core/lib/supabase-client.js": {
       "promoted": true,
-      "source": "release:core/lib/supabase-client.js",
-      "sha256": "b26779bcd466c96f26dde9faea2f122c389d434188f814d960ad4d93a16c889f"
+      "source": "cloudflare-license-authority:core/lib/supabase-client.js",
+      "sha256": "ea8fa860fe75022c915d56cdb7bbae803d1e673e76bb4ec5c88eaac90e4a5d0d"
     },
     "features/clinical-note-feature.css": {
       "promoted": true,

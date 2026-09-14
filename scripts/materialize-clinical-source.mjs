@@ -6,6 +6,7 @@ import { unzipSync } from 'fflate';
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
 const OUT = resolve(PUBLIC, 'clinical-source');
+const CLOUDFLARE_OVERLAY = resolve(ROOT, 'patch-source', 'cloudflare-license-authority');
 const mode = process.argv.includes('--write') ? 'write' : 'verify';
 
 const BASE_PARTS = [1, 2, 3, 4].map((part) => resolve(PUBLIC, `debora-app-${part}.bin`));
@@ -69,6 +70,12 @@ function add(outputPath, entries, entryPath, source) {
   resolved.set(outputPath, requireEntry(entries, entryPath, source));
   sourceByPath.set(outputPath, source);
 }
+function overlay(outputPath) {
+  const sourcePath = resolve(CLOUDFLARE_OVERLAY, outputPath);
+  if (!existsSync(sourcePath)) return;
+  resolved.set(outputPath, new Uint8Array(readFileSync(sourcePath)));
+  sourceByPath.set(outputPath, `cloudflare-license-authority:${outputPath}`);
+}
 
 add('index.html', base, 'index.html', 'base:index.html');
 add('styles.css', base, 'styles.css', 'base:styles.css');
@@ -100,6 +107,11 @@ add('features/clinical-note-feature.js', release, 'features/clinical-note-featur
 add('features/clinical-note-feature.css', release, 'features/clinical-note-feature.css', 'release:features/clinical-note-feature.css');
 if (release['features/patient-fixes.js']) add('features/patient-fixes.js', release, 'features/patient-fixes.js', 'release:features/patient-fixes.js');
 if (release['features/patient-fixes.css']) add('features/patient-fixes.css', release, 'features/patient-fixes.css', 'release:features/patient-fixes.css');
+
+// Source-controlled overlays are applied last so future materialization cannot silently
+// restore the old direct-Supabase commercial write paths.
+overlay('core/lib/supabase-client.js');
+overlay('core/lib/repositories.js');
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {

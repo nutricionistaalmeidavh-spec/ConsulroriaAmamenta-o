@@ -78,6 +78,16 @@ function addPlanPeriod(planCode: string) {
   return date.toISOString();
 }
 
+async function storedPeriodEnd(url: string, serviceKey: string, ownerId: string, provider: string, planCode: string) {
+  const response = await serviceFetch(
+    url,
+    serviceKey,
+    `/rest/v1/subscriptions?owner_id=eq.${encodeURIComponent(ownerId)}&provider=eq.${encodeURIComponent(provider)}&plan_code=eq.${encodeURIComponent(planCode)}&select=current_period_end&order=updated_at.desc&limit=1`,
+  );
+  const rows = await response.json().catch(() => []);
+  return response.ok && Array.isArray(rows) ? rows[0]?.current_period_end || null : null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
@@ -99,19 +109,14 @@ Deno.serve(async (req: Request) => {
   const paymentId = String(body?.paymentId || '');
   if (!/^[A-Za-z0-9_-]{3,128}$/.test(paymentId)) return json(400, { error: 'invalid_payment_id' });
 
-  // The Edge Function independently reads the payment from the matching Asaas environment.
   const { response: paymentResponse, payload: payment } = await asaasFetch(
     apiKey,
     `/payments/${encodeURIComponent(paymentId)}`,
     environment,
   );
-  if (paymentResponse.status === 401 || paymentResponse.status === 403) {
-    return json(401, { error: 'asaas_api_key_rejected' });
-  }
+  if (paymentResponse.status === 401 || paymentResponse.status === 403) return json(401, { error: 'asaas_api_key_rejected' });
   if (paymentResponse.status === 404) return json(200, { status: 'ignored_payment_not_found', environment });
-  if (!paymentResponse.ok || String(payment?.id || '') !== paymentId) {
-    return json(502, { error: 'asaas_payment_verification_failed' });
-  }
+  if (!paymentResponse.ok || String(payment?.id || '') !== paymentId) return json(502, { error: 'asaas_payment_verification_failed' });
 
   const requestId = parseCheckoutReference(payment?.externalReference);
   if (!requestId) return json(200, { status: 'ignored_unmapped_payment', paymentId, environment });
@@ -124,11 +129,8 @@ Deno.serve(async (req: Request) => {
   const checkoutRows = await checkoutResponse.json().catch(() => []);
   const checkoutRequest = Array.isArray(checkoutRows) ? checkoutRows[0] : null;
   if (!checkoutResponse.ok) return json(500, { error: 'checkout_lookup_failed' });
-  if (!checkoutRequest?.external_checkout_id) {
-    return json(200, { status: 'ignored_unknown_checkout', paymentId, environment });
-  }
+  if (!checkoutRequest?.external_checkout_id) return json(200, { status: 'ignored_unknown_checkout', paymentId, environment });
 
-  // The supplied key must list this exact payment under the exact checkout session stored for this environment.
   const { response: checkoutPaymentsResponse, payload: checkoutPayments } = await asaasFetch(
     apiKey,
     `/payments?checkoutSession=${encodeURIComponent(checkoutRequest.external_checkout_id)}&limit=100`,
@@ -148,14 +150,12 @@ Deno.serve(async (req: Request) => {
     const subscriptionRows = await subscriptionResponse.json().catch(() => []);
     belongsToOurCheckout = subscriptionResponse.ok && Array.isArray(subscriptionRows) && subscriptionRows.length === 1;
   }
-
   if (!belongsToOurCheckout) return json(401, { error: 'payment_not_from_registered_checkout' });
 
   const providerStatus = String(payment?.status || '').toUpperCase();
   const transition = billingTransition(providerStatus);
-  if (!transition) {
-    return json(200, { status: 'ignored_no_billing_transition', paymentId, providerStatus, environment });
-  }
+  if (!transition) return json(200, { status: 'ignored_no_billing_transition', paymentId, providerStatus, environment });
+  const currentPeriodEnd = transition === 'active' ? addPlanPeriod(checkoutRequest.plan_code) : null;
 
   const eventId = `payment:${paymentId}:${providerStatus}`;
   const eventResponse = await serviceFetch(
@@ -170,13 +170,7 @@ Deno.serve(async (req: Request) => {
         external_event_id: eventId,
         event_type: `PAYMENT_${providerStatus}`,
         status: 'received',
-        payload: {
-          source: metadataSource,
-          environment,
-          payment_id: paymentId,
-          checkout_request_id: requestId,
-          provider_status: providerStatus,
-        },
+        payload: { source: metadataSource, environment, payment_id: paymentId, checkout_request_id: requestId, provider_status: providerStatus },
       }),
     },
   );
@@ -193,9 +187,17 @@ Deno.serve(async (req: Request) => {
         const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
         if (!email.ok) return json(503, { error: email.status, eventId });
       }
-      return json(200, { status: 'duplicate_ignored', eventId, environment });
+      return json(200, {
+        status: 'duplicate_ignored',
+        eventId,
+        paymentId,
+        ownerId: checkoutRequest.owner_id,
+        planCode: checkoutRequest.plan_code,
+        billingStatus: transition,
+        currentPeriodEnd: await storedPeriodEnd(supabaseUrl, serviceKey, checkoutRequest.owner_id, provider, checkoutRequest.plan_code),
+        environment,
+      });
     }
-    // A failed application may be retried; never mark an email-delivery failure as a billing failure.
   }
 
   const rpcResponse = await serviceFetch(
@@ -210,7 +212,7 @@ Deno.serve(async (req: Request) => {
         p_status: transition,
         p_provider: provider,
         p_external_subscription_id: externalSubscriptionId || null,
-        p_current_period_end: transition === 'active' ? addPlanPeriod(checkoutRequest.plan_code) : null,
+        p_current_period_end: currentPeriodEnd,
         p_metadata: {
           source: metadataSource,
           environment,
@@ -233,15 +235,11 @@ Deno.serve(async (req: Request) => {
       `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}`,
       {
         method: 'PATCH',
-        body: JSON.stringify({
-          status: transition === 'active' ? 'paid' : 'cancelled',
-          updated_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify({ status: transition === 'active' ? 'paid' : 'cancelled', updated_at: new Date().toISOString() }),
       },
     );
     if (!checkoutUpdate.ok) { processed = false; rpcError = 'checkout_status_update_failed'; }
   }
-
 
   await serviceFetch(
     supabaseUrl,
@@ -249,11 +247,7 @@ Deno.serve(async (req: Request) => {
     `/rest/v1/billing_webhook_events?provider=eq.${encodeURIComponent(provider)}&external_event_id=eq.${encodeURIComponent(eventId)}`,
     {
       method: 'PATCH',
-      body: JSON.stringify({
-        status: processed ? 'processed' : 'failed',
-        processed_at: new Date().toISOString(),
-        error_message: rpcError,
-      }),
+      body: JSON.stringify({ status: processed ? 'processed' : 'failed', processed_at: new Date().toISOString(), error_message: rpcError }),
     },
   );
 
@@ -268,8 +262,10 @@ Deno.serve(async (req: Request) => {
     status: 'processed',
     eventId,
     paymentId,
+    ownerId: checkoutRequest.owner_id,
     planCode: checkoutRequest.plan_code,
     billingStatus: transition,
+    currentPeriodEnd,
     environment,
   });
 });
