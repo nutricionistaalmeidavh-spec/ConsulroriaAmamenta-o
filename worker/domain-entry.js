@@ -1,5 +1,5 @@
 import coreWorker from './index.js';
-import { handleSeoGoogleOverview, handleSeoGoogleSession } from './seo-search-console.js';
+import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
@@ -28,18 +28,13 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // SEO administration is isolated from product/member accounts. The owner
-    // authenticates through the existing ArtiSys Google OAuth broker, then this
-    // domain keeps only a signed HttpOnly SEO session.
-    if (url.pathname === '/api/seo/google/session' && request.method === 'POST') {
-      return withNoIndex(await handleSeoGoogleSession(request, env));
+    if (url.pathname === '/api/seo/login' && request.method === 'POST') {
+      return withNoIndex(await handleSeoPasswordLogin(request, env));
     }
     if (url.pathname === '/api/seo/google/overview' && request.method === 'GET') {
       return withNoIndex(await handleSeoGoogleOverview(request, env));
     }
 
-    // API behavior is identical on every bound hostname. Keep it on the core worker
-    // so custom-domain routing never changes checkout, webhook or health semantics.
     if (url.pathname.startsWith('/api/')) {
       return withNoIndex(await coreWorker.fetch(request, env, ctx));
     }
