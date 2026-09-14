@@ -9,9 +9,11 @@ function parseSession(raw) {
 }
 
 function readCompatibleSession() {
-  for (const key of SESSION_KEYS) {
-    const session = parseSession(sessionStorage.getItem(key));
-    if (session?.access_token) return session;
+  for (const store of [localStorage, sessionStorage]) {
+    for (const key of SESSION_KEYS) {
+      const session = parseSession(store.getItem(key));
+      if (session?.access_token) return session;
+    }
   }
   return null;
 }
