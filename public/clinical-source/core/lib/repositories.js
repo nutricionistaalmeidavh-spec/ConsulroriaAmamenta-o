@@ -15,10 +15,17 @@ function createTableRepository(client, table) {
       return first(await client.rest(table, { query: `select=*&id=eq.${encodeURIComponent(id)}&limit=1` }));
     },
     async create(payload) {
+      const body = cleanObject(payload);
+      if (table === 'mothers') {
+        return first(await client.workerRequest('/api/clinical/mothers', {
+          method: 'POST',
+          body
+        }));
+      }
       return first(await client.rest(table, {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
-        body: cleanObject(payload)
+        body
       }));
     },
     async update(id, payload) {
