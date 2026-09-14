@@ -19,41 +19,49 @@ function Require-Command([string]$Name) {
   }
 }
 
+Require-Command git
+Require-Command node
+Require-Command npm.cmd
+Require-Command npx.cmd
+
+$NpmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
+$NpxCmd = (Get-Command npx.cmd -ErrorAction Stop).Source
+
 function Set-WranglerSecret([string]$Name, [string]$Value, [string]$Config, [switch]$UseLocalWrangler) {
   if ([string]::IsNullOrWhiteSpace($Value)) { throw "Secret $Name está vazio." }
   if ($UseLocalWrangler) {
-    $Value | & npx wrangler secret put $Name --config $Config
+    $Value | & $script:NpxCmd wrangler secret put $Name --config $Config
   } else {
-    $Value | & npx --yes 'wrangler@4' secret put $Name --config $Config
+    $Value | & $script:NpxCmd --yes 'wrangler@4' secret put $Name --config $Config
   }
   Assert-Exit "Configuração do secret $Name"
 }
 
 function Ensure-CloudflareLogin([switch]$UseLocalWrangler) {
   if ($UseLocalWrangler) {
-    $output = (& npx wrangler whoami 2>&1 | Out-String)
+    $output = (& $script:NpxCmd wrangler whoami 2>&1 | Out-String)
   } else {
-    $output = (& npx --yes 'wrangler@4' whoami 2>&1 | Out-String)
+    $output = (& $script:NpxCmd --yes 'wrangler@4' whoami 2>&1 | Out-String)
   }
   Write-Host $output.Trim()
   if ($LASTEXITCODE -ne 0 -or $output -match '(?i)not authenticated|not logged|login required') {
     Step 'Autenticação Cloudflare'
-    if ($UseLocalWrangler) { & npx wrangler login } else { & npx --yes 'wrangler@4' login }
+    if ($UseLocalWrangler) { & $script:NpxCmd wrangler login } else { & $script:NpxCmd --yes 'wrangler@4' login }
     Assert-Exit 'Login Cloudflare'
   }
 }
 
 function Ensure-SupabaseLogin {
-  $null = & npx --yes 'supabase@2.111.0' projects list --output json 2>$null
+  $null = & $script:NpxCmd --yes 'supabase@2.111.0' projects list --output json 2>$null
   if ($LASTEXITCODE -ne 0) {
     Step 'Autenticação Supabase'
-    & npx --yes 'supabase@2.111.0' login
+    & $script:NpxCmd --yes 'supabase@2.111.0' login
     Assert-Exit 'Login Supabase'
   }
 }
 
 function Get-SupabaseServerKey([string]$ProjectRef) {
-  $raw = (& npx --yes 'supabase@2.111.0' projects api-keys --project-ref $ProjectRef --output json | Out-String)
+  $raw = (& $script:NpxCmd --yes 'supabase@2.111.0' projects api-keys --project-ref $ProjectRef --output json | Out-String)
   Assert-Exit 'Leitura das chaves do Supabase'
   $parsed = $raw | ConvertFrom-Json
   $rows = @($parsed)
@@ -84,11 +92,6 @@ function Get-SupabaseServerKey([string]$ProjectRef) {
   }
   return $key
 }
-
-Require-Command git
-Require-Command node
-Require-Command npm
-Require-Command npx
 
 $DeboraRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CentralRoot = Join-Path $env:TEMP 'artisys-central-license-release'
@@ -133,22 +136,22 @@ $LicenseSecret = [Convert]::ToBase64String($bytes)
 Step 'Validando e compilando a Central Artisys'
 Push-Location $CentralWeb
 try {
-  & npm ci --no-audit --no-fund
+  & $NpmCmd ci --no-audit --no-fund
   Assert-Exit 'npm ci Central'
-  & npx vitest run backend/product-license-service.test.ts backend/debora-license-admin.test.ts src/owner-auth-contract.test.ts
+  & $NpxCmd vitest run backend/product-license-service.test.ts backend/debora-license-admin.test.ts src/owner-auth-contract.test.ts
   Assert-Exit 'testes de licenciamento da Central'
-  & npm run build
+  & $NpmCmd run build
   Assert-Exit 'build Central'
 
   Ensure-CloudflareLogin -UseLocalWrangler
   Set-WranglerSecret -Name 'LICENSE_SERVICE_SECRET' -Value $LicenseSecret -Config 'wrangler.jsonc' -UseLocalWrangler
 
   Step 'Aplicando migration D1 da Central'
-  & npx wrangler d1 migrations apply obra-na-mao-comercial --remote --config wrangler.jsonc
+  & $NpxCmd wrangler d1 migrations apply obra-na-mao-comercial --remote --config wrangler.jsonc
   Assert-Exit 'migration D1'
 
   Step 'Publicando a Central Artisys'
-  & npx wrangler deploy --config wrangler.jsonc
+  & $NpxCmd wrangler deploy --config wrangler.jsonc
   Assert-Exit 'deploy Central'
 } finally {
   Pop-Location
@@ -169,7 +172,7 @@ $SupabaseServerKey = Get-SupabaseServerKey -ProjectRef $SupabaseProjectRef
 Step 'Atualizando a Edge Function financeira que sincroniza o D1'
 Push-Location $DeboraRoot
 try {
-  & npx --yes 'supabase@2.111.0' functions deploy saas-billing-webhook --project-ref $SupabaseProjectRef --no-verify-jwt --use-api
+  & $NpxCmd --yes 'supabase@2.111.0' functions deploy saas-billing-webhook --project-ref $SupabaseProjectRef --no-verify-jwt --use-api
   Assert-Exit 'deploy saas-billing-webhook'
 } finally {
   Pop-Location
@@ -178,13 +181,13 @@ try {
 Step 'Validando e compilando a Débora'
 Push-Location $DeboraRoot
 try {
-  & npm ci --no-audit --no-fund
+  & $NpmCmd ci --no-audit --no-fund
   Assert-Exit 'npm ci Débora'
   & node scripts/test-cloudflare-license-authority.mjs
   Assert-Exit 'contrato Cloudflare/D1'
   & node scripts/materialize-clinical-source.mjs --verify
   Assert-Exit 'materialização clínica'
-  & npm run build
+  & $NpmCmd run build
   Assert-Exit 'build Débora'
 
   Ensure-CloudflareLogin
@@ -192,7 +195,7 @@ try {
   Set-WranglerSecret -Name 'SUPABASE_SERVICE_ROLE_KEY' -Value $SupabaseServerKey -Config 'wrangler.jsonc'
 
   Step 'Publicando o Worker da Débora'
-  & npx --yes 'wrangler@4' deploy --config wrangler.jsonc
+  & $NpxCmd --yes 'wrangler@4' deploy --config wrangler.jsonc
   Assert-Exit 'deploy Débora'
 } finally {
   Pop-Location
@@ -208,12 +211,12 @@ Step 'Alinhando o histórico oficial de migrations do Supabase'
 Push-Location $DeboraRoot
 try {
   if (-not (Test-Path 'supabase\config.toml')) {
-    & npx --yes 'supabase@2.111.0' init
+    & $NpxCmd --yes 'supabase@2.111.0' init
     Assert-Exit 'supabase init'
   }
-  & npx --yes 'supabase@2.111.0' link --project-ref $SupabaseProjectRef
+  & $NpxCmd --yes 'supabase@2.111.0' link --project-ref $SupabaseProjectRef
   Assert-Exit 'supabase link'
-  & npx --yes 'supabase@2.111.0' migration fetch --linked
+  & $NpxCmd --yes 'supabase@2.111.0' migration fetch --linked
   Assert-Exit 'supabase migration fetch'
 
   if (-not (Test-Path 'supabase\migrations\20260914210000_cloudflare_license_authority.sql')) {
@@ -221,14 +224,14 @@ try {
   }
 
   Step 'Prévia da migration final do Supabase'
-  & npx --yes 'supabase@2.111.0' db push --linked --dry-run
+  & $NpxCmd --yes 'supabase@2.111.0' db push --linked --dry-run
   Assert-Exit 'Supabase db push dry-run'
 
   Step 'Aplicando por último a migration final do Supabase'
-  & npx --yes 'supabase@2.111.0' db push --linked
+  & $NpxCmd --yes 'supabase@2.111.0' db push --linked
   Assert-Exit 'Supabase db push'
 
-  $migrationList = (& npx --yes 'supabase@2.111.0' migration list --linked 2>&1 | Out-String)
+  $migrationList = (& $NpxCmd --yes 'supabase@2.111.0' migration list --linked 2>&1 | Out-String)
   Assert-Exit 'verificação das migrations Supabase'
   Write-Host $migrationList
   if ($migrationList -notmatch '20260914210000') {
