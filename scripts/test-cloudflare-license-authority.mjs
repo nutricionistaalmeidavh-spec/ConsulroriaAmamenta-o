@@ -12,6 +12,8 @@ const documents = readFileSync('public/documents-feature.js', 'utf8');
 const migration = readFileSync('supabase/phase-cloudflare-license-authority.sql', 'utf8');
 const versionedMigration = readFileSync('supabase/migrations/20260914210000_cloudflare_license_authority.sql', 'utf8');
 const publisher = readFileSync('scripts/publish-cloudflare-license-authority.ps1', 'utf8');
+const cutover = readFileSync('scripts/cutover-cloudflare-runtime.ps1', 'utf8');
+const licenseSync = readFileSync('scripts/sync-license-authority-secret.ps1', 'utf8');
 
 assert.match(wrangler, /ARTISYS_LICENSING/);
 assert.match(wrangler, /obra-na-mao-comercial/);
@@ -19,13 +21,13 @@ assert.match(worker, /\/api\/license\/me/);
 assert.match(worker, /\/api\/clinical\/mothers/);
 assert.match(worker, /\/api\/clinical\/media\/upload/);
 assert.match(worker, /ARTISYS_LICENSING/);
-assert.match(worker, /SUPABASE_SERVICE_ROLE_KEY/);
 
 assert.match(domain, /ensureExplicitCommercialMarker/);
 assert.match(bootstrap, /saas_accounts/);
 assert.match(bootstrap, /access\?\.commercial===true/);
-assert.match(bootstrap, /if\(!await isSaasAccount\(token,user\.id\)\)return/);
-assert.match(bootstrap, /source:'supabase_saas_account'/);
+assert.match(bootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
+assert.match(bootstrap, /migrated_saas_account/);
+assert.match(bootstrap, /supabase_saas_account/);
 
 assert.doesNotMatch(plan, /\/rest\/v1\/entitlements/);
 assert.doesNotMatch(plan, /\/rest\/v1\/subscriptions/);
@@ -52,23 +54,20 @@ assert.doesNotMatch(migration, /apply_freemium_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /create policy[\s\S]{0,80}mothers[\s\S]{0,80}for insert/i);
 assert.match(migration, /PDFs and other non-photo\/video clinical files/i);
 
-for (const required of [
-  "d1 migrations apply obra-na-mao-comercial --remote",
-  "functions deploy saas-billing-webhook",
-  "wrangler@4' deploy",
-  'migration fetch --linked',
-  'db push --linked --dry-run',
-  'db push --linked',
-  '20260914210000_cloudflare_license_authority.sql',
-]) assert.ok(publisher.includes(required), `publisher missing: ${required}`);
-
-const centralDeploy = publisher.indexOf("npx wrangler deploy --config wrangler.jsonc");
-const deboraDeploy = publisher.indexOf("'wrangler@4' deploy --config wrangler.jsonc");
-const finalSupabasePush = publisher.lastIndexOf("db push --linked");
-assert.ok(centralDeploy >= 0 && deboraDeploy > centralDeploy, 'Central must deploy before Débora');
-assert.ok(finalSupabasePush > deboraDeploy, 'Supabase final enforcement migration must run after both Workers deploy');
+// Previous hybrid publisher remains available as rollback tooling and applies only
+// the reviewed central D1 migration before any optional Supabase finalization.
+assert.match(publisher, /0008_product_license_authority\.sql/);
+assert.match(publisher, /d1 execute obra-na-mao-comercial --remote/);
+assert.match(publisher, /obra-na-mao-comercial\.nutricionistaalmeidavh\.workers\.dev/);
 assert.match(publisher, /legacy_unmanaged/);
-assert.match(publisher, /migration fetch --linked/);
-assert.match(publisher, /--no-verify-jwt/);
+
+// Final clinical cutover must explicitly synchronize the same secret with the
+// central authority so manual CEO grants continue to resolve in Débora.
+assert.match(cutover, /sync-license-authority-secret\.ps1/);
+assert.match(cutover, /license_authority_synced/);
+assert.match(licenseSync, /LICENSE_SERVICE_SECRET/);
+assert.match(licenseSync, /product-license-service\.test\.ts/);
+assert.match(licenseSync, /debora-license-admin\.test\.ts/);
+assert.match(licenseSync, /license-cutover-probe@artisys\.invalid/);
 
 console.log('cloudflare license authority contract: OK');
