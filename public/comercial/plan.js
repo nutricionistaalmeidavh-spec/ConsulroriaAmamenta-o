@@ -2,6 +2,7 @@ const runtime = window.SAAS_RUNTIME_CONFIG || {};
 const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
 const publishableKey = String(runtime.supabasePublishableKey || '');
 const SESSION_KEY = 'commercial.saas.session.v1';
+const PRO_PLANS = ['pro_monthly', 'pro_annual', 'pro_6m'];
 
 const authRequired = document.querySelector('#auth-required');
 const content = document.querySelector('#plan-content');
@@ -61,6 +62,20 @@ async function loadPatientCount(ownerId, token) {
 
 function entitlementMap(rows) {
   return Object.fromEntries((rows || []).map((item) => [item.feature_key, item]));
+}
+
+function activeProSubscription(subscription, now = Date.now()) {
+  if (!subscription || !PRO_PLANS.includes(subscription.plan_code)) return false;
+  if (!['active', 'trialing'].includes(subscription.status)) return false;
+  const end = subscription.current_period_end ? Date.parse(subscription.current_period_end) : null;
+  if (subscription.plan_code === 'pro_6m') return Number.isFinite(end) && end > now;
+  return end == null || (Number.isFinite(end) && end > now);
+}
+
+function subscriptionLabel(subscription, isPro) {
+  if (isPro) return subscription?.plan_code === 'pro_6m' ? 'Ativa · 6 meses' : (subscription?.status || 'Ativa');
+  if (subscription?.current_period_end && Date.parse(subscription.current_period_end) <= Date.now()) return 'Expirada';
+  return subscription?.status || 'Sem cobrança';
 }
 
 function showSignedOut() {
@@ -141,19 +156,21 @@ async function init() {
     const subscription = subscriptionsRes.payload?.[0] || null;
     const mediaEnabled = entitlements.media_upload?.enabled === true;
     const patientLimit = entitlements.patient_limit?.limit_value;
-    const isPro = mediaEnabled && patientLimit == null;
+    const isPro = activeProSubscription(subscription) && mediaEnabled && patientLimit == null;
 
     showSignedIn();
     document.querySelector('#current-plan-badge').textContent = isPro ? 'Pro' : 'Freemium';
-    document.querySelector('#current-plan-name').textContent = isPro ? 'Plano Pro' : 'Plano Freemium';
+    document.querySelector('#current-plan-name').textContent = isPro
+      ? (subscription?.plan_code === 'pro_6m' ? 'Plano Pro · 6 meses' : 'Plano Pro')
+      : 'Plano Freemium';
     document.querySelector('#current-plan-copy').textContent = isPro
       ? 'Uso ilimitado e upload de fotos e vídeos habilitado.'
       : 'Fluxo completo, até 3 mães/pacientes e sem upload de fotos e vídeos.';
     document.querySelector('#patient-usage').textContent = isPro
       ? `${patientCount ?? '—'} / ilimitado`
       : `${patientCount ?? '—'} / ${patientLimit ?? 3}`;
-    document.querySelector('#media-access').textContent = mediaEnabled ? 'Habilitado' : 'Bloqueado';
-    document.querySelector('#subscription-status').textContent = subscription?.status || (isPro ? 'Ativa' : 'Sem cobrança');
+    document.querySelector('#media-access').textContent = isPro && mediaEnabled ? 'Habilitado' : 'Bloqueado';
+    document.querySelector('#subscription-status').textContent = subscriptionLabel(subscription, isPro);
     document.querySelector('#account-email').textContent = user.email || 'Conta autenticada';
     document.querySelector('#account-name').textContent = profile.professional_name || profile.business_name || 'Perfil profissional';
     document.querySelector('#upgrade-section').hidden = isPro;
