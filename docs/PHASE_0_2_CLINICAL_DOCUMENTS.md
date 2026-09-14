@@ -9,7 +9,7 @@ Invariantes que não podem mudar nesta entrega:
 
 - `mother_id`, `baby_id`, `appointment_id` e `encounter_id` persistidos continuam sendo a única identidade clínica.
 - Agenda, finalização de atendimento, follow-up, financeiro, pacotes, pesos/curvas e prontuário existente não recebem alteração funcional.
-- O AppDeploy e o ambiente de produção não são alterados nesta entrega.
+- O ambiente de produção Cloudflare não é alterado por esta fase histórica isoladamente.
 - A nova camada é carregada de forma aditiva pelo bootstrap.
 - `consents` continua sendo a fonte de verdade para autorizações; PDFs são somente representações documentais.
 
