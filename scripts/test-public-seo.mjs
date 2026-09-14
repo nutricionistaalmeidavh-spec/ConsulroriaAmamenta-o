@@ -35,20 +35,22 @@ assert.doesNotMatch(sitemap, /\/api\//i);
 
 assert.match(dashboard, /<meta\s+name="robots"\s+content="noindex,nofollow"/i, 'admin dashboard must not be indexed');
 assert.match(dashboard, /Painel SEO/i);
-assert.match(dashboard, /Entrar com Google/i, 'SEO dashboard must use the existing ArtiSys Google sign-in');
+assert.match(dashboard, /Entrar com Google/i, 'SEO dashboard must use Google sign-in');
 assert.doesNotMatch(dashboard, /Chave SEO/i, 'legacy admin key must not be exposed in the UI');
 assert.doesNotMatch(dashboardApp, /provider[^\n]*google|provider=google/i, 'dashboard must not call the disabled Supabase Google provider');
-assert.match(dashboardApp, /obra-na-mao-comercial\.nutricionistaalmeidavh\.workers\.dev\/api\/artisys-sso\/start/i, 'dashboard must reuse the existing ArtiSys Google OAuth broker');
-assert.match(dashboardApp, /artisys_sso_code/i, 'dashboard must redeem the one-time owner SSO code');
+assert.doesNotMatch(dashboardApp, /obra-na-mao-comercial|workers\.dev/i, 'SEO login must never leave the Débora domain through another product');
+assert.match(dashboardApp, /accounts\.google\.com\/gsi\/client/i, 'dashboard must use Google Identity Services directly');
+assert.match(dashboardApp, /initTokenClient/i, 'dashboard must obtain the Google credential in a popup without redirecting away');
 assert.match(dashboardApp, /\/api\/seo\/google\/session/i, 'dashboard must establish an HttpOnly SEO admin session');
 assert.match(dashboardApp, /\/api\/seo\/google\/overview/);
 assert.doesNotMatch(dashboardApp, /localStorage/);
 assert.match(seoWorker, /artisys-seo-session/i, 'SEO API must support its own HttpOnly admin session');
 assert.match(seoWorker, /nutricionistaalmeidavh@gmail\.com/i, 'SEO API must restrict access to the owner e-mail');
 assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as emergency fallback and signing key');
-assert.match(seoWorker, /api\/artisys-sso\/redeem/i, 'SEO session exchange must redeem the broker code server-side');
+assert.doesNotMatch(seoWorker, /obra-na-mao-comercial|api\/artisys-sso\/redeem/i, 'SEO backend must not depend on the Obra na Mão broker');
+assert.match(seoWorker, /oauth2\.googleapis\.com\/tokeninfo/i, 'SEO backend must validate the Google access token');
 
-assert.match(worker, /\/api\/seo\/google\/session/i, 'worker must route the SEO SSO session exchange');
+assert.match(worker, /\/api\/seo\/google\/session/i, 'worker must route the direct Google session exchange');
 assert.match(worker, /x-robots-tag/i, 'private paths must receive X-Robots-Tag');
 
 console.log('Public SEO contract OK');
