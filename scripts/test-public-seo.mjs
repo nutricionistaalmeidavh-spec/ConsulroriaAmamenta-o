@@ -15,6 +15,19 @@ assert.match(landing, /<link\s+rel="canonical"\s+href="https:\/\/deboralactacao\
 assert.match(robots, /Sitemap:\s*https:\/\/deboralactacao\.com\/sitemap\.xml/i);
 assert.match(sitemap, /<loc>https:\/\/deboralactacao\.com\/<\/loc>/i);
 
+// P0 local/commercial SEO intent: keep the emotional H1 while making service + location explicit.
+assert.match(landing, /<title>Consultora de Amamentação em Ribeirão Preto \| Débora<\/title>/i);
+assert.match(landing, /<meta\s+name="description"\s+content="Consultoria de amamentação presencial em Ribeirão Preto e online\. Orientação para pega, dor ao amamentar, preparação e pós-parto\."/i);
+assert.match(landing, /Consultora de amamentação em Ribeirão Preto e online/i);
+assert.match(landing, /<h1[^>]*>Amamentar tem sido mais difícil do que você imaginava\?<\/h1>/i);
+assert.match(landing, /Dor ao amamentar, dificuldade na pega ou insegurança sobre as mamadas\?/i);
+assert.match(landing, /presencialmente em Ribeirão Preto ou online/i);
+assert.match(landing, /Consultoria de amamentação em Ribeirão Preto/i);
+assert.match(landing, /É normal sentir dor ao amamentar\?/i);
+assert.match(landing, /Como saber se a pega do bebê precisa de orientação\?/i);
+assert.match(landing, /A consultoria de amamentação é presencial em Ribeirão Preto\?/i);
+assert.match(landing, /"@type"\s*:\s*"City"[^}]*"name"\s*:\s*"Ribeirão Preto"/i, 'structured data must reflect the confirmed local service area');
+
 assert.match(dashboard, /<meta\s+name="robots"\s+content="noindex,nofollow"/i);
 assert.match(dashboard, /Painel SEO/i);
 assert.match(dashboard, /E-mail/i);
