@@ -1,9 +1,10 @@
 import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
+import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
-const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
+const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
 const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me','/api/clinical/mothers','/api/clinical/media/upload']);
 
 function rewriteAssetRequest(request, pathname) {
@@ -39,6 +40,11 @@ export default {
     if (url.pathname === '/api/license/register-commercial') {
       return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
     }
+
+    // CLINICAL_DB is the cutover switch. Without the binding this returns null and
+    // the current Supabase-backed runtime remains available as an immediate rollback.
+    const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
+    if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
     if (url.pathname.startsWith('/api/')) {
       if (COMMERCIAL_GATED_PATHS.has(url.pathname)) await ensureExplicitCommercialMarker(request, env);
