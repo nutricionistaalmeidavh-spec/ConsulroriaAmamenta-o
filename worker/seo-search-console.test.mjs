@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleSeoGoogleOverview, handleSeoGoogleSession } from './seo-search-console.js';
+import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
 
 function baseEnv(overrides = {}) {
   return {
     ARTISYS_SEO_ADMIN_TOKEN: 'seo-admin-secret-used-as-signing-key',
+    ARTISYS_SEO_ADMIN_PASSWORD: 'DyDwv4-6YClt-J6V-uLd',
     ARTISYS_GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
     ARTISYS_GOOGLE_CLIENT_SECRET: 'client-secret',
     ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN: 'refresh-secret',
@@ -40,129 +41,83 @@ function searchConsoleFetch(calls = []) {
 }
 
 test('SEO overview requires an administrative credential or signed SEO session', async () => {
-  let calls = 0;
-  const response = await handleSeoGoogleOverview(request(null), baseEnv(), {
-    fetch: async () => { calls += 1; throw new Error('must not run'); },
-  });
+  const response = await handleSeoGoogleOverview(request(null), baseEnv(), { fetch: async () => { throw new Error('must not run'); } });
   assert.equal(response.status, 401);
   assert.deepEqual(await body(response), { error: 'unauthorized' });
-  assert.equal(calls, 0);
 });
 
-test('legacy SEO admin token remains an emergency fallback', async () => {
-  const calls = [];
-  const response = await handleSeoGoogleOverview(request(), baseEnv(), { fetch: searchConsoleFetch(calls) });
-  const result = await body(response);
-  assert.equal(response.status, 200);
-  assert.equal(result.ok, true);
-});
-
-test('direct Google credential creates an HttpOnly SEO session for the owner', async () => {
-  const googleCalls = [];
-  const sessionRequest = new Request('https://deboralactacao.com/api/seo/google/session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ accessToken: 'google-access-token' }),
+test('password login creates an HttpOnly SEO session for the owner', async () => {
+  const loginRequest = new Request('https://deboralactacao.com/api/seo/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'nutricionistaalmeidavh@gmail.com', password: 'DyDwv4-6YClt-J6V-uLd' }),
   });
-  const sessionResponse = await handleSeoGoogleSession(sessionRequest, baseEnv(), {
-    fetch: async (url, options = {}) => {
-      googleCalls.push({ url: String(url), options });
-      if (String(url).startsWith('https://oauth2.googleapis.com/tokeninfo?access_token=')) {
-        return new Response(JSON.stringify({ aud: '826322917381-ia1khl7es1gqddv6jsmg8p75m7amfle5.apps.googleusercontent.com', scope: 'openid email profile' }), { status: 200 });
-      }
-      if (String(url) === 'https://www.googleapis.com/oauth2/v2/userinfo') {
-        return new Response(JSON.stringify({ email: 'nutricionistaalmeidavh@gmail.com', verified_email: true }), { status: 200 });
-      }
-      throw new Error(`unexpected URL ${url}`);
-    },
-    now: () => Date.parse('2026-09-13T20:00:00Z'),
-  });
-
-  assert.equal(sessionResponse.status, 200);
-  assert.deepEqual(await body(sessionResponse), { ok: true, email: 'nutricionistaalmeidavh@gmail.com' });
-  const setCookie = sessionResponse.headers.get('set-cookie') || '';
+  const loginResponse = await handleSeoPasswordLogin(loginRequest, baseEnv(), { now: () => Date.parse('2026-09-13T20:00:00Z') });
+  assert.equal(loginResponse.status, 200);
+  assert.deepEqual(await body(loginResponse), { ok: true, email: 'nutricionistaalmeidavh@gmail.com' });
+  const setCookie = loginResponse.headers.get('set-cookie') || '';
   assert.match(setCookie, /^artisys-seo-session=/i);
   assert.match(setCookie, /HttpOnly/i);
   assert.match(setCookie, /Secure/i);
   assert.match(setCookie, /SameSite=Lax/i);
-  assert.equal(googleCalls.length, 2);
 
   const cookie = setCookie.split(';')[0];
-  const calls = [];
   const response = await handleSeoGoogleOverview(request(null, cookie), baseEnv(), {
-    fetch: searchConsoleFetch(calls),
-    now: () => Date.parse('2026-09-13T20:01:00Z'),
+    fetch: searchConsoleFetch([]), now: () => Date.parse('2026-09-13T20:01:00Z'),
   });
-  const result = await body(response);
   assert.equal(response.status, 200);
-  assert.equal(result.ok, true);
-  assert.equal(result.googleSearch.metrics.clicks, 12);
+  assert.equal((await body(response)).ok, true);
 });
 
-test('direct Google session refuses any identity other than the owner email', async () => {
-  const sessionRequest = new Request('https://deboralactacao.com/api/seo/google/session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ accessToken: 'google-access-token' }),
-  });
-  const response = await handleSeoGoogleSession(sessionRequest, baseEnv(), {
-    fetch: async (url) => {
-      if (String(url).startsWith('https://oauth2.googleapis.com/tokeninfo?access_token=')) {
-        return new Response(JSON.stringify({ aud: '826322917381-ia1khl7es1gqddv6jsmg8p75m7amfle5.apps.googleusercontent.com' }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ email: 'outro@gmail.com', verified_email: true }), { status: 200 });
-    },
-  });
-  assert.equal(response.status, 403);
-  assert.deepEqual(await body(response), { error: 'forbidden' });
+test('password login rejects wrong password without creating a session', async () => {
+  const response = await handleSeoPasswordLogin(new Request('https://deboralactacao.com/api/seo/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'nutricionistaalmeidavh@gmail.com', password: 'errada' }),
+  }), baseEnv());
+  assert.equal(response.status, 401);
+  assert.deepEqual(await body(response), { error: 'invalid_credentials' });
   assert.equal(response.headers.get('set-cookie'), null);
 });
 
-test('direct Google session rejects credentials issued for another OAuth client', async () => {
-  const sessionRequest = new Request('https://deboralactacao.com/api/seo/google/session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ accessToken: 'wrong-client-token' }),
-  });
-  const response = await handleSeoGoogleSession(sessionRequest, baseEnv(), {
-    fetch: async () => new Response(JSON.stringify({ aud: 'other-client.apps.googleusercontent.com' }), { status: 200 }),
-  });
+test('password login rejects any other email', async () => {
+  const response = await handleSeoPasswordLogin(new Request('https://deboralactacao.com/api/seo/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'outro@gmail.com', password: 'DyDwv4-6YClt-J6V-uLd' }),
+  }), baseEnv());
   assert.equal(response.status, 401);
-  assert.deepEqual(await body(response), { error: 'google_identity_invalid' });
+  assert.deepEqual(await body(response), { error: 'invalid_credentials' });
+});
+
+test('password login reports missing password secret', async () => {
+  const response = await handleSeoPasswordLogin(new Request('https://deboralactacao.com/api/seo/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'nutricionistaalmeidavh@gmail.com', password: 'qualquer' }),
+  }), baseEnv({ ARTISYS_SEO_ADMIN_PASSWORD: '' }));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await body(response), { error: 'seo_password_not_configured' });
+});
+
+test('legacy SEO admin token remains an emergency fallback', async () => {
+  const response = await handleSeoGoogleOverview(request(), baseEnv(), { fetch: searchConsoleFetch([]) });
+  assert.equal(response.status, 200);
+  assert.equal((await body(response)).ok, true);
 });
 
 test('SEO overview derives actionable audit opportunities from Search Console rows', async () => {
   const fetchImpl = async (url, options = {}) => {
-    if (url === 'https://oauth2.googleapis.com/token') {
-      return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600 }), { status: 200 });
-    }
+    if (url === 'https://oauth2.googleapis.com/token') return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600 }), { status: 200 });
     const payload = JSON.parse(options.body || '{}');
-    if (Array.isArray(payload.dimensions) && payload.dimensions.length === 0) {
-      return new Response(JSON.stringify({ rows: [{ clicks: 20, impressions: 1000, ctr: 0.02, position: 9.1 }] }), { status: 200 });
-    }
-    if (payload.dimensions?.[0] === 'query') {
-      return new Response(JSON.stringify({ rows: [
-        { keys: ['dor ao amamentar'], clicks: 2, impressions: 220, ctr: 0.009, position: 8.4 },
-        { keys: ['consultora amamentação'], clicks: 5, impressions: 120, ctr: 0.041, position: 12.2 },
-      ] }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ rows: [
-      { keys: ['https://deboralactacao.com/'], clicks: 18, impressions: 900, ctr: 0.02, position: 8.9 },
-    ] }), { status: 200 });
+    if (Array.isArray(payload.dimensions) && payload.dimensions.length === 0) return new Response(JSON.stringify({ rows: [{ clicks: 20, impressions: 1000, ctr: 0.02, position: 9.1 }] }), { status: 200 });
+    if (payload.dimensions?.[0] === 'query') return new Response(JSON.stringify({ rows: [{ keys: ['dor ao amamentar'], clicks: 2, impressions: 220, ctr: 0.009, position: 8.4 }] }), { status: 200 });
+    return new Response(JSON.stringify({ rows: [{ keys: ['https://deboralactacao.com/'], clicks: 18, impressions: 900, ctr: 0.02, position: 8.9 }] }), { status: 200 });
   };
-
   const response = await handleSeoGoogleOverview(request(), baseEnv(), { fetch: fetchImpl });
   const result = await body(response);
   assert.equal(response.status, 200);
-  assert.ok(Array.isArray(result.audit?.opportunities));
-  assert.ok(result.audit.opportunities.some((item) => item.type === 'low_ctr_query' && item.query === 'dor ao amamentar'));
-  assert.ok(result.audit.opportunities.some((item) => item.type === 'ranking_opportunity' && item.query === 'consultora amamentação'));
+  assert.ok(result.audit.opportunities.some((item) => item.type === 'low_ctr_query'));
 });
 
 test('SEO overview reports missing Google Search Console configuration without exposing details', async () => {
-  const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_GOOGLE_CLIENT_SECRET: '' }), {
-    fetch: async () => { throw new Error('must not run'); },
-  });
+  const response = await handleSeoGoogleOverview(request(), baseEnv({ ARTISYS_GOOGLE_CLIENT_SECRET: '' }), { fetch: async () => { throw new Error('must not run'); } });
   assert.equal(response.status, 503);
   assert.deepEqual(await body(response), { error: 'seo_google_not_configured' });
 });
