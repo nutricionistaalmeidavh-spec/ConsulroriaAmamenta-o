@@ -3,7 +3,7 @@ import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.m
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
 const DEFAULT_SEO_ADMIN_EMAIL = 'nutricionistaalmeidavh@gmail.com';
-const OWNER_SSO_REDEEM_URL = 'https://obra-na-mao-comercial.nutricionistaalmeidavh.workers.dev/api/artisys-sso/redeem';
+const SEO_GOOGLE_LOGIN_CLIENT_ID = '826322917381-ia1khl7es1gqddv6jsmg8p75m7amfle5.apps.googleusercontent.com';
 const SEO_SESSION_COOKIE = 'artisys-seo-session';
 const SEO_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -128,7 +128,7 @@ async function authorizeSeoRequest(request, env, dependencies = {}) {
 
   const sessionToken = cookieValue(request, SEO_SESSION_COOKIE);
   if (sessionToken && await verifySeoSessionToken(sessionToken, env, dependencies)) {
-    return { ok: true, method: 'artisys_owner_sso', email: adminEmail(env) };
+    return { ok: true, method: 'google_oauth', email: adminEmail(env) };
   }
 
   return { ok: false, response: json(401, { error: 'unauthorized' }) };
@@ -141,26 +141,36 @@ export async function handleSeoGoogleSession(request, env, dependencies = {}) {
 
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_request' }); }
-  const code = text(body?.code);
-  if (!/^[a-f0-9]{64}$/i.test(code)) return json(401, { error: 'invalid_sso_code' });
+  const accessToken = text(body?.accessToken);
+  if (!accessToken || accessToken.length < 8) return json(401, { error: 'google_identity_invalid' });
 
-  let response;
+  let tokenInfoResponse;
   try {
-    response = await fetchImpl(OWNER_SSO_REDEEM_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
+    tokenInfoResponse = await fetchImpl(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
   } catch {
-    return json(502, { error: 'owner_sso_unavailable' });
+    return json(502, { error: 'google_identity_unavailable' });
   }
 
-  let payload;
-  try { payload = await response.json(); } catch { payload = {}; }
-  if (!response.ok) return json(response.status === 401 ? 401 : 502, { error: 'owner_sso_rejected' });
+  let tokenInfo;
+  try { tokenInfo = await tokenInfoResponse.json(); } catch { tokenInfo = {}; }
+  if (!tokenInfoResponse.ok || text(tokenInfo?.aud) !== SEO_GOOGLE_LOGIN_CLIENT_ID) {
+    return json(401, { error: 'google_identity_invalid' });
+  }
 
-  const email = text(payload?.email).toLowerCase();
-  if (payload?.target !== 'debora-seo' || email !== adminEmail(env)) return json(403, { error: 'forbidden' });
+  let userResponse;
+  try {
+    userResponse = await fetchImpl('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+  } catch {
+    return json(502, { error: 'google_identity_unavailable' });
+  }
+
+  let user;
+  try { user = await userResponse.json(); } catch { user = {}; }
+  const email = text(user?.email).toLowerCase();
+  if (!userResponse.ok || user?.verified_email !== true || !email) return json(401, { error: 'google_identity_invalid' });
+  if (email !== adminEmail(env)) return json(403, { error: 'forbidden' });
 
   const token = await createSeoSessionToken(email, env, dependencies);
   if (!token) return json(503, { error: 'seo_admin_not_configured' });
