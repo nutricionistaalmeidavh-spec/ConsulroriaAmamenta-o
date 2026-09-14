@@ -41,8 +41,7 @@ function ConvertFrom-LooseJson([string]$Text) {
   elseif ($arrayStart -ge 0) { $start = $arrayStart }
   elseif ($objectStart -ge 0) { $start = $objectStart }
   if ($start -lt 0) { throw 'Saída JSON não encontrada.' }
-  $candidate = $clean.Substring($start)
-  return $candidate | ConvertFrom-Json
+  return $clean.Substring($start) | ConvertFrom-Json
 }
 
 function Ensure-CloudflareLogin([string]$NpxCmd) {
@@ -98,13 +97,19 @@ function New-RandomSecret {
   [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
 }
 
-function Ensure-WorkerSecret([string]$NpxCmd, [string]$ConfigPath, [string]$Name) {
+function Test-WorkerSecret([string]$NpxCmd, [string]$ConfigPath, [string]$Name) {
   $listed = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','secret','list','--config',$ConfigPath,'--json')
-  $exists = $false
   if ($listed.ExitCode -eq 0) {
-    try { $exists = @((ConvertFrom-LooseJson $listed.Output) | Where-Object { [string]$_.name -eq $Name }).Count -gt 0 } catch {}
+    try {
+      if (@((ConvertFrom-LooseJson $listed.Output) | Where-Object { [string]$_.name -eq $Name }).Count -gt 0) { return $true }
+    } catch {}
   }
-  if ($exists) {
+  $fallback = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','secret','list','--config',$ConfigPath)
+  return $fallback.ExitCode -eq 0 -and $fallback.Output -match "(?m)^\s*$([regex]::Escape($Name))\s*$|\b$([regex]::Escape($Name))\b"
+}
+
+function Ensure-WorkerSecret([string]$NpxCmd, [string]$ConfigPath, [string]$Name) {
+  if (Test-WorkerSecret $NpxCmd $ConfigPath $Name) {
     Write-Host "Secret $Name já existe; valor preservado." -ForegroundColor Green
     return
   }
@@ -112,7 +117,7 @@ function Ensure-WorkerSecret([string]$NpxCmd, [string]$ConfigPath, [string]$Name
   $old = $ErrorActionPreference
   try {
     $ErrorActionPreference = 'Continue'
-    $output = ($secret | & $NpxCmd --yes wrangler@4 secret put $Name --config $ConfigPath 2>&1 | Out-String)
+    $output = ($secret | & $NpxCmd --yes wrangler@4 versions secret put $Name --config $ConfigPath 2>&1 | Out-String)
     $code = $LASTEXITCODE
   } finally { $ErrorActionPreference = $old; $secret = $null }
   if ($code -ne 0) { throw "Não foi possível configurar o secret $Name.`n$output" }
@@ -147,6 +152,7 @@ function Get-Health([string]$Url) {
   return $last
 }
 
+Require-Command git
 Require-Command node
 Require-Command npm.cmd
 Require-Command npx.cmd
@@ -154,9 +160,11 @@ $NpmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
 $NpxCmd = (Get-Command npx.cmd -ErrorAction Stop).Source
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $RuntimeSchema = Join-Path $RepoRoot 'cloudflare\runtime-schema.sql'
+$LicenseSyncScript = Join-Path $PSScriptRoot 'sync-license-authority-secret.ps1'
 $GeneratedConfig = $null
 
 if (-not (Test-Path $RuntimeSchema)) { throw "Schema runtime ausente: $RuntimeSchema" }
+if (-not (Test-Path $LicenseSyncScript)) { throw "Sincronizador de licenciamento ausente: $LicenseSyncScript" }
 
 try {
   Step 'Validando pré-requisitos do corte'
@@ -177,7 +185,7 @@ try {
   Step 'Instalando dependências e materializando runtime clínico'
   Push-Location $RepoRoot
   try {
-    if (Test-Path (Join-Path $RepoRoot 'package-lock.json')) { & $NpmCmd ci } else { & $NpmCmd install }
+    if (Test-Path (Join-Path $RepoRoot 'package-lock.json')) { & $NpmCmd ci --no-audit --no-fund } else { & $NpmCmd install --no-audit --no-fund }
     if ($LASTEXITCODE -ne 0) { throw 'Instalação npm falhou.' }
     & node scripts/materialize-clinical-source.mjs --write
     if ($LASTEXITCODE -ne 0) { throw 'Materialização clínica falhou.' }
@@ -197,6 +205,16 @@ try {
 
     Step 'Configurando segredo de autenticação'
     Ensure-WorkerSecret $NpxCmd $GeneratedConfig 'CLINICAL_AUTH_SECRET'
+
+    $licenseSynced = D1-Scalar $NpxCmd $D1Database "SELECT COUNT(*) AS n FROM runtime_state WHERE state_key='license_authority_synced' AND state_value='1';" 'n'
+    if ($licenseSynced -lt 1) {
+      Step 'Sincronizando painel admin com o Worker da Débora'
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $LicenseSyncScript -DeboraWranglerConfig $GeneratedConfig
+      if ($LASTEXITCODE -ne 0) { throw 'Sincronização do segredo de licenciamento falhou.' }
+      Invoke-NativeChecked 'marcação do licenciamento sincronizado' $NpxCmd @('--yes','wrangler@4','d1','execute',$D1Database,'--remote','--command',"INSERT INTO runtime_state(state_key,state_value,updated_at) VALUES('license_authority_synced','1',CURRENT_TIMESTAMP) ON CONFLICT(state_key) DO UPDATE SET state_value='1',updated_at=CURRENT_TIMESTAMP;",'--yes') | Out-Null
+    } else {
+      Write-Host 'Licenciamento Central ↔ Débora já sincronizado; segredo preservado.' -ForegroundColor Green
+    }
 
     Step 'Gerando build de produção'
     & $NpmCmd run build
@@ -220,8 +238,8 @@ try {
   Write-Host "Arquivos: R2 $R2Bucket"
   Write-Host "Usuários migrados: $($health.authUsers)"
   Write-Host "Registros disponíveis: $($health.records)"
-  Write-Host 'Licenciamento: Artisys D1 central preservado.'
-  Write-Host 'Supabase clínico: preservado apenas como rollback e ponte temporária de primeira autenticação; novas leituras/gravações clínicas usam Cloudflare.'
+  Write-Host 'Licenciamento: painel Artisys e D1 central sincronizados.'
+  Write-Host 'Supabase clínico: preservado como rollback e ponte temporária para sessões/senhas antigas; novas leituras e gravações clínicas usam Cloudflare.'
   Write-Host 'Usuários existentes podem entrar com a senha atual; no primeiro login ela é migrada automaticamente para o D1.'
 } finally {
   if ($GeneratedConfig -and (Test-Path $GeneratedConfig)) { Remove-Item -Force $GeneratedConfig -ErrorAction SilentlyContinue }
