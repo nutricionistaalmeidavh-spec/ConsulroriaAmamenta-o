@@ -11,11 +11,24 @@ if (-not (Test-Path $source)) {
 }
 
 $text = [IO.File]::ReadAllText($source)
+
+# Corrige interpolação inválida de variável seguida de ':' no Windows PowerShell.
 $old = '$failures.Add("$table: origem=$sourceCount destino=$targetCount")'
 $new = '$failures.Add("${table}: origem=$sourceCount destino=$targetCount")'
-
 if ($text.Contains($old)) {
   $text = $text.Replace($old, $new)
+}
+
+# Windows PowerShell 5.1 trata Range como cabeçalho restrito no Invoke-WebRequest.
+# O PostgREST suporta paginação equivalente via query string limit/offset.
+$text = [regex]::Replace($text, '(?m)^\s*\$headers\[''Range''\]\s*=.*\r?\n', '')
+$text = [regex]::Replace($text, '(?m)^\s*\$headers\[''Prefer''\]\s*=\s*''count=exact''\s*\r?\n', '')
+$oldUri = '$uri = "$BaseUrl/rest/v1/$([Uri]::EscapeDataString($Table))?select=*"'
+$newUri = '$uri = "$BaseUrl/rest/v1/$([Uri]::EscapeDataString($Table))?select=*&limit=$pageSize&offset=$offset"'
+if ($text.Contains($oldUri)) {
+  $text = $text.Replace($oldUri, $newUri)
+} elseif ($text -notmatch '\?select=\*.*limit=\$pageSize.*offset=\$offset') {
+  throw 'Não foi possível adaptar a paginação do PostgREST para Windows PowerShell. Nenhuma migração foi iniciada.'
 }
 
 # Keep the corrected copy inside the repository's scripts directory so that
@@ -40,6 +53,7 @@ try {
   }
 
   Write-Host 'Sintaxe do migrador validada.' -ForegroundColor Green
+  Write-Host 'Paginação PostgREST compatível com Windows PowerShell validada.' -ForegroundColor Green
   Write-Host "Raiz do repositório validada: $repoRoot" -ForegroundColor DarkGreen
 
   $argsList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $temp)
