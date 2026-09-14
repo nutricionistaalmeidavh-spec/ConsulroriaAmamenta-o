@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/generate-pwa-icons.mjs && vite build",
+    "build": "node scripts/materialize-clinical-source.mjs --write && node scripts/generate-pwa-icons.mjs && vite build",
     "preview": "vite preview",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs"
   },
