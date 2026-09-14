@@ -61,6 +61,23 @@ export function createSupabaseClient(config, {
     return session;
   }
 
+  async function workerRequest(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
+    const session = getSession();
+    if (!session?.access_token) throw new Error('Sessão expirada. Entre novamente.');
+    const finalHeaders = { Authorization: `Bearer ${session.access_token}`, ...headers };
+    if (!raw && body !== undefined && !finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
+    const res = await fetchImpl(path, { method, headers: finalHeaders, body: body === undefined ? undefined : raw ? body : JSON.stringify(body) });
+    const data = await parseResponse(res);
+    if (res.status === 401) { setSession(null); throw new Error('Sessão expirada. Entre novamente.'); }
+    if (!res.ok) {
+      const code = data?.error || data?.message || `Falha no serviço (${res.status}).`;
+      if (code === 'SAAS_PATIENT_LIMIT_REACHED') throw new Error('Seu plano Freemium permite até 3 mães/pacientes.');
+      if (code === 'SAAS_MEDIA_UPLOAD_NOT_ALLOWED') throw new Error('Upload de fotos e vídeos está disponível no plano Pro.');
+      throw new Error(code);
+    }
+    return data;
+  }
+
   async function authRequest(path, { method = 'POST', body, token = null } = {}) {
     const headers = jsonHeaders(config, token ? { access_token: token } : null);
     const res = await fetchImpl(`${base}/auth/v1/${path}`, {
@@ -136,13 +153,20 @@ export function createSupabaseClient(config, {
   }
 
   async function storageRequest(path, { method = 'GET', body, headers = {} } = {}) {
+    const normalized = path.replace(/^\//, '');
+    if (method === 'POST' && normalized.startsWith('object/clinical-media/')) {
+      const storagePath = normalized.slice('object/clinical-media/'.length);
+      return workerRequest(`/api/clinical/media/upload?path=${encodeURIComponent(storagePath).replace(/%2F/g, '/')}`, {
+        method: 'POST', body, headers, raw: true
+      });
+    }
     const session = getSession();
     const finalHeaders = {
       apikey: config.SUPABASE_PUBLISHABLE_KEY,
       ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...headers
     };
-    const res = await fetchImpl(`${base}/storage/v1/${path.replace(/^\//, '')}`, { method, headers: finalHeaders, body });
+    const res = await fetchImpl(`${base}/storage/v1/${normalized}`, { method, headers: finalHeaders, body });
     const data = await parseResponse(res);
     if (res.status === 401) {
       setSession(null);
@@ -162,6 +186,7 @@ export function createSupabaseClient(config, {
     signOut,
     rest,
     rpc,
-    storageRequest
+    storageRequest,
+    workerRequest
   };
 }
