@@ -18,7 +18,9 @@ if ($text.Contains($old)) {
   $text = $text.Replace($old, $new)
 }
 
-$temp = Join-Path $env:TEMP ("debora-cloudflare-migration-fixed-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
+# Keep the corrected copy inside the repository's scripts directory so that
+# $PSScriptRoot inside the migration script still resolves the repository root.
+$temp = Join-Path $PSScriptRoot (".migrate-supabase-to-cloudflare.fixed-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
 [IO.File]::WriteAllText($temp, $text, (New-Object Text.UTF8Encoding($false)))
 
 try {
@@ -31,7 +33,14 @@ try {
     throw "O migrador ainda possui erro(s) de sintaxe. Nenhuma migração foi iniciada.`n$details"
   }
 
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+  $schemaPath = Join-Path $repoRoot 'cloudflare\full-migration-schema.sql'
+  if (-not (Test-Path $schemaPath)) {
+    throw "Schema de migração ausente no repositório: $schemaPath"
+  }
+
   Write-Host 'Sintaxe do migrador validada.' -ForegroundColor Green
+  Write-Host "Raiz do repositório validada: $repoRoot" -ForegroundColor DarkGreen
 
   $argsList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $temp)
   if ($Apply) { $argsList += '-Apply' }
