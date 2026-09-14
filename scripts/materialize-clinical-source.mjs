@@ -76,6 +76,14 @@ function overlay(outputPath) {
   resolved.set(outputPath, new Uint8Array(readFileSync(sourcePath)));
   sourceByPath.set(outputPath, `cloudflare-license-authority:${outputPath}`);
 }
+function replaceText(outputPath, search, replacement, label) {
+  const bytes = resolved.get(outputPath);
+  if (!bytes) throw new Error(`${label}: arquivo não materializado ${outputPath}`);
+  const text = Buffer.from(bytes).toString('utf8');
+  if (!text.includes(search)) throw new Error(`${label}: trecho esperado não encontrado em ${outputPath}`);
+  resolved.set(outputPath, new Uint8Array(Buffer.from(text.replace(search, replacement), 'utf8')));
+  sourceByPath.set(outputPath, `${sourceByPath.get(outputPath)}+${label}`);
+}
 
 add('index.html', base, 'index.html', 'base:index.html');
 add('styles.css', base, 'styles.css', 'base:styles.css');
@@ -109,9 +117,23 @@ if (release['features/patient-fixes.js']) add('features/patient-fixes.js', relea
 if (release['features/patient-fixes.css']) add('features/patient-fixes.css', release, 'features/patient-fixes.css', 'release:features/patient-fixes.css');
 
 // Source-controlled overlays are applied last so future materialization cannot silently
-// restore the old direct-Supabase commercial write paths.
+// restore direct Supabase clinical traffic after the Cloudflare cutover.
+overlay('config.js');
 overlay('core/lib/supabase-client.js');
 overlay('core/lib/repositories.js');
+
+const oldConfigured = `export function configured() {
+  return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
+    /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
+    !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
+}`;
+const newConfigured = `export function configured() {
+  if (config.BACKEND_MODE === 'cloudflare') return Boolean(config.SUPABASE_URL && config.SUPABASE_PUBLISHABLE_KEY);
+  return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
+    /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
+    !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
+}`;
+replaceText('core/app-shell.js', oldConfigured, newConfigured, 'cloudflare-runtime-config');
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -123,8 +145,8 @@ for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.l
 }
 
 const manifest = Buffer.from(`${JSON.stringify({
-  version: 2,
-  strategy: 'canonical-first-with-legacy-fallback',
+  version: 3,
+  strategy: 'cloudflare-d1-r2-runtime-with-legacy-auth-bridge',
   generatedFromLegacyArtifacts: true,
   modules
 }, null, 2)}\n`, 'utf8');
@@ -156,5 +178,5 @@ if (mode === 'write') {
   console.error(`Clinical source verification failed: ${mismatches} mismatch(es).`);
   process.exit(1);
 } else {
-  console.log(`Clinical source verified: ${resolved.size - 1} files match legacy runtime resolution.`);
+  console.log(`Clinical source verified: ${resolved.size - 1} files match Cloudflare runtime resolution.`);
 }
