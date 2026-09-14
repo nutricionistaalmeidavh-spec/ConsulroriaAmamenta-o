@@ -44,11 +44,10 @@ assert.match(dashboardApp, /debora-runtime-access-token|amamentacao-session|debo
 assert.match(dashboardApp, /\/app\//i, 'dashboard must send unauthenticated users to the existing professional login');
 assert.match(dashboardApp, /\/api\/seo\/google\/overview/);
 assert.doesNotMatch(dashboardApp, /localStorage/);
-assert.match(seoWorker, /\/auth\/v1\/user/i, 'SEO API must validate the existing Supabase access token server-side');
-assert.match(seoWorker, /nutricionistaalmeidavh@gmail\.com/i, 'SEO API must restrict access to the owner e-mail');
-assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as emergency fallback');
-assert.doesNotMatch(seoWorker, /obra-na-mao-comercial|artisys-sso\/redeem/i, 'SEO API must not depend on the Obra na Mão broker');
-
+assert.match(worker, /\/auth\/v1\/user/i, 'domain worker must validate the existing Supabase access token server-side');
+assert.match(worker, /nutricionistaalmeidavh@gmail\.com/i, 'domain worker must restrict SEO to the owner e-mail');
+assert.doesNotMatch(worker, /artisys-sso|obra-na-mao-comercial/i, 'active SEO route must not depend on the Obra na Mão broker');
+assert.match(seoWorker, /ARTISYS_SEO_ADMIN_TOKEN/, 'legacy admin token must remain available as internal fallback');
 assert.match(worker, /x-robots-tag/i, 'private paths must receive X-Robots-Tag');
 
 console.log('Public SEO contract OK');
