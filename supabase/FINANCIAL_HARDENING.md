@@ -46,4 +46,4 @@ Snapshot anterior ao endurecimento:
 
 `snapshot/cloudflare-pre-financial-hardening-2026-09-03`
 
-O AppDeploy permanece independente e não participa desta publicação.
+A publicação canônica atual é feita pelo Cloudflare a partir do GitHub.
