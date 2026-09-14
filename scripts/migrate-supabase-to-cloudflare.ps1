@@ -96,7 +96,10 @@ function Ensure-CloudflareLogin([string]$NpxCmd) {
 }
 
 function Get-SupabaseServerKey([string]$NpxCmd, [string]$ProjectRef) {
-  $result = Invoke-NativeChecked 'Leitura das chaves do Supabase' $NpxCmd @('--yes','supabase@2.111.0','projects','api-keys','--project-ref',$ProjectRef,'--output','json')
+  $result = Invoke-NativeCapture $NpxCmd @('--yes','supabase@2.111.0','projects','api-keys','--project-ref',$ProjectRef,'--output','json')
+  if ($result.ExitCode -ne 0) {
+    throw "Leitura das chaves do Supabase falhou (exit $($result.ExitCode))."
+  }
   $parsed = $result.Output | ConvertFrom-Json
   $rows = @($parsed)
   if ($parsed -is [pscustomobject] -and $parsed.PSObject.Properties.Name -contains 'api_keys') { $rows = @($parsed.api_keys) }
@@ -114,6 +117,7 @@ function Get-SupabaseServerKey([string]$NpxCmd, [string]$ProjectRef) {
   if (-not $row) { throw 'Não foi possível obter automaticamente uma chave server-side do Supabase.' }
   $key = [string](Get-ObjectProperty $row 'api_key')
   if ([string]::IsNullOrWhiteSpace($key) -or $key -match '(?i)redacted') { throw 'A chave server-side retornada pelo Supabase está indisponível.' }
+  Write-Host 'Chave server-side obtida sem exibir o valor.'
   return $key
 }
 
