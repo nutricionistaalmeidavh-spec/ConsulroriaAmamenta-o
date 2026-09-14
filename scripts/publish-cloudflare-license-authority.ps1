@@ -146,9 +146,11 @@ try {
   Ensure-CloudflareLogin -UseLocalWrangler
   Set-WranglerSecret -Name 'LICENSE_SERVICE_SECRET' -Value $LicenseSecret -Config 'wrangler.jsonc' -UseLocalWrangler
 
-  Step 'Aplicando migration D1 da Central'
-  & $NpxCmd wrangler d1 migrations apply obra-na-mao-comercial --remote --config wrangler.jsonc
-  Assert-Exit 'migration D1'
+  Step 'Aplicando somente a migration 0008 de autoridade de licenças no D1'
+  $LicenseMigration = Join-Path $CentralWeb 'cloudflare\migrations\0008_product_license_authority.sql'
+  if (-not (Test-Path $LicenseMigration)) { throw "Migration D1 0008 ausente: $LicenseMigration" }
+  & $NpxCmd wrangler d1 execute obra-na-mao-comercial --remote --file $LicenseMigration --yes --config wrangler.jsonc
+  Assert-Exit 'migration D1 0008'
 
   Step 'Publicando a Central Artisys'
   & $NpxCmd wrangler deploy --config wrangler.jsonc
@@ -160,7 +162,7 @@ try {
 Step 'Confirmando a autoridade D1 publicada'
 $probeHeaders = @{ 'x-artisys-license-secret' = $LicenseSecret; 'content-type' = 'application/json' }
 $probeBody = @{ action='resolve'; productCode='debora-lactacao'; email='license-probe@artisys.invalid' } | ConvertTo-Json -Compress
-$probe = Invoke-RestMethod -Method Post -Uri 'https://artisys.dev/api/internal/product-license' -Headers $probeHeaders -Body $probeBody
+$probe = Invoke-RestMethod -Method Post -Uri 'https://obra-na-mao-comercial.nutricionistaalmeidavh.workers.dev/api/internal/product-license' -Headers $probeHeaders -Body $probeBody
 if ($probe.planCode -ne 'legacy_unmanaged' -or $probe.commercial -ne $false) {
   throw 'Probe da Central não confirmou o isolamento legacy_unmanaged.'
 }
