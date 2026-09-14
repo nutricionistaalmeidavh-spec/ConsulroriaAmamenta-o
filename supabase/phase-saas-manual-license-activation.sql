@@ -47,6 +47,11 @@ $$;
 revoke all on function saas_private.activate_manual_license_on_account() from public, anon, authenticated;
 grant execute on function saas_private.activate_manual_license_on_account() to service_role;
 
+-- The resolver is used by SECURITY DEFINER enforcement functions and does not need
+-- to be callable directly by authenticated browser clients.
+revoke all on function saas_private.has_active_pro(uuid) from public, anon, authenticated;
+grant execute on function saas_private.has_active_pro(uuid) to service_role;
+
 drop trigger if exists saas_accounts_manual_license_activation on public.saas_accounts;
 create trigger saas_accounts_manual_license_activation
 after insert on public.saas_accounts
