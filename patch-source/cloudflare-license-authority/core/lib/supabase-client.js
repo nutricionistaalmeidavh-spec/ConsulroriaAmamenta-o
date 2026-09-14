@@ -2,7 +2,7 @@ const SESSION_KEY = 'debora-lactacao-session';
 
 function assertConfig(config) {
   if (!config?.SUPABASE_URL || !config?.SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error('Configuração do Supabase incompleta.');
+    throw new Error('Configuração do backend incompleta.');
   }
 }
 
@@ -42,7 +42,7 @@ export function createMemorySessionStorage(initial = {}) {
 
 export function createSupabaseClient(config, {
   fetchImpl = globalThis.fetch?.bind(globalThis),
-  sessionStorage = globalThis.sessionStorage
+  sessionStorage = globalThis.localStorage
 } = {}) {
   assertConfig(config);
   if (typeof fetchImpl !== 'function') throw new Error('Fetch indisponível.');
