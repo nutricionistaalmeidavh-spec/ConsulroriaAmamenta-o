@@ -3,7 +3,6 @@ import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.m
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
 const DEFAULT_SEO_ADMIN_EMAIL = 'nutricionistaalmeidavh@gmail.com';
-const SEO_GOOGLE_LOGIN_CLIENT_ID = '826322917381-ia1khl7es1gqddv6jsmg8p75m7amfle5.apps.googleusercontent.com';
 const SEO_SESSION_COOKIE = 'artisys-seo-session';
 const SEO_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -87,6 +86,10 @@ function signingSecret(env) {
   return text(env?.ARTISYS_SEO_ADMIN_TOKEN);
 }
 
+function adminPassword(env) {
+  return text(env?.ARTISYS_SEO_ADMIN_PASSWORD);
+}
+
 async function createSeoSessionToken(email, env, dependencies = {}) {
   const secret = signingSecret(env);
   if (!secret) return '';
@@ -128,49 +131,25 @@ async function authorizeSeoRequest(request, env, dependencies = {}) {
 
   const sessionToken = cookieValue(request, SEO_SESSION_COOKIE);
   if (sessionToken && await verifySeoSessionToken(sessionToken, env, dependencies)) {
-    return { ok: true, method: 'google_oauth', email: adminEmail(env) };
+    return { ok: true, method: 'password', email: adminEmail(env) };
   }
 
   return { ok: false, response: json(401, { error: 'unauthorized' }) };
 }
 
-export async function handleSeoGoogleSession(request, env, dependencies = {}) {
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
+export async function handleSeoPasswordLogin(request, env, dependencies = {}) {
   if (!signingSecret(env)) return json(503, { error: 'seo_admin_not_configured' });
+  const configuredPassword = adminPassword(env);
+  if (!configuredPassword) return json(503, { error: 'seo_password_not_configured' });
 
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_request' }); }
-  const accessToken = text(body?.accessToken);
-  if (!accessToken || accessToken.length < 8) return json(401, { error: 'google_identity_invalid' });
+  const email = text(body?.email).toLowerCase();
+  const password = typeof body?.password === 'string' ? body.password : '';
 
-  let tokenInfoResponse;
-  try {
-    tokenInfoResponse = await fetchImpl(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
-  } catch {
-    return json(502, { error: 'google_identity_unavailable' });
+  if (!constantTimeTextEqual(email, adminEmail(env)) || !constantTimeTextEqual(password, configuredPassword)) {
+    return json(401, { error: 'invalid_credentials' });
   }
-
-  let tokenInfo;
-  try { tokenInfo = await tokenInfoResponse.json(); } catch { tokenInfo = {}; }
-  if (!tokenInfoResponse.ok || text(tokenInfo?.aud) !== SEO_GOOGLE_LOGIN_CLIENT_ID) {
-    return json(401, { error: 'google_identity_invalid' });
-  }
-
-  let userResponse;
-  try {
-    userResponse = await fetchImpl('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { authorization: `Bearer ${accessToken}` },
-    });
-  } catch {
-    return json(502, { error: 'google_identity_unavailable' });
-  }
-
-  let user;
-  try { user = await userResponse.json(); } catch { user = {}; }
-  const email = text(user?.email).toLowerCase();
-  if (!userResponse.ok || user?.verified_email !== true || !email) return json(401, { error: 'google_identity_invalid' });
-  if (email !== adminEmail(env)) return json(403, { error: 'forbidden' });
 
   const token = await createSeoSessionToken(email, env, dependencies);
   if (!token) return json(503, { error: 'seo_admin_not_configured' });
