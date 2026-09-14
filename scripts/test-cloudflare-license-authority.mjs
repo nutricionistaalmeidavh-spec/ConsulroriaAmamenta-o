@@ -10,6 +10,8 @@ const repositories = readFileSync('public/clinical-source/core/lib/repositories.
 const client = readFileSync('public/clinical-source/core/lib/supabase-client.js', 'utf8');
 const documents = readFileSync('public/documents-feature.js', 'utf8');
 const migration = readFileSync('supabase/phase-cloudflare-license-authority.sql', 'utf8');
+const versionedMigration = readFileSync('supabase/migrations/20260914210000_cloudflare_license_authority.sql', 'utf8');
+const publisher = readFileSync('scripts/publish-cloudflare-license-authority.ps1', 'utf8');
 
 assert.match(wrangler, /ARTISYS_LICENSING/);
 assert.match(wrangler, /obra-na-mao-comercial/);
@@ -44,9 +46,29 @@ for (const required of [
   'delete from public.entitlements',
 ]) assert.ok(migration.toLowerCase().includes(required), `missing migration contract: ${required}`);
 
+assert.equal(versionedMigration, migration, 'versioned Supabase migration must exactly match the reviewed phase migration');
 assert.doesNotMatch(migration, /apply_pro_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /apply_freemium_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /create policy[\s\S]{0,80}mothers[\s\S]{0,80}for insert/i);
 assert.match(migration, /PDFs and other non-photo\/video clinical files/i);
+
+for (const required of [
+  "d1 migrations apply obra-na-mao-comercial --remote",
+  "functions deploy saas-billing-webhook",
+  "wrangler@4' deploy",
+  'migration fetch --linked',
+  'db push --linked --dry-run',
+  'db push --linked',
+  '20260914210000_cloudflare_license_authority.sql',
+]) assert.ok(publisher.includes(required), `publisher missing: ${required}`);
+
+const centralDeploy = publisher.indexOf("npx wrangler deploy --config wrangler.jsonc");
+const deboraDeploy = publisher.indexOf("'wrangler@4' deploy --config wrangler.jsonc");
+const finalSupabasePush = publisher.lastIndexOf("db push --linked");
+assert.ok(centralDeploy >= 0 && deboraDeploy > centralDeploy, 'Central must deploy before Débora');
+assert.ok(finalSupabasePush > deboraDeploy, 'Supabase final enforcement migration must run after both Workers deploy');
+assert.match(publisher, /legacy_unmanaged/);
+assert.match(publisher, /migration fetch --linked/);
+assert.match(publisher, /--no-verify-jwt/);
 
 console.log('cloudflare license authority contract: OK');
