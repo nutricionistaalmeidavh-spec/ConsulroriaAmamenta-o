@@ -1,4 +1,5 @@
-const ARTISYS_OWNER_SSO = 'https://obra-na-mao-comercial.nutricionistaalmeidavh.workers.dev/api/artisys-sso/start?target=debora-seo';
+const GOOGLE_LOGIN_CLIENT_ID = '826322917381-ia1khl7es1gqddv6jsmg8p75m7amfle5.apps.googleusercontent.com';
+const GOOGLE_GSI_SRC = 'https://accounts.google.com/gsi/client';
 
 const authPanel = document.querySelector('#authPanel');
 const googleLoginButton = document.querySelector('#googleLoginButton');
@@ -7,6 +8,9 @@ const dashboard = document.querySelector('#dashboard');
 const refreshButton = document.querySelector('#refreshButton');
 const statusText = document.querySelector('#statusText');
 const periodLabel = document.querySelector('#periodLabel');
+
+let googleScriptPromise = null;
+let tokenClient = null;
 
 function number(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
@@ -65,35 +69,87 @@ function render(data) {
   statusText.textContent = 'Dados atualizados do Search Console';
 }
 
-function startGoogleLogin() {
-  window.location.assign(ARTISYS_OWNER_SSO);
+function loadGoogleIdentityServices() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (googleScriptPromise) return googleScriptPromise;
+
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${GOOGLE_GSI_SRC}"]`);
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Não foi possível carregar o login Google.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = GOOGLE_GSI_SRC;
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Não foi possível carregar o login Google.'));
+    document.head.appendChild(script);
+  });
+
+  return googleScriptPromise;
 }
 
-async function consumeSsoCallback() {
-  if (!window.location.hash) return false;
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const code = params.get('artisys_sso_code');
-  if (!code) return false;
+async function createSeoSession(accessToken) {
+  const response = await fetch('/api/seo/google/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    cache: 'no-store',
+    body: JSON.stringify({ accessToken }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload.error === 'forbidden'
+      ? 'Esta conta Google não tem permissão para acessar o painel SEO.'
+      : payload.error === 'google_identity_invalid'
+        ? 'O Google não confirmou esta identidade para o painel SEO.'
+        : 'Não foi possível concluir o login Google.';
+    throw new Error(message);
+  }
+}
 
-  history.replaceState({}, document.title, `${window.location.origin}/admin/seo/`);
+async function startGoogleLogin() {
   authError.textContent = '';
   googleLoginButton.disabled = true;
-  googleLoginButton.textContent = 'Concluindo acesso…';
+  googleLoginButton.textContent = 'Abrindo Google…';
+
   try {
-    const response = await fetch('/api/seo/google/session', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'same-origin',
-      cache: 'no-store',
-      body: JSON.stringify({ code }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível concluir o login Google.');
-    return true;
+    await loadGoogleIdentityServices();
+    if (!window.google?.accounts?.oauth2) throw new Error('Login Google indisponível neste navegador.');
+
+    if (!tokenClient) {
+      tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_LOGIN_CLIENT_ID,
+        scope: 'openid email profile',
+        callback: async (response) => {
+          try {
+            if (response?.error) throw new Error(response.error_description || response.error);
+            if (!response?.access_token) throw new Error('O Google não retornou uma credencial válida.');
+            googleLoginButton.textContent = 'Concluindo acesso…';
+            await createSeoSession(response.access_token);
+            await loadDashboard();
+          } catch (error) {
+            authError.textContent = error.message || 'Não foi possível concluir o login Google.';
+          } finally {
+            googleLoginButton.disabled = false;
+            googleLoginButton.textContent = 'Entrar com Google';
+          }
+        },
+        error_callback: () => {
+          authError.textContent = 'O login Google foi cancelado ou bloqueado pelo navegador.';
+          googleLoginButton.disabled = false;
+          googleLoginButton.textContent = 'Entrar com Google';
+        },
+      });
+    }
+
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
   } catch (error) {
-    authError.textContent = error.message || 'Não foi possível concluir o login Google.';
-    return false;
-  } finally {
+    authError.textContent = error.message || 'Não foi possível abrir o login Google.';
     googleLoginButton.disabled = false;
     googleLoginButton.textContent = 'Entrar com Google';
   }
@@ -134,5 +190,4 @@ async function loadDashboard() {
 
 googleLoginButton.addEventListener('click', startGoogleLogin);
 refreshButton.addEventListener('click', loadDashboard);
-await consumeSsoCallback();
 loadDashboard();
