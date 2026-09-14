@@ -29,11 +29,11 @@ function Set-WranglerSecret([string]$Name, [string]$Value, [string]$Config, [swi
   Assert-Exit "Configuração do secret $Name"
 }
 
-function Ensure-CloudflareLogin([string]$Config, [switch]$UseLocalWrangler) {
+function Ensure-CloudflareLogin([switch]$UseLocalWrangler) {
   if ($UseLocalWrangler) {
-    $output = (& npx wrangler whoami --config $Config 2>&1 | Out-String)
+    $output = (& npx wrangler whoami 2>&1 | Out-String)
   } else {
-    $output = (& npx --yes 'wrangler@4' whoami --config $Config 2>&1 | Out-String)
+    $output = (& npx --yes 'wrangler@4' whoami 2>&1 | Out-String)
   }
   Write-Host $output.Trim()
   if ($LASTEXITCODE -ne 0 -or $output -match '(?i)not authenticated|not logged|login required') {
@@ -56,16 +56,29 @@ function Get-SupabaseServerKey([string]$ProjectRef) {
   $raw = (& npx --yes 'supabase@2.111.0' projects api-keys --project-ref $ProjectRef --output json 2>&1 | Out-String)
   Assert-Exit 'Leitura das chaves do Supabase'
   $parsed = $raw | ConvertFrom-Json
-  $rows = if ($null -ne $parsed.api_keys) { @($parsed.api_keys) } else { @($parsed) }
+  $rows = @($parsed)
+  if ($parsed -is [pscustomobject] -and $parsed.PSObject.Properties.Name -contains 'api_keys') {
+    $rows = @($parsed.api_keys)
+  }
+
   $row = $rows | Where-Object {
-    ($_.id -eq 'service_role' -or $_.name -eq 'service_role' -or $_.type -eq 'service_role') -and $_.api_key
+    $id = if ($_.PSObject.Properties.Name -contains 'id') { [string]$_.id } else { '' }
+    $name = if ($_.PSObject.Properties.Name -contains 'name') { [string]$_.name } else { '' }
+    $type = if ($_.PSObject.Properties.Name -contains 'type') { [string]$_.type } else { '' }
+    $apiKey = if ($_.PSObject.Properties.Name -contains 'api_key') { [string]$_.api_key } else { '' }
+    ($id -eq 'service_role' -or $name -eq 'service_role' -or $type -eq 'service_role') -and -not [string]::IsNullOrWhiteSpace($apiKey)
   } | Select-Object -First 1
+
   if (-not $row) {
     $row = $rows | Where-Object {
-      $_.api_key -and $_.api_key -notmatch '(?i)redacted' -and ($_.id -match 'secret|service' -or $_.name -match 'secret|service')
+      $id = if ($_.PSObject.Properties.Name -contains 'id') { [string]$_.id } else { '' }
+      $name = if ($_.PSObject.Properties.Name -contains 'name') { [string]$_.name } else { '' }
+      $apiKey = if ($_.PSObject.Properties.Name -contains 'api_key') { [string]$_.api_key } else { '' }
+      -not [string]::IsNullOrWhiteSpace($apiKey) -and $apiKey -notmatch '(?i)redacted' -and ($id -match 'secret|service' -or $name -match 'secret|service')
     } | Select-Object -First 1
   }
-  $key = if ($row) { [string]$row.api_key } else { '' }
+
+  $key = if ($row -and $row.PSObject.Properties.Name -contains 'api_key') { [string]$row.api_key } else { '' }
   if ([string]::IsNullOrWhiteSpace($key) -or $key -match '(?i)redacted') {
     throw 'Não foi possível obter automaticamente uma chave server-side do Supabase. Nenhuma migration foi aplicada.'
   }
@@ -127,7 +140,7 @@ try {
   & npm run build
   Assert-Exit 'build Central'
 
-  Ensure-CloudflareLogin -Config 'wrangler.jsonc' -UseLocalWrangler
+  Ensure-CloudflareLogin -UseLocalWrangler
   Set-WranglerSecret -Name 'LICENSE_SERVICE_SECRET' -Value $LicenseSecret -Config 'wrangler.jsonc' -UseLocalWrangler
 
   Step 'Aplicando migration D1 da Central'
@@ -153,6 +166,15 @@ Step 'Autenticando no Supabase e obtendo chave server-side sem expô-la'
 Ensure-SupabaseLogin
 $SupabaseServerKey = Get-SupabaseServerKey -ProjectRef $SupabaseProjectRef
 
+Step 'Atualizando a Edge Function financeira que sincroniza o D1'
+Push-Location $DeboraRoot
+try {
+  & npx --yes 'supabase@2.111.0' functions deploy saas-billing-webhook --project-ref $SupabaseProjectRef --no-verify-jwt --use-api
+  Assert-Exit 'deploy saas-billing-webhook'
+} finally {
+  Pop-Location
+}
+
 Step 'Validando e compilando a Débora'
 Push-Location $DeboraRoot
 try {
@@ -167,7 +189,7 @@ try {
   & npm run build
   Assert-Exit 'build Débora'
 
-  Ensure-CloudflareLogin -Config 'wrangler.jsonc'
+  Ensure-CloudflareLogin
   Set-WranglerSecret -Name 'LICENSE_SERVICE_SECRET' -Value $LicenseSecret -Config 'wrangler.jsonc'
   Set-WranglerSecret -Name 'SUPABASE_SERVICE_ROLE_KEY' -Value $SupabaseServerKey -Config 'wrangler.jsonc'
 
@@ -208,8 +230,12 @@ try {
   & npx --yes 'supabase@2.111.0' db push --linked
   Assert-Exit 'Supabase db push'
 
-  & npx --yes 'supabase@2.111.0' migration list --linked
+  $migrationList = (& npx --yes 'supabase@2.111.0' migration list --linked 2>&1 | Out-String)
   Assert-Exit 'verificação das migrations Supabase'
+  Write-Host $migrationList
+  if ($migrationList -notmatch '20260914210000') {
+    throw 'A migration final não apareceu no histórico remoto após o push.'
+  }
 } finally {
   Pop-Location
   $LicenseSecret = $null
@@ -218,5 +244,5 @@ try {
 }
 
 Write-Host "`nPUBLICAÇÃO CONCLUÍDA" -ForegroundColor Green
-Write-Host 'Central Artisys + D1 publicados; Débora publicada; migration final do Supabase aplicada por último.'
+Write-Host 'Central Artisys + D1 publicados; Edge Function financeira atualizada; Débora publicada; migration final do Supabase aplicada por último.'
 Write-Host 'Contas sem vínculo comercial continuam legacy_unmanaged. Pro 6 meses é liberado pelo painel CEO.'
