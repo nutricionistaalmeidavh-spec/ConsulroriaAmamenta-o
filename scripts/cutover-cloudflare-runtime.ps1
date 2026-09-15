@@ -44,6 +44,58 @@ function ConvertFrom-LooseJson([string]$Text) {
   return $clean.Substring($start) | ConvertFrom-Json
 }
 
+# Windows PowerShell 5.1 can preserve a JSON array as a single Object[] value
+# when it crosses function/pipeline boundaries. These helpers traverse the parsed
+# value explicitly instead of depending on automatic PowerShell enumeration.
+function Find-JsonItemByName([object]$Value, [string]$Name) {
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [System.Array]) {
+    foreach ($item in $Value) {
+      $found = Find-JsonItemByName $item $Name
+      if ($null -ne $found) { return $found }
+    }
+    return $null
+  }
+  $props = @($Value.PSObject.Properties.Name)
+  if ($props -contains 'name' -and [string]$Value.name -eq $Name) { return $Value }
+  foreach ($container in @('result','results','items','databases','buckets','secrets')) {
+    if ($props -contains $container) {
+      $found = Find-JsonItemByName $Value.$container $Name
+      if ($null -ne $found) { return $found }
+    }
+  }
+  return $null
+}
+
+function Find-JsonProperty([object]$Value, [string]$PropertyName) {
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [System.Array]) {
+    foreach ($item in $Value) {
+      $found = Find-JsonProperty $item $PropertyName
+      if ($null -ne $found) { return $found }
+    }
+    return $null
+  }
+  $props = @($Value.PSObject.Properties.Name)
+  if ($props -contains $PropertyName) { return $Value.$PropertyName }
+  foreach ($container in @('result','items','data')) {
+    if ($props -contains $container) {
+      $found = Find-JsonProperty $Value.$container $PropertyName
+      if ($null -ne $found) { return $found }
+    }
+  }
+  return $null
+}
+
+function First-JsonItem([object]$Value) {
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [System.Array]) {
+    if ($Value.Length -eq 0) { return $null }
+    return $Value[0]
+  }
+  return $Value
+}
+
 function Ensure-CloudflareLogin([string]$NpxCmd) {
   $probe = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','whoami')
   if ($probe.ExitCode -eq 0 -and $probe.Output -notmatch '(?i)not logged|not authenticated|login required') {
@@ -60,10 +112,23 @@ function Ensure-CloudflareLogin([string]$NpxCmd) {
 
 function Get-D1([string]$NpxCmd, [string]$Name) {
   $result = Invoke-NativeChecked 'wrangler d1 list' $NpxCmd @('--yes','wrangler@4','d1','list','--json')
-  $rows = @(ConvertFrom-LooseJson $result.Output)
-  $found = $rows | Where-Object { [string]$_.name -eq $Name } | Select-Object -First 1
-  if (-not $found) { throw "D1 '$Name' não encontrado. Rode primeiro a migração de dados com -Apply." }
-  $id = if ($found.PSObject.Properties.Name -contains 'uuid') { [string]$found.uuid } elseif ($found.PSObject.Properties.Name -contains 'id') { [string]$found.id } else { '' }
+  $parsed = ConvertFrom-LooseJson $result.Output
+  $found = Find-JsonItemByName $parsed $Name
+
+  # Final fallback is intentionally based on the Wrangler JSON text itself. This
+  # avoids a false negative if an older PowerShell build wraps JSON unexpectedly.
+  if ($null -eq $found) {
+    $clean = Strip-Ansi $result.Output
+    $escapedName = [regex]::Escape($Name)
+    $objectPattern = '(?s)\{(?=[^{}]*"name"\s*:\s*"' + $escapedName + '")[^{}]*"uuid"\s*:\s*"([^"]+)"[^{}]*\}'
+    $match = [regex]::Match($clean, $objectPattern)
+    if ($match.Success) {
+      return [pscustomobject]@{ Name = $Name; Id = $match.Groups[1].Value }
+    }
+    throw "D1 '$Name' não encontrado. Rode primeiro a migração de dados com -Apply."
+  }
+
+  $id = if (@($found.PSObject.Properties.Name) -contains 'uuid') { [string]$found.uuid } elseif (@($found.PSObject.Properties.Name) -contains 'id') { [string]$found.id } else { '' }
   if ([string]::IsNullOrWhiteSpace($id)) { throw "Não foi possível identificar o UUID do D1 '$Name'." }
   [pscustomobject]@{ Name = $Name; Id = $id }
 }
@@ -72,7 +137,10 @@ function Ensure-R2([string]$NpxCmd, [string]$Name) {
   $json = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','r2','bucket','list','--json')
   $exists = $false
   if ($json.ExitCode -eq 0) {
-    try { $exists = @((ConvertFrom-LooseJson $json.Output) | Where-Object { [string]$_.name -eq $Name }).Count -gt 0 } catch {}
+    try {
+      $parsed = ConvertFrom-LooseJson $json.Output
+      $exists = $null -ne (Find-JsonItemByName $parsed $Name)
+    } catch {}
   }
   if (-not $exists) {
     $text = Invoke-NativeChecked 'wrangler r2 bucket list' $NpxCmd @('--yes','wrangler@4','r2','bucket','list')
@@ -83,11 +151,12 @@ function Ensure-R2([string]$NpxCmd, [string]$Name) {
 
 function D1-Scalar([string]$NpxCmd, [string]$Db, [string]$Sql, [string]$Field) {
   $result = Invoke-NativeChecked 'consulta D1' $NpxCmd @('--yes','wrangler@4','d1','execute',$Db,'--remote','--command',$Sql,'--json','--yes')
-  $parsed = @(ConvertFrom-LooseJson $result.Output)
-  if ($parsed.Count -eq 0) { return 0 }
-  $results = @($parsed[0].results)
-  if ($results.Count -eq 0) { return 0 }
-  return [int64]$results[0].$Field
+  $parsed = ConvertFrom-LooseJson $result.Output
+  $resultsValue = Find-JsonProperty $parsed 'results'
+  $row = First-JsonItem $resultsValue
+  if ($null -eq $row) { return 0 }
+  if (-not (@($row.PSObject.Properties.Name) -contains $Field)) { return 0 }
+  return [int64]$row.$Field
 }
 
 function New-RandomSecret {
@@ -101,7 +170,8 @@ function Test-WorkerSecret([string]$NpxCmd, [string]$ConfigPath, [string]$Name) 
   $listed = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','secret','list','--config',$ConfigPath,'--json')
   if ($listed.ExitCode -eq 0) {
     try {
-      if (@((ConvertFrom-LooseJson $listed.Output) | Where-Object { [string]$_.name -eq $Name }).Count -gt 0) { return $true }
+      $parsed = ConvertFrom-LooseJson $listed.Output
+      if ($null -ne (Find-JsonItemByName $parsed $Name)) { return $true }
     } catch {}
   }
   $fallback = Invoke-NativeCapture $NpxCmd @('--yes','wrangler@4','secret','list','--config',$ConfigPath)
