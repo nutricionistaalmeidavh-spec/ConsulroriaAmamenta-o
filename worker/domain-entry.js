@@ -2,6 +2,7 @@ import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
+import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
@@ -69,10 +70,12 @@ export default {
     }
 
     if (route.type === 'rewrite') {
-      return env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      const response = await env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
     }
 
     const response = await coreWorker.fetch(request, env, ctx);
-    return isPrivateRobotsPath(url.pathname) ? withNoIndex(response) : response;
+    if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
+    return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },
 };
