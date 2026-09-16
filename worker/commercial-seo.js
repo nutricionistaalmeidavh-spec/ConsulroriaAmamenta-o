@@ -29,52 +29,17 @@ const COMMERCIAL_STRUCTURED_DATA = Object.freeze({
         'Upload de fotos e vídeos no plano Pro',
       ],
       offers: [
-        {
-          '@type': 'Offer',
-          name: 'Freemium',
-          price: '0',
-          priceCurrency: 'BRL',
-          url: COMMERCIAL_CANONICAL_URL,
-          description: 'Plano gratuito para começar com até 3 mães/pacientes.',
-        },
-        {
-          '@type': 'Offer',
-          name: 'Pro mensal',
-          price: '49.90',
-          priceCurrency: 'BRL',
-          url: COMMERCIAL_CANONICAL_URL,
-          description: 'Plano Pro mensal com pacientes ilimitados e upload de fotos e vídeos.',
-        },
+        { '@type': 'Offer', name: 'Freemium', price: '0', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano gratuito para começar com até 3 mães/pacientes.' },
+        { '@type': 'Offer', name: 'Pro mensal', price: '49.90', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano Pro mensal com pacientes ilimitados e upload de fotos e vídeos.' },
       ],
     },
     {
       '@type': 'FAQPage',
       '@id': `${COMMERCIAL_CANONICAL_URL}#faq`,
       mainEntity: [
-        {
-          '@type': 'Question',
-          name: 'Preciso instalar alguma coisa?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Não para usar a versão web. A plataforma funciona no celular e no computador pelo navegador.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'Posso começar sem pagar?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Sim. O Freemium custa R$ 0 e libera o fluxo para até 3 mães/pacientes, sem upload de fotos e vídeos.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'Qual é a diferença do Pro?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'O Pro remove o limite de pacientes e libera upload de fotos e vídeos, mantendo os recursos do fluxo da plataforma.',
-          },
-        },
+        { '@type': 'Question', name: 'Preciso instalar alguma coisa?', acceptedAnswer: { '@type': 'Answer', text: 'Não para usar a versão web. A plataforma funciona no celular e no computador pelo navegador.' } },
+        { '@type': 'Question', name: 'Posso começar sem pagar?', acceptedAnswer: { '@type': 'Answer', text: 'Sim. O Freemium custa R$ 0 e libera o fluxo para até 3 mães/pacientes, sem upload de fotos e vídeos.' } },
+        { '@type': 'Question', name: 'Qual é a diferença do Pro?', acceptedAnswer: { '@type': 'Answer', text: 'O Pro remove o limite de pacientes e libera upload de fotos e vídeos, mantendo os recursos do fluxo da plataforma.' } },
       ],
     },
   ],
@@ -95,6 +60,8 @@ function commercialSeoMarkup() {
     '  <meta name="twitter:card" content="summary">',
     `  <meta name="twitter:title" content="${COMMERCIAL_SEO_TITLE}">`,
     `  <meta name="twitter:description" content="${COMMERCIAL_SEO_DESCRIPTION}">`,
+    '  <link rel="stylesheet" href="/comercial/mobile-sales-v2.css?v=20260915">',
+    '  <script src="/comercial/mobile-sales-v2.js?v=20260915" defer></script>',
     `  <script type="application/ld+json">${structuredData}</script>`,
   ].join('\n');
 }
