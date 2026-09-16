@@ -159,3 +159,6 @@ body.sales-v2-active .sales-v2 { display: block; min-height: 100vh; background:
 .sales-screen-sprite[data-screen-index="3"] { background-position: 0% 100%; }
 .sales-screen-sprite[data-screen-index="4"] { background-position: 50% 100%; }
 .sales-screen-sprite[data-screen-index="5"] { background-position: 100% 100%; }
+
+.sales-screen-card .sales-screen-sprite { height: auto; min-height: 0; aspect-ratio: 1 / 2; }
+.sales-screen-card:last-child .sales-screen-sprite { height: auto; }
