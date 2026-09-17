@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --sales-bg: #140e16;
   --sales-bg-2: #1d1320;
   --sales-card: #251a28;
@@ -162,3 +162,19 @@ body.sales-v2-active .sales-v2 { display: block; min-height: 100vh; background:
 
 .sales-screen-card .sales-screen-sprite { height: auto; min-height: 0; aspect-ratio: 1 / 2; }
 .sales-screen-card:last-child .sales-screen-sprite { height: auto; }
+
+/* HQ real screenshots: individual assets, no destructive sprite compression */
+.sales-screen-card .sales-screen-media {
+  height: auto;
+  aspect-ratio: auto;
+  background: #f7f2f4;
+}
+.sales-screen-card .sales-screen-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: contain;
+  object-position: top center;
+}
+.sales-screen-card:last-child .sales-screen-media { height: auto; }

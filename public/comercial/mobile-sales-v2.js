@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   const PLAN_KEY = 'commercial.saas.plan-intent.v1';
   const screens = [
     ['Dashboard', 'Visão rápida do dia com atendimentos, follow-ups e financeiro.'],
@@ -69,7 +69,7 @@
             </div>
           </div>
           <figure class="sales-hero-shot">
-            <img src="./assets/screens/dashboard-real-mobile.webp" width="430" height="775" alt="Tela inicial real do sistema para consultoras de amamentação com agenda, follow-ups e financeiro">
+            <img src="./assets/screens/dashboard.webp" width="430" height="775" alt="Tela inicial real do sistema para consultoras de amamentação com agenda, follow-ups e financeiro">
             <figcaption>Tela real do sistema · dados demonstrativos</figcaption>
           </figure>
         </section>
@@ -81,9 +81,9 @@
             <p>Veja como agenda, pacientes, prontuário e financeiro aparecem hoje na plataforma.</p>
           </div>
           <div class="sales-screen-strip" role="list">
-            ${screens.map(([title, text], index) => `
+            ${screens.map(([title, text, image]) => `
               <figure class="sales-screen-card" role="listitem">
-                <div class="sales-screen-media sales-screen-sprite" data-screen-index="${index}" role="img" aria-label="${title} real do sistema de gestão para consultoras de amamentação"></div>
+                <div class="sales-screen-media"><img src="./assets/screens/${image}" alt="${title} real do sistema de gestão para consultoras de amamentação" loading="lazy" decoding="async"></div>
                 <figcaption><strong>${title}</strong><span>${text}</span></figcaption>
               </figure>`).join('')}
           </div>
@@ -220,3 +220,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render, { once: true });
   else render();
 })();
+
