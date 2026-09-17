@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -8,7 +8,7 @@ const seo = read('worker/commercial-seo.js');
 
 assert.match(js, /Sistema para consultoras de amamentação/i, 'hero must state commercial search intent');
 assert.ok((js.match(/data-purchase-card/g) || []).length >= 4, 'landing must contain multiple purchase cards');
-assert.match(js, /dashboard-real-mobile\.webp/);
+assert.match(js, /dashboard\.webp/);
 assert.match(css, /real-screens-sprite-small\.webp/);
 assert.match(js, /data-plan="freemium"/);
 assert.match(js, /data-plan="pro_monthly"/);
@@ -21,3 +21,5 @@ assert.match(seo, /mobile-sales-v2\.js/);
 assert.match(seo, /defer/);
 
 console.log('Commercial mobile-first contract OK');
+
+
