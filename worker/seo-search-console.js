@@ -1,10 +1,12 @@
 import { createGoogleRefreshTokenProvider } from './vendor/artisys-seo/google-token.mjs';
-import { createSearchConsoleClient } from './vendor/artisys-seo/search-console.mjs';
+import { createSearchConsoleClient, normalizeSearchConsoleSiteUrl } from './vendor/artisys-seo/search-console.mjs';
 import { loadSearchConsoleOverview } from './vendor/artisys-seo/search-console-overview.mjs';
 
 const DEFAULT_SEO_ADMIN_EMAIL = 'nutricionistaalmeidavh@gmail.com';
 const SEO_SESSION_COOKIE = 'artisys-seo-session';
 const SEO_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_ARTISYS_SITE = 'sc-domain:artisys.dev';
+const LOJA_ONLINE_PRODUCT_PREFIX = 'https://artisys.dev/sistemas/loja-online/';
 
 function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
@@ -122,6 +124,27 @@ function googleConfig(env) {
   return { clientId, clientSecret, refreshToken };
 }
 
+function seoContexts(env) {
+  const deboraSite = normalizeSearchConsoleSiteUrl(text(env?.ARTISYS_SEO_SITE_URL) || 'deboralactacao.com');
+  const artisysSite = normalizeSearchConsoleSiteUrl(text(env?.ARTISYS_SEO_ARTISYS_SITE_URL) || DEFAULT_ARTISYS_SITE);
+  return Object.freeze([
+    Object.freeze({
+      id: 'debora',
+      label: 'Débora Lactação',
+      kind: 'product',
+      siteUrl: deboraSite,
+      pagePrefix: '',
+    }),
+    Object.freeze({
+      id: 'loja-online',
+      label: 'Loja Online — página comercial',
+      kind: 'product',
+      siteUrl: artisysSite,
+      pagePrefix: text(env?.ARTISYS_SEO_LOJAONLINE_PAGE_PREFIX) || LOJA_ONLINE_PRODUCT_PREFIX,
+    }),
+  ]);
+}
+
 async function authorizeSeoRequest(request, env, dependencies = {}) {
   const configuredAdminToken = signingSecret(env);
   const presentedToken = bearerToken(request);
@@ -202,7 +225,7 @@ export function buildSearchConsoleAudit(googleSearch) {
       opportunities.push({
         type: 'low_ctr_query', priority: row.impressions >= 150 ? 'high' : 'medium', label: 'CTR baixo',
         title: `Melhorar clique para “${row.query}”`,
-        recommendation: 'Revisar título e descrição da página para responder melhor à intenção desta busca, sem alterar o conteúdo clínico sem aprovação.',
+        recommendation: 'Revisar título e descrição da página para responder melhor à intenção desta busca, sem alterar o conteúdo do produto sem aprovação.',
         query: row.query, ...opportunityBase(row),
       });
     }
@@ -210,7 +233,7 @@ export function buildSearchConsoleAudit(googleSearch) {
       opportunities.push({
         type: 'ranking_opportunity', priority: row.position <= 10 ? 'high' : 'medium', label: 'Perto da 1ª página',
         title: `Ganhar posição para “${row.query}”`,
-        recommendation: 'Reforçar a relevância semântica da landing para esta intenção e acompanhar a evolução da posição média.',
+        recommendation: 'Reforçar a relevância semântica da página para esta intenção e acompanhar a evolução da posição média.',
         query: row.query, ...opportunityBase(row),
       });
     }
@@ -243,15 +266,133 @@ export function buildSearchConsoleAudit(googleSearch) {
   });
 }
 
-export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
+function createGoogleClient(config, fetchImpl, dependencies = {}) {
+  const getAccessToken = createGoogleRefreshTokenProvider({
+    ...config,
+    fetch: fetchImpl,
+    ...(dependencies.now ? { now: dependencies.now } : {}),
+  });
+  return createSearchConsoleClient({ getAccessToken, fetch: fetchImpl });
+}
+
+function normalizedSiteEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  const seen = new Set();
+  const output = [];
+  for (const entry of entries) {
+    try {
+      const siteUrl = normalizeSearchConsoleSiteUrl(entry?.siteUrl);
+      if (seen.has(siteUrl)) continue;
+      seen.add(siteUrl);
+      output.push({ siteUrl, permissionLevel: text(entry?.permissionLevel) || 'unknown' });
+    } catch {
+      // Ignore malformed upstream entries instead of surfacing them to the dashboard.
+    }
+  }
+  return output;
+}
+
+function validPagePrefix(value) {
+  const raw = text(value);
+  if (!raw) return '';
+  if (raw.length > 2048) throw new TypeError('pagePrefix too long');
+  const url = new URL(raw);
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new TypeError('pagePrefix must be a public HTTPS URL');
+  return url.toString();
+}
+
+function pageFilterGroups(pagePrefix) {
+  if (!pagePrefix) return undefined;
+  return [{
+    groupType: 'and',
+    filters: [{ dimension: 'page', operator: 'contains', expression: pagePrefix }],
+  }];
+}
+
+function siteAllowed(sites, siteUrl) {
+  return sites.some((site) => site.siteUrl === siteUrl);
+}
+
+function resolveScope(request, env, sites) {
+  const url = new URL(request.url);
+  const requestedContext = text(url.searchParams.get('context'));
+  const requestedSite = text(url.searchParams.get('siteUrl'));
+  const requestedPrefix = text(url.searchParams.get('pagePrefix'));
+  const contexts = seoContexts(env);
+
+  if (requestedContext) {
+    const context = contexts.find((item) => item.id === requestedContext);
+    if (!context) return { error: 'seo_context_not_found' };
+    if (!siteAllowed(sites, context.siteUrl)) return { error: 'seo_site_not_allowed' };
+    return {
+      context: context.id,
+      label: context.label,
+      kind: context.kind,
+      siteUrl: context.siteUrl,
+      pagePrefix: context.pagePrefix,
+    };
+  }
+
+  if (requestedSite) {
+    let siteUrl;
+    let pagePrefix;
+    try {
+      siteUrl = normalizeSearchConsoleSiteUrl(requestedSite);
+      pagePrefix = validPagePrefix(requestedPrefix);
+    } catch {
+      return { error: 'invalid_scope' };
+    }
+    if (!siteAllowed(sites, siteUrl)) return { error: 'seo_site_not_allowed' };
+    return {
+      context: 'custom',
+      label: pagePrefix ? 'Loja / URL específica' : 'Domínio / propriedade',
+      kind: pagePrefix ? 'store' : 'domain',
+      siteUrl,
+      pagePrefix,
+    };
+  }
+
+  const fallback = contexts[0];
+  if (!siteAllowed(sites, fallback.siteUrl)) return { error: 'seo_site_not_allowed' };
+  return {
+    context: fallback.id,
+    label: fallback.label,
+    kind: fallback.kind,
+    siteUrl: fallback.siteUrl,
+    pagePrefix: fallback.pagePrefix,
+  };
+}
+
+async function preparedGoogle(request, env, dependencies = {}) {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== 'function') return json(500, { error: 'seo_fetch_unavailable' });
-
+  if (typeof fetchImpl !== 'function') return { response: json(500, { error: 'seo_fetch_unavailable' }) };
   const authorization = await authorizeSeoRequest(request, env, dependencies);
-  if (!authorization.ok) return authorization.response;
-
+  if (!authorization.ok) return { response: authorization.response };
   const config = googleConfig(env);
-  if (!config) return json(503, { error: 'seo_google_not_configured' });
+  if (!config) return { response: json(503, { error: 'seo_google_not_configured' }) };
+  const client = createGoogleClient(config, fetchImpl, dependencies);
+  return { fetchImpl, client };
+}
+
+export async function handleSeoGoogleSites(request, env, dependencies = {}) {
+  const prepared = await preparedGoogle(request, env, dependencies);
+  if (prepared.response) return prepared.response;
+  try {
+    const sites = normalizedSiteEntries(await prepared.client.listSites());
+    const contexts = seoContexts(env).map((context) => ({
+      ...context,
+      available: siteAllowed(sites, context.siteUrl),
+    }));
+    return json(200, { ok: true, contexts, sites });
+  } catch (error) {
+    const upstreamStatus = Number.isInteger(error?.status) ? error.status : undefined;
+    return json(502, { error: 'search_console_unavailable', ...(upstreamStatus ? { upstreamStatus } : {}) });
+  }
+}
+
+export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
+  const prepared = await preparedGoogle(request, env, dependencies);
+  if (prepared.response) return prepared.response;
 
   let period;
   try {
@@ -262,20 +403,21 @@ export async function handleSeoGoogleOverview(request, env, dependencies = {}) {
   }
 
   try {
-    const getAccessToken = createGoogleRefreshTokenProvider({
-      ...config,
-      fetch: fetchImpl,
-      ...(dependencies.now ? { now: dependencies.now } : {}),
-    });
-    const client = createSearchConsoleClient({ getAccessToken, fetch: fetchImpl });
+    const sites = normalizedSiteEntries(await prepared.client.listSites());
+    const scope = resolveScope(request, env, sites);
+    if (scope.error === 'seo_site_not_allowed') return json(403, { error: scope.error });
+    if (scope.error) return json(400, { error: scope.error });
+
+    const filters = pageFilterGroups(scope.pagePrefix);
     const googleSearch = await loadSearchConsoleOverview({
-      client,
-      siteUrl: text(env?.ARTISYS_SEO_SITE_URL) || 'deboralactacao.com',
+      client: prepared.client,
+      siteUrl: scope.siteUrl,
       ...period,
       rowLimit: 10,
+      ...(filters ? { dimensionFilterGroups: filters } : {}),
     });
     const audit = buildSearchConsoleAudit(googleSearch);
-    return json(200, { ok: true, googleSearch, audit });
+    return json(200, { ok: true, scope, googleSearch, audit });
   } catch (error) {
     const upstreamStatus = Number.isInteger(error?.status) ? error.status : undefined;
     return json(502, { error: 'search_console_unavailable', ...(upstreamStatus ? { upstreamStatus } : {}) });
