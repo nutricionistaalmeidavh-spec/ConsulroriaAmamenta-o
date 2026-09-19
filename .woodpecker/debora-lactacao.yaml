@@ -1,0 +1,62 @@
+labels:
+  platform: windows/amd64
+  backend: local
+
+when:
+  - event: manual
+  - event: push
+    branch: [main]
+
+steps:
+  - name: validar-build-deploy
+    image: powershell.exe
+    environment:
+      ARTISYS_UTILIDADES_PATH: 'C:\VICTOR\Artisys\AgroFrota\utilidades'
+    commands:
+      - '$ErrorActionPreference = "Stop"'
+      - 'New-Item -ItemType Directory -Force -Path ".\artifacts" | Out-Null'
+      - '"validar-build-deploy" | Set-Content ".\artifacts\current-step.txt"'
+      - '$log=".\artifacts\woodpecker-debora.log"; "=== debora ===" | Set-Content $log'
+      - '$npm=(Get-Command npm.cmd -ErrorAction Stop).Source; & $npm ci *>&1 | Tee-Object -FilePath $log -Append; if($LASTEXITCODE -ne 0){throw "npm ci falhou"}'
+      - '"test:seo" | Set-Content ".\artifacts\current-step.txt"; & $npm run test:seo *>&1 | Tee-Object -FilePath $log -Append; if($LASTEXITCODE -ne 0){throw "test:seo falhou"}'
+      - '"build" | Set-Content ".\artifacts\current-step.txt"; & $npm run build *>&1 | Tee-Object -FilePath $log -Append; if($LASTEXITCODE -ne 0){throw "build falhou"}'
+      - '"deploy" | Set-Content ".\artifacts\current-step.txt"; $npx=(Get-Command npx.cmd -ErrorAction Stop).Source; & $npx --yes wrangler@4 deploy --config wrangler.jsonc *>&1 | Tee-Object -FilePath $log -Append; if($LASTEXITCODE -ne 0){throw "deploy Cloudflare falhou"}'
+      - 'node .\scripts\woodpecker-ci-report.mjs --status pass --output .\artifacts\woodpecker-ci-report.json'
+      - 'Remove-Item ".\artifacts\current-step.txt" -ErrorAction SilentlyContinue'
+
+  - name: reportar-sucesso-github
+    image: powershell.exe
+    environment:
+      ARTISYS_UTILIDADES_PATH: 'C:\VICTOR\Artisys\AgroFrota\utilidades'
+      ARTISYS_REPORT_PATH: '.\artifacts\woodpecker-ci-report.json'
+      ARTISYS_LOG_PATH: '.\artifacts\woodpecker-debora.log'
+      ARTISYS_STATUS_CONTEXT: 'ci/woodpecker/debora-lactacao'
+      ARTISYS_CI_RESULT: 'success'
+      ARTISYS_COMMENT_SUCCESS: 'false'
+      ARTISYS_INSTALLER_REQUIRED: 'false'
+    commands:
+      - '$ErrorActionPreference="Continue"'
+      - '$reporter=Join-Path $env:ARTISYS_UTILIDADES_PATH "modules\artisys-ci-reporter\bin\artisys-ci-reporter.mjs"; if(Test-Path $reporter){node $reporter}else{Write-Warning "Reporter ausente: $reporter"}'
+    when:
+      - event: [push, manual]
+        status: [success]
+    failure: ignore
+
+  - name: reportar-falha-github
+    image: powershell.exe
+    environment:
+      ARTISYS_UTILIDADES_PATH: 'C:\VICTOR\Artisys\AgroFrota\utilidades'
+      ARTISYS_REPORT_PATH: '.\artifacts\woodpecker-ci-report.json'
+      ARTISYS_LOG_PATH: '.\artifacts\woodpecker-debora.log'
+      ARTISYS_STATUS_CONTEXT: 'ci/woodpecker/debora-lactacao'
+      ARTISYS_CI_RESULT: 'failure'
+      ARTISYS_INSTALLER_REQUIRED: 'false'
+    commands:
+      - '$ErrorActionPreference="Continue"'
+      - '$step=if(Test-Path ".\artifacts\current-step.txt"){(Get-Content ".\artifacts\current-step.txt" -Raw).Trim()}else{"pipeline"}'
+      - 'node .\scripts\woodpecker-ci-report.mjs --status fail --failed-step $step --output .\artifacts\woodpecker-ci-report.json'
+      - '$reporter=Join-Path $env:ARTISYS_UTILIDADES_PATH "modules\artisys-ci-reporter\bin\artisys-ci-reporter.mjs"; if(Test-Path $reporter){node $reporter}else{Write-Warning "Reporter ausente: $reporter"}'
+    when:
+      - event: [push, manual]
+        status: [failure]
+    failure: ignore
