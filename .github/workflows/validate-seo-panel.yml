@@ -1,0 +1,36 @@
+name: Validate SEO panel
+
+# Focused gate for the shared ArtiSys SEO panel and Loja Online scopes.
+on:
+  pull_request:
+    paths:
+      - 'public/admin/seo/**'
+      - 'worker/seo-search-console.js'
+      - 'worker/seo-search-console.test.mjs'
+      - 'worker/vendor/artisys-seo/search-console-overview.mjs'
+      - 'worker/domain-entry.js'
+      - 'scripts/test-public-seo.mjs'
+      - '.github/workflows/validate-seo-panel.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seo-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate SEO API contract
+        run: node --test worker/seo-search-console.test.mjs
+      - name: Validate SEO UI contract
+        run: node scripts/test-public-seo.mjs
+      - name: Syntax-check SEO worker
+        run: |
+          node --check worker/seo-search-console.js
+          node --check worker/domain-entry.js
+          node --check public/admin/seo/app.js

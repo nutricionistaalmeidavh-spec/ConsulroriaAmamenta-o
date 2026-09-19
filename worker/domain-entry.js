@@ -1,5 +1,5 @@
 import coreWorker from './index.js';
-import { handleSeoGoogleOverview, handleSeoPasswordLogin } from './seo-search-console.js';
+import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
@@ -34,6 +34,9 @@ export default {
 
     if (url.pathname === '/api/seo/login' && request.method === 'POST') {
       return withNoIndex(await handleSeoPasswordLogin(request, env));
+    }
+    if (url.pathname === '/api/seo/google/sites' && request.method === 'GET') {
+      return withNoIndex(await handleSeoGoogleSites(request, env));
     }
     if (url.pathname === '/api/seo/google/overview' && request.method === 'GET') {
       return withNoIndex(await handleSeoGoogleOverview(request, env));

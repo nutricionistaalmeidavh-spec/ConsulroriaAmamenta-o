@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <meta name="color-scheme" content="light">
-  <title>Painel SEO | Débora Lactação</title>
+  <title>Painel SEO | ArtiSys</title>
   <link rel="stylesheet" href="/admin/seo/style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
       <div>
         <p class="eyebrow">ArtiSys SEO</p>
         <h1>Painel SEO</h1>
-        <p class="muted">Dados reais do Google Search Console para deboralactacao.com.</p>
+        <p class="muted">Dados reais do Google Search Console para produtos, domínios e lojas conectados.</p>
       </div>
       <button id="refreshButton" class="button secondary" type="button" hidden>Atualizar</button>
     </header>
@@ -33,6 +33,29 @@
     </section>
 
     <section id="dashboard" hidden>
+      <section class="panel scope-panel" aria-labelledby="scopeTitle">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Produto / domínio / loja</p>
+            <h2 id="scopeTitle">Recorte do Search Console</h2>
+            <p id="scopeLabel" class="muted">Selecione o que deseja acompanhar.</p>
+          </div>
+        </div>
+        <div class="scope-grid">
+          <label for="seoContext">Visão
+            <select id="seoContext"></select>
+          </label>
+          <label for="siteSelect">Propriedade
+            <select id="siteSelect"></select>
+          </label>
+          <label for="pagePrefix">URL da loja / página
+            <input id="pagePrefix" type="url" inputmode="url" placeholder="https://minhaloja.artisys.dev/">
+          </label>
+          <button id="applyScopeButton" class="button" type="button">Aplicar filtro</button>
+        </div>
+        <p id="scopeHelp" class="scope-help">As opções exibidas vêm das propriedades que a conta conectada pode consultar no Google Search Console.</p>
+      </section>
+
       <div class="metrics" aria-label="Métricas principais">
         <article class="metric"><span>Cliques</span><strong id="metricClicks">—</strong></article>
         <article class="metric"><span>Impressões</span><strong id="metricImpressions">—</strong></article>
