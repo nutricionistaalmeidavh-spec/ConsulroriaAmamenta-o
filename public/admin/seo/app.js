@@ -6,6 +6,15 @@ const dashboard = document.querySelector('#dashboard');
 const refreshButton = document.querySelector('#refreshButton');
 const statusText = document.querySelector('#statusText');
 const periodLabel = document.querySelector('#periodLabel');
+const seoContext = document.querySelector('#seoContext');
+const siteSelect = document.querySelector('#siteSelect');
+const pagePrefix = document.querySelector('#pagePrefix');
+const applyScopeButton = document.querySelector('#applyScopeButton');
+const scopeLabel = document.querySelector('#scopeLabel');
+const scopeHelp = document.querySelector('#scopeHelp');
+
+const requestedContext = new URLSearchParams(window.location.search).get('context') || '';
+const scopeState = { contexts: [], sites: [], initialized: false };
 
 function number(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
@@ -61,7 +70,102 @@ function render(data) {
   renderRows('#pagesBody', search.topPages || [], 'page');
   renderAudit(data.audit);
   periodLabel.textContent = `${search.period.startDate} → ${search.period.endDate}`;
+  scopeLabel.textContent = `${data.scope?.label || 'Search Console'} · ${data.scope?.siteUrl || search.siteUrl}`;
   statusText.textContent = 'Dados atualizados do Search Console';
+}
+
+function option(value, label, disabled = false) {
+  const node = document.createElement('option');
+  node.value = value;
+  node.textContent = label;
+  node.disabled = disabled;
+  return node;
+}
+
+function populateScopeControls(payload) {
+  scopeState.contexts = Array.isArray(payload.contexts) ? payload.contexts : [];
+  scopeState.sites = Array.isArray(payload.sites) ? payload.sites : [];
+
+  seoContext.replaceChildren();
+  for (const context of scopeState.contexts) {
+    seoContext.appendChild(option(context.id, context.label, context.available === false));
+  }
+  seoContext.appendChild(option('custom-domain', 'Domínio / propriedade inteira'));
+  seoContext.appendChild(option('custom-store', 'Loja / URL específica'));
+
+  siteSelect.replaceChildren();
+  for (const site of scopeState.sites) {
+    siteSelect.appendChild(option(site.siteUrl, site.siteUrl));
+  }
+
+  const requested = scopeState.contexts.find((item) => item.id === requestedContext && item.available !== false);
+  const fallback = scopeState.contexts.find((item) => item.available !== false);
+  seoContext.value = requested?.id || fallback?.id || 'custom-domain';
+  syncScopeInputs();
+  scopeState.initialized = true;
+}
+
+function selectedContextDefinition() {
+  return scopeState.contexts.find((item) => item.id === seoContext.value) || null;
+}
+
+function syncScopeInputs() {
+  const context = selectedContextDefinition();
+  if (context) {
+    siteSelect.value = context.siteUrl;
+    siteSelect.disabled = true;
+    pagePrefix.value = context.pagePrefix || '';
+    pagePrefix.disabled = true;
+    scopeHelp.textContent = context.pagePrefix
+      ? `Métricas filtradas para ${context.pagePrefix}`
+      : `Métricas da propriedade ${context.siteUrl}.`;
+    return;
+  }
+  siteSelect.disabled = false;
+  const storeMode = seoContext.value === 'custom-store';
+  pagePrefix.disabled = !storeMode;
+  if (!storeMode) pagePrefix.value = '';
+  scopeHelp.textContent = storeMode
+    ? 'Informe a URL HTTPS da vitrine para separar as métricas desta loja.'
+    : 'Mostra todas as métricas da propriedade selecionada.';
+}
+
+function overviewUrl() {
+  const url = new URL('/api/seo/google/overview', window.location.origin);
+  const context = selectedContextDefinition();
+  if (context) {
+    url.searchParams.set('context', context.id);
+  } else {
+    if (!siteSelect.value) throw new Error('Selecione uma propriedade do Search Console.');
+    url.searchParams.set('siteUrl', siteSelect.value);
+    if (seoContext.value === 'custom-store') {
+      const prefix = pagePrefix.value.trim();
+      if (!prefix) throw new Error('Informe a URL da loja que deseja acompanhar.');
+      url.searchParams.set('pagePrefix', prefix);
+    }
+  }
+  return url;
+}
+
+function updateAddressBar() {
+  const context = selectedContextDefinition();
+  const url = new URL(window.location.href);
+  if (context) url.searchParams.set('context', context.id);
+  else url.searchParams.delete('context');
+  window.history.replaceState(null, '', url);
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
+function showLogin() {
+  authPanel.hidden = false;
+  dashboard.hidden = true;
+  refreshButton.hidden = true;
+  statusText.textContent = 'Acesso administrativo necessário';
 }
 
 async function login(event) {
@@ -89,6 +193,7 @@ async function login(event) {
     }
     loginForm.reset();
     document.querySelector('#email').value = 'nutricionistaalmeidavh@gmail.com';
+    scopeState.initialized = false;
     await loadDashboard();
   } catch (error) {
     authError.textContent = error.message || 'Não foi possível entrar no painel SEO.';
@@ -98,39 +203,53 @@ async function login(event) {
   }
 }
 
+async function ensureScopes() {
+  if (scopeState.initialized) return true;
+  const { response, payload } = await fetchJson('/api/seo/google/sites');
+  if (response.status === 401 || response.status === 403) {
+    showLogin();
+    return false;
+  }
+  if (!response.ok) throw new Error(payload.error || `Falha HTTP ${response.status}`);
+  populateScopeControls(payload);
+  return true;
+}
+
 async function loadDashboard() {
   authError.textContent = '';
   statusText.textContent = 'Carregando…';
   refreshButton.disabled = true;
+  applyScopeButton.disabled = true;
 
   try {
-    const response = await fetch('/api/seo/google/overview', {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 401 || response.status === 403) {
-      authPanel.hidden = false;
-      dashboard.hidden = true;
-      refreshButton.hidden = true;
-      statusText.textContent = 'Acesso administrativo necessário';
+    if (!await ensureScopes()) return;
+    const { response, payload } = await fetchJson(overviewUrl());
+    if (response.status === 401 || response.status === 403 && payload.error === 'unauthorized') {
+      showLogin();
       return;
     }
-    if (!response.ok) throw new Error(payload.error || `Falha HTTP ${response.status}`);
+    if (!response.ok) {
+      if (payload.error === 'seo_site_not_allowed') throw new Error('A propriedade selecionada ainda não está liberada para a conta conectada no Search Console.');
+      throw new Error(payload.error || `Falha HTTP ${response.status}`);
+    }
     render(payload);
+    updateAddressBar();
     authPanel.hidden = true;
     dashboard.hidden = false;
     refreshButton.hidden = false;
   } catch (error) {
-    authPanel.hidden = false;
-    dashboard.hidden = true;
-    refreshButton.hidden = true;
+    dashboard.hidden = false;
+    refreshButton.hidden = false;
     authError.textContent = error.message || 'Não foi possível carregar o painel.';
+    statusText.textContent = 'Falha ao atualizar';
   } finally {
     refreshButton.disabled = false;
+    applyScopeButton.disabled = false;
   }
 }
 
+seoContext.addEventListener('change', syncScopeInputs);
 loginForm.addEventListener('submit', login);
 refreshButton.addEventListener('click', loadDashboard);
+applyScopeButton.addEventListener('click', loadDashboard);
 loadDashboard();
