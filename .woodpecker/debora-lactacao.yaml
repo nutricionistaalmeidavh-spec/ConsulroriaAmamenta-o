@@ -24,7 +24,7 @@ steps:
       - '"dependencias" | Set-Content ".\artifacts\current-step.txt"'
       - '$npm=(Get-Command npm.cmd -ErrorAction Stop).Source'
       - '& $npm ci *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
-      - 'if($LASTEXITCODE -ne 0){throw "npm ci falhou com exit $LASTEXITCODE"}'
+      - 'if($LASTEXITCODE -ne 0){throw "npm install falhou com exit $LASTEXITCODE"}'
 
   - name: testes-seo-comercial
     image: powershell.exe
