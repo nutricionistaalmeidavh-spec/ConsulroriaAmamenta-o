@@ -1,102 +1,107 @@
-# SEO / Google Search Console — Débora Lactação
+# ArtiSys SEO / Google Search Console
 
 ## Separação de autenticações
 
-A administração de SEO é independente do login usado por profissionais, pacientes, membros ou qualquer outro usuário do produto.
+A administração de SEO é independente do login usado por profissionais, pacientes, membros, clientes da Loja Online ou usuários do Obra na Mão.
 
 - a conta Google administrativa autoriza o Search Console;
 - o Worker guarda Client Secret, refresh token e uma chave administrativa própria como secrets;
-- a API SEO exige essa chave administrativa da ArtiSys;
-- nenhuma conta Supabase/Membra/Débora é necessária para administrar SEO;
+- a API SEO exige a sessão administrativa do painel ou a chave administrativa de contingência;
+- nenhuma conta do produto é necessária para administrar SEO;
 - Client Secret, refresh token, access token e chave administrativa nunca são enviados em respostas da API.
 
-## Endpoint administrativo
+## Painel compartilhado
+
+O painel continua no endereço existente:
 
 ```text
-GET /api/seo/google/overview
-Authorization: Bearer <ARTISYS_SEO_ADMIN_TOKEN>
+https://deboralactacao.com/admin/seo/
 ```
 
-O endpoint aceita opcionalmente:
+Ele agora pode alternar entre produtos, propriedades e lojas sem duplicar credenciais Google.
+
+Contextos prontos:
+
+- `debora`: propriedade da Débora Lactação;
+- `loja-online`: propriedade `sc-domain:artisys.dev`, filtrada por `https://artisys.dev/sistemas/loja-online/`.
+
+O atalho da Central ArtiSys abre:
+
+```text
+https://deboralactacao.com/admin/seo/?context=loja-online
+```
+
+## Endpoints administrativos
+
+```text
+GET /api/seo/google/sites
+GET /api/seo/google/overview
+```
+
+`/sites` devolve somente as propriedades às quais a conta Google conectada realmente tem acesso e os contextos ArtiSys disponíveis. O backend não aceita uma propriedade arbitrária que não apareça nessa lista.
+
+`/overview` aceita opcionalmente:
 
 ```text
 ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+?context=loja-online
+?siteUrl=sc-domain:artisys.dev
+?siteUrl=sc-domain:artisys.dev&pagePrefix=https%3A%2F%2Fminhaloja.artisys.dev%2F
 ```
 
 Sem período explícito, consulta 28 dias terminando dois dias antes do dia atual.
 
-Resposta autorizada:
-
-```json
-{
-  "ok": true,
-  "googleSearch": {
-    "siteUrl": "sc-domain:deboralactacao.com",
-    "period": { "startDate": "...", "endDate": "..." },
-    "metrics": {
-      "clicks": 0,
-      "impressions": 0,
-      "ctr": 0,
-      "position": null
-    },
-    "topQueries": [],
-    "topPages": []
-  }
-}
-```
-
-Os valores acima são apenas o formato do contrato; o Worker retorna dados reais da API.
+Quando `pagePrefix` é informado, todas as consultas agregadas, buscas e páginas recebem o mesmo filtro de dimensão `page`; assim as métricas ficam separadas por loja/URL sem misturar o restante da propriedade.
 
 ## Proteção
 
-A rota exige:
+A rota exige uma sessão SEO administrativa válida ou o Bearer token de contingência. As credenciais Google permanecem exclusivamente no Worker.
 
-1. `ARTISYS_SEO_ADMIN_TOKEN` configurado como secret do Worker;
-2. o mesmo token no header Bearer da requisição administrativa;
-3. credenciais Google configuradas como secrets do Worker.
+Além da autenticação, o Worker aplica fail-closed por propriedade: `siteUrl` só é aceito se a API `sites.list` do Search Console confirmar acesso para a conta conectada. Uma propriedade não autorizada retorna `403 seo_site_not_allowed`.
 
-Sem token administrativo configurado, o endpoint permanece fechado (`503 seo_admin_not_configured`). Sem Bearer token responde `401`; token incorreto responde `403`.
+URLs de loja usadas como `pagePrefix` precisam ser HTTPS e não podem carregar usuário, senha ou fragmento.
 
-## Secrets do Worker
+## Secrets / variáveis do Worker
+
+Secrets existentes:
 
 ```text
 ARTISYS_GOOGLE_CLIENT_ID
 ARTISYS_GOOGLE_CLIENT_SECRET
 ARTISYS_GOOGLE_SEARCH_CONSOLE_REFRESH_TOKEN
 ARTISYS_SEO_ADMIN_TOKEN
+ARTISYS_SEO_ADMIN_PASSWORD
 ```
 
-O domínio padrão do produto é `deboralactacao.com`; `ARTISYS_SEO_SITE_URL` pode sobrescrever esse valor se necessário.
+Configuração de propriedades:
 
-## Provisionamento sem copiar segredos
-
-Depois que o OAuth local do `artisys-seo` estiver concluído, execute no checkout deste repo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\provision-seo-search-console.ps1
+```text
+ARTISYS_SEO_SITE_URL=deboralactacao.com
+ARTISYS_SEO_ARTISYS_SITE_URL=sc-domain:artisys.dev
 ```
 
-O script:
+`ARTISYS_SEO_ARTISYS_SITE_URL` é opcional; o default é `sc-domain:artisys.dev`. `ARTISYS_SEO_LOJAONLINE_PAGE_PREFIX` também é opcional e só precisa ser usado se a página comercial da Loja Online mudar de endereço.
 
-- lê `%LOCALAPPDATA%\ArtiSys\SEO\google-search-console-token.json`;
-- lê Client ID/Secret do remote rclone `artisys-qa-drive`;
-- valida o refresh token diretamente no Google;
-- confirma acesso a `sc-domain:deboralactacao.com`;
-- cria ou reutiliza uma chave administrativa forte em `%LOCALAPPDATA%\ArtiSys\SEO\debora-seo-admin-token.txt`;
-- cria um JSON temporário fora do repo;
-- envia os quatro secrets em lote ao Cloudflare via Wrangler;
-- remove o arquivo temporário mesmo em caso de erro.
+Não há novo serviço pago obrigatório nem novo segredo por loja. Subdomínios de `artisys.dev` podem ser analisados dentro da propriedade de domínio `sc-domain:artisys.dev`. Domínios próprios de clientes precisam estar verificados/acessíveis no Search Console para aparecerem na lista do painel.
 
-O valor da chave administrativa não é exibido no terminal e nenhum segredo é commitado. A conta Google administrativa pode ser a conta que já possui a propriedade no Search Console; isso não cria nem exige um usuário correspondente dentro do produto.
+## Provisionamento
+
+O fluxo existente de OAuth/refresh token continua válido. A conta Google conectada deve possuir acesso às propriedades que serão exibidas no painel. Para habilitar `artisys.dev`, confirme a propriedade de domínio nessa mesma conta; o painel a descobrirá automaticamente via Search Console.
 
 ## Teste isolado
 
+A validação focada do painel executa:
+
 ```bash
-npm run test:seo
+node --test worker/seo-search-console.test.mjs
+node scripts/test-public-seo.mjs
+node --check worker/seo-search-console.js
+node --check worker/domain-entry.js
+node --check public/admin/seo/app.js
 ```
 
-Os testes cobrem default-deny, ausência de Bearer token, token administrativo inválido, consulta real modelada do Search Console, independência do login do produto e ausência de vazamento de secrets na resposta.
+Os testes cobrem autenticação, descoberta de propriedades, contexto Loja Online, filtro por URL de loja, bloqueio de propriedades não autorizadas, contrato da UI e ausência de vazamento de secrets.
 
 ## Origem do core
 
-Os helpers vendorizados em `worker/vendor/artisys-seo/` vêm do módulo `artisys-seo` do repositório `utilidades`; `SOURCE.json` registra o commit de origem para auditoria e atualização futura.
+Os helpers vendorizados em `worker/vendor/artisys-seo/` vêm do núcleo reutilizável `artisys-seo`. O painel mantém a integração local sem alterar dados clínicos, billing ou autenticação dos produtos.
