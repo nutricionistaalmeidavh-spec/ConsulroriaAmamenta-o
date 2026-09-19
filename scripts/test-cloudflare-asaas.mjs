@@ -19,16 +19,19 @@ assert.match(worker, /env\.ASAAS_SECRET/);
 assert.doesNotMatch(worker, /env\.ASSAS_SECRET/);
 assert.match(worker, /env\.ASSAS_SANDBOX_SECRET/);
 assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
-assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(worker, /asaas-access-token/);
-assert.doesNotMatch(worker, /serviceFetch/);
+// The shared Worker also hosts owner-scoped clinical proxy routes, which legitimately
+// read the Supabase service-role secret. Keep the Asaas contract focused on preventing
+// hard-coded/leaked credentials rather than forbidding an unrelated runtime binding.
+assert.match(worker, /env\.SUPABASE_SERVICE_ROLE_KEY/);
+assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY\s*=\s*['"][^'"]+['"]/);
 
 // Production stays unchanged except for matching the configured runtime secret name.
 assert.match(worker, /\/api\/asaas\/checkout/);
 assert.match(worker, /\/api\/webhooks\/asaas/);
 assert.match(worker, /https:\/\/api\.asaas\.com\/v3/);
 assert.match(worker, /https:\/\/asaas\.com\/checkoutSession\/show\?id=/);
-assert.match(worker, /cloudflareSecretsRequired:\s*\[environment === 'sandbox' \? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET'\]/);
+assert.match(worker, /cloudflareSecretsRequired:\s*\[environment === 'sandbox' \? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET',\s*'LICENSE_SERVICE_SECRET',\s*'SUPABASE_SERVICE_ROLE_KEY'\]/);
 
 // Sandbox is isolated behind separate routes and a separate temporary secret.
 assert.match(worker, /\/api\/sandbox\/asaas\/health/);

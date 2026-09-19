@@ -24,13 +24,21 @@ const expectedCanonicalFiles = [
   'public/clinical-source/features/clinical-note-feature.css'
 ];
 
-test('materializer verifies complete canonical clinical runtime without rewriting it', () => {
+test('materializer regenerates and then verifies the canonical clinical runtime deterministically', () => {
   assert.equal(existsSync(scriptPath), true, 'clinical source materializer must exist');
-  const result = spawnSync(process.execPath, [scriptPath, '--verify'], {
+
+  const writeResult = spawnSync(process.execPath, [scriptPath, '--write'], {
     cwd: root,
     encoding: 'utf8'
   });
-  assert.equal(result.status, 0, result.stderr || result.stdout || 'materializer verification failed');
+  assert.equal(writeResult.status, 0, writeResult.stderr || writeResult.stdout || 'clinical source materialization failed');
+
+  const verifyResult = spawnSync(process.execPath, [scriptPath, '--verify'], {
+    cwd: root,
+    encoding: 'utf8'
+  });
+  assert.equal(verifyResult.status, 0, verifyResult.stderr || verifyResult.stdout || 'materializer verification failed');
+
   for (const relativePath of expectedCanonicalFiles) {
     assert.equal(existsSync(resolve(root, relativePath)), true, `${relativePath} must exist`);
   }

@@ -127,6 +127,7 @@ const billing = edge('supabase/functions/saas-billing-webhook/index.ts', async (
     if (options.method === 'PATCH') return reply({});
     return reply([{ status: 'processed' }]);
   }
+  if (url.includes('/subscriptions?')) return reply([]);
   if (url.includes('apply_billing_state')) { billingWrites++; return reply({}); }
   throw new Error(`Unexpected billing URL ${url}`);
 }, { sendPaidConfirmation: async () => {
