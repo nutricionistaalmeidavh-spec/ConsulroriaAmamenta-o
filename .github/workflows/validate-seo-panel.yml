@@ -1,5 +1,6 @@
 name: Validate SEO panel
 
+# Focused gate for the shared ArtiSys SEO panel and Loja Online scopes.
 on:
   pull_request:
     paths:
