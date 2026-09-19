@@ -48,7 +48,7 @@
     shell.innerHTML = `
       <header class="sales-header">
         <a class="sales-brand" href="#inicio" aria-label="Débora Lactação — início">
-          <span class="sales-brand-mark"><img src="../icon.svg" alt=""></span>
+          <span class="sales-brand-mark"><img src="/icon.svg" alt=""></span>
           <span><strong>Débora Lactação</strong><small>Sistema para Consultoras</small></span>
         </a>
         <button class="sales-login" type="button" data-sales-open="login">Entrar</button>
@@ -201,7 +201,7 @@
       </main>
 
       <footer class="sales-footer">
-        <div class="sales-brand"><span class="sales-brand-mark"><img src="../icon.svg" alt=""></span><span><strong>Débora Lactação</strong><small>Sistema para Consultoras</small></span></div>
+        <div class="sales-brand"><span class="sales-brand-mark"><img src="/icon.svg" alt=""></span><span><strong>Débora Lactação</strong><small>Sistema para Consultoras</small></span></div>
         <nav><a href="#produto">Sistema</a><a href="#recursos">Recursos</a><a href="#planos">Planos</a><a href="#faq">Perguntas</a></nav>
         <p>© 2026 Débora Lactação.</p>
       </footer>
