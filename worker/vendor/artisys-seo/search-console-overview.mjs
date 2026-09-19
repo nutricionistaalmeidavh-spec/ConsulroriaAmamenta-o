@@ -31,8 +31,16 @@ export async function loadSearchConsoleOverview(input) {
   const endDate = required(input.endDate, 'endDate');
   const rowLimit = input.rowLimit === undefined ? 10 : input.rowLimit;
   if (!Number.isInteger(rowLimit) || rowLimit < 1 || rowLimit > 25000) throw new RangeError('rowLimit must be an integer between 1 and 25000');
+  if (input.dimensionFilterGroups !== undefined && !Array.isArray(input.dimensionFilterGroups)) {
+    throw new TypeError('dimensionFilterGroups must be an array');
+  }
 
-  const base = { siteUrl, startDate, endDate };
+  const base = {
+    siteUrl,
+    startDate,
+    endDate,
+    ...(input.dimensionFilterGroups ? { dimensionFilterGroups: input.dimensionFilterGroups } : {})
+  };
   const [aggregate, queryRows, pageRows] = await Promise.all([
     input.client.querySearchAnalytics({ ...base, dimensions: [], rowLimit: 1 }),
     input.client.querySearchAnalytics({ ...base, dimensions: ['query'], rowLimit }),
