@@ -19,9 +19,12 @@ assert.match(worker, /env\.ASAAS_SECRET/);
 assert.doesNotMatch(worker, /env\.ASSAS_SECRET/);
 assert.match(worker, /env\.ASSAS_SANDBOX_SECRET/);
 assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
-assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(worker, /asaas-access-token/);
-assert.doesNotMatch(worker, /serviceFetch/);
+// The shared Worker now also hosts owner-scoped clinical proxy routes, which legitimately
+// read the Supabase service-role secret. Keep the Asaas contract focused on preventing
+// hard-coded/leaked credentials rather than forbidding an unrelated runtime binding.
+assert.match(worker, /env\.SUPABASE_SERVICE_ROLE_KEY/);
+assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY\s*=\s*['"][^'"]+['"]/);
 
 // Production stays unchanged except for matching the configured runtime secret name.
 assert.match(worker, /\/api\/asaas\/checkout/);
