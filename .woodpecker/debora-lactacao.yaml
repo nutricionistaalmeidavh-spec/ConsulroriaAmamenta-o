@@ -30,6 +30,10 @@ steps:
       - '$ErrorActionPreference = "Stop"'
       - '"test:seo" | Set-Content ".\artifacts\current-step.txt"'
       - '$npm=(Get-Command npm.cmd -ErrorAction Stop).Source'
+      - '& $npm run test:auth-runtime *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
+      - 'if($LASTEXITCODE -ne 0){throw "test:auth-runtime falhou com exit $LASTEXITCODE"}'
+      - '& $npm run test:deploy-safety *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
+      - 'if($LASTEXITCODE -ne 0){throw "test:deploy-safety falhou com exit $LASTEXITCODE"}'
       - '& $npm run test:seo *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
       - 'if($LASTEXITCODE -ne 0){throw "test:seo falhou com exit $LASTEXITCODE"}'
 
@@ -47,9 +51,9 @@ steps:
     commands:
       - '$ErrorActionPreference = "Stop"'
       - '"deploy-cloudflare" | Set-Content ".\artifacts\current-step.txt"'
-      - '$npx=(Get-Command npx.cmd -ErrorAction Stop).Source'
-      - '& $npx --yes wrangler@4 deploy --config wrangler.jsonc *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
-      - 'if($LASTEXITCODE -ne 0){throw "deploy Cloudflare falhou com exit $LASTEXITCODE"}'
+      - '$npm=(Get-Command npm.cmd -ErrorAction Stop).Source'
+      - '& $npm run deploy:production *>&1 | Tee-Object -FilePath ".\artifacts\woodpecker-debora.log" -Append'
+      - 'if($LASTEXITCODE -ne 0){throw "deploy Cloudflare protegido falhou com exit $LASTEXITCODE"}'
       - 'node .\scripts\woodpecker-ci-report.mjs --status pass --output .\artifacts\woodpecker-ci-report.json'
       - 'Remove-Item ".\artifacts\current-step.txt" -ErrorAction SilentlyContinue'
 
