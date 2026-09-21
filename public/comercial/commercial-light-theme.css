@@ -1,0 +1,277 @@
+/* Commercial light theme: reuse the canonical Débora Lactação palette. */
+body.sales-v2-active {
+  background: #f5edf0;
+  color: #2f3833;
+}
+
+body.sales-v2-active .sales-v2 {
+  --sales-bg: #f5edf0;
+  --sales-bg-2: #fbf7f8;
+  --sales-card: #ffffff;
+  --sales-card-2: #fbf6f7;
+  --sales-line: rgba(107, 63, 80, .16);
+  --sales-text: #2f3833;
+  --sales-muted: #727a75;
+  --sales-pink: #8a5368;
+  --sales-purple: #6b3f50;
+  --sales-glow: rgba(107, 63, 80, .18);
+  background:
+    radial-gradient(circle at 92% 5%, rgba(107, 63, 80, .10), transparent 28rem),
+    radial-gradient(circle at 5% 24%, rgba(185, 154, 216, .11), transparent 24rem),
+    var(--sales-bg);
+  color: var(--sales-text);
+}
+
+.sales-v2 .sales-header {
+  background: rgba(245, 237, 240, .98);
+  border-color: var(--sales-line);
+  backdrop-filter: none;
+  box-shadow: 0 8px 24px rgba(66, 48, 56, .06);
+}
+
+.sales-v2 .sales-login {
+  color: #6b3f50;
+  background: #ffffff;
+  border-color: rgba(107, 63, 80, .20);
+}
+
+.sales-v2 .sales-kicker {
+  color: #6b3f50;
+  border-color: rgba(107, 63, 80, .20);
+  background: rgba(107, 63, 80, .07);
+}
+
+.sales-v2 .sales-button {
+  color: #ffffff;
+  border-color: rgba(107, 63, 80, .18);
+  background: #6b3f50;
+  box-shadow: 0 12px 28px rgba(107, 63, 80, .16);
+}
+
+.sales-v2 .sales-button--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #6b3f50, #8a5368);
+  box-shadow: 0 14px 32px var(--sales-glow);
+}
+
+.sales-v2 .sales-button--ghost {
+  color: #6b3f50;
+  border-color: rgba(107, 63, 80, .34);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.sales-v2 .sales-trust-row span,
+.sales-v2 .sales-feature-grid article,
+.sales-v2 .sales-steps li,
+.sales-v2 .sales-plan-card,
+.sales-v2 .sales-faq details {
+  color: var(--sales-text);
+  background: rgba(255, 255, 255, .88);
+  border-color: var(--sales-line);
+  box-shadow: 0 10px 28px rgba(66, 48, 56, .045);
+}
+
+.sales-v2 .sales-trust-row span {
+  color: #525b56;
+}
+
+.sales-v2 .sales-hero-shot {
+  border-color: rgba(107, 63, 80, .16);
+  background: #ffffff;
+  box-shadow: 0 22px 56px rgba(66, 48, 56, .12);
+}
+
+.sales-v2 .sales-hero-shot figcaption {
+  color: #727a75;
+}
+
+.sales-v2 .sales-screen-card {
+  color: var(--sales-text);
+  background: #ffffff;
+  border-color: var(--sales-line);
+  box-shadow: 0 12px 34px rgba(66, 48, 56, .07);
+}
+
+.sales-v2 .sales-purchase-card,
+.sales-v2 .sales-purchase-card.is-secondary {
+  color: var(--sales-text);
+  border-color: rgba(107, 63, 80, .18);
+  background: linear-gradient(145deg, #ffffff, #fbf6f7 76%);
+  box-shadow: 0 16px 42px rgba(66, 48, 56, .08);
+}
+
+.sales-v2 .sales-purchase-card::after {
+  background: radial-gradient(circle, rgba(107, 63, 80, .10), transparent 68%);
+}
+
+.sales-v2 .sales-purchase-card p,
+.sales-v2 .sales-purchase-card.is-secondary p {
+  color: var(--sales-muted);
+}
+
+.sales-v2 .sales-purchase-card h3,
+.sales-v2 .sales-purchase-card .sales-purchase-row strong,
+.sales-v2 .sales-purchase-card.is-secondary h3,
+.sales-v2 .sales-purchase-card.is-secondary .sales-purchase-row strong {
+  color: var(--sales-text);
+}
+
+.sales-v2 .sales-feature-grid article > span {
+  color: #6b3f50;
+  background: #f5edf0;
+}
+
+.sales-v2 .sales-steps li > span {
+  color: #ffffff;
+  background: #6b3f50;
+}
+
+.sales-v2 .sales-plan-card.is-featured {
+  color: var(--sales-text);
+  border-color: rgba(107, 63, 80, .34);
+  background: linear-gradient(155deg, #fff, #f3e6ea);
+  box-shadow: 0 16px 40px rgba(107, 63, 80, .10);
+}
+
+.sales-v2 .sales-plan-card > span,
+.sales-v2 .sales-text-link {
+  color: #6b3f50;
+}
+
+.sales-v2 .sales-plan-card ul {
+  color: #525b56;
+}
+
+.sales-v2 .sales-footer p {
+  color: #727a75;
+}
+
+/* Privacy-safe Financeiro preview used only on the public commercial page. */
+.sales-v2 .sales-finance-demo {
+  min-height: 430px;
+  padding: 18px;
+  color: #2f3833;
+  background: #f8f3f5;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.sales-v2 .sales-finance-demo__top,
+.sales-v2 .sales-finance-demo__section-head,
+.sales-v2 .sales-finance-demo__payment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sales-v2 .sales-finance-demo__top {
+  margin-bottom: 18px;
+}
+
+.sales-v2 .sales-finance-demo__top > span:first-child,
+.sales-v2 .sales-finance-demo__payment-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.sales-v2 .sales-finance-demo small {
+  color: #727a75;
+  font-size: 10px;
+}
+
+.sales-v2 .sales-finance-demo__top strong {
+  font-size: 18px;
+}
+
+.sales-v2 .sales-finance-demo__badge {
+  padding: 6px 8px;
+  border-radius: 999px;
+  color: #6b3f50;
+  background: #f0e1e6;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.sales-v2 .sales-finance-demo__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sales-v2 .sales-finance-demo__metrics > div,
+.sales-v2 .sales-finance-demo__section {
+  border: 1px solid #e6d9de;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(66, 48, 56, .05);
+}
+
+.sales-v2 .sales-finance-demo__metrics > div {
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+}
+
+.sales-v2 .sales-finance-demo__metrics strong {
+  color: #6b3f50;
+  font-size: 15px;
+}
+
+.sales-v2 .sales-finance-demo__section {
+  padding: 14px;
+}
+
+.sales-v2 .sales-finance-demo__section-head {
+  margin-bottom: 12px;
+}
+
+.sales-v2 .sales-finance-demo__section-head strong {
+  font-size: 12px;
+}
+
+.sales-v2 .sales-finance-demo__payment {
+  padding: 12px 0;
+  border-top: 1px solid #eee5e8;
+}
+
+.sales-v2 .sales-finance-demo__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #6b3f50;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.sales-v2 .sales-finance-demo__payment-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.sales-v2 .sales-finance-demo__payment-copy strong {
+  font-size: 11px;
+}
+
+.sales-v2 .sales-finance-demo__amount {
+  color: #45624f;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sales-v2 .sales-finance-demo__privacy {
+  margin-top: 12px;
+  color: #727a75;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+@media (min-width: 1100px) {
+  .sales-v2 .sales-finance-demo { min-height: 315px; }
+}
