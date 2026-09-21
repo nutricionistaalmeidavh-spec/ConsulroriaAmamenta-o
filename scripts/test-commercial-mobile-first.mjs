@@ -11,7 +11,8 @@ const logo = read('public/icon.svg');
 const seo = read('worker/commercial-seo.js');
 
 function assertSelectorColor(cssText, selector, color, message) {
-  const rules = [...cssText.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const normalizedCss = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...normalizedCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
   const matches = rules.filter(([, selectorList]) =>
     selectorList
       .split(',')
