@@ -18,16 +18,10 @@ function jsonHeaders(config, session, extra = {}) {
 
 async function parseResponse(res) {
   if (res.status === 204) return null;
-  const type = res.headers?.get?.('content-type') || '';
-  if (type.includes('application/json') && typeof res.json === 'function') return res.json();
-  if (typeof res.json === 'function') {
-    try { return await res.json(); } catch {}
-  }
-  if (typeof res.text === 'function') {
-    const text = await res.text();
-    try { return JSON.parse(text); } catch { return text; }
-  }
-  return null;
+  if (typeof res.text !== 'function') return null;
+  const text = await res.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return text; }
 }
 
 export function createMemorySessionStorage(initial = {}) {
