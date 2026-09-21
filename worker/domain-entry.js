@@ -18,14 +18,26 @@ function isPrivateRobotsPath(pathname) {
   return PRIVATE_ROBOTS_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-function withNoIndex(response) {
-  const headers = new Headers(response.headers);
-  headers.set('x-robots-tag', 'noindex, nofollow');
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+export function withNoIndex(response) {
+  // Responses created by this Worker have mutable headers. Mutating them in place
+  // preserves ownership of the original body stream instead of rebinding the same
+  // ReadableStream into a second Response, which can surface as a disturbed/locked
+  // body in browser Fetch implementations.
+  try {
+    response.headers.set('x-robots-tag', 'noindex, nofollow');
+    return response;
+  } catch {
+    // Fetch-derived responses can expose immutable headers. Clone first so the
+    // fallback never transfers the original response's live body stream.
+    const copy = response.clone();
+    const headers = new Headers(copy.headers);
+    headers.set('x-robots-tag', 'noindex, nofollow');
+    return new Response(copy.body, {
+      status: copy.status,
+      statusText: copy.statusText,
+      headers,
+    });
+  }
 }
 
 export default {
