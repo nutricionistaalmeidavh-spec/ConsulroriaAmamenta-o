@@ -2,6 +2,7 @@ import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
+import { handleCloudflarePasswordCompat } from './cloudflare-auth-compat.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -56,6 +57,12 @@ export default {
     if (url.pathname === '/api/license/register-commercial') {
       return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
     }
+
+    // Existing accounts are migrated on first successful login. Cloudflare Workers
+    // caps PBKDF2 at 100k iterations, so password login uses the compatibility bridge
+    // before entering the general clinical runtime.
+    const passwordCompatResponse = await handleCloudflarePasswordCompat(request, env, url);
+    if (passwordCompatResponse) return withNoIndex(passwordCompatResponse);
 
     // A migrated saas_accounts row is an explicit commercial marker. Promote it into
     // the central Artisys license authority before the first Cloudflare license read.
