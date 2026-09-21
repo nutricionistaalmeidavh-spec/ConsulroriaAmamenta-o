@@ -63,6 +63,7 @@ function commercialSeoMarkup() {
     '  <link rel="stylesheet" href="/comercial/mobile-sales-v2.css?v=20260917">',
     '  <link rel="stylesheet" href="/comercial/brand-mark.css?v=20260921">',
     '  <link rel="stylesheet" href="/comercial/commercial-light-theme.css?v=20260921-contrast">',
+    '  <link rel="stylesheet" href="/comercial/commercial-sales-v2-contrast-fix.css?v=20260921-2">',
     '  <script src="/comercial/mobile-sales-v2.js?v=20260917" defer></script>',
     '  <script src="/comercial/mobile-assets-fix.js?v=20260921" defer></script>',
     `  <script type="application/ld+json">${structuredData}</script>`,

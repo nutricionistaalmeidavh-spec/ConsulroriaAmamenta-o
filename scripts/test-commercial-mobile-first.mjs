@@ -6,6 +6,7 @@ const js = read('public/comercial/mobile-sales-v2.js');
 const css = read('public/comercial/mobile-sales-v2.css');
 const brandCss = read('public/comercial/brand-mark.css');
 const lightCss = read('public/comercial/commercial-light-theme.css');
+const contrastFixCss = read('public/comercial/commercial-sales-v2-contrast-fix.css');
 const assetFix = read('public/comercial/mobile-assets-fix.js');
 const logo = read('public/icon.svg');
 const seo = read('worker/commercial-seo.js');
@@ -48,6 +49,11 @@ assertSelectorColor(lightCss, '.sales-v2 .sales-feature-grid p', '#727a75', 'fea
 assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card h3', '#2f3833', 'plan prices must use dark ink');
 assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card p', '#525b56', 'plan descriptions must remain readable');
 assertSelectorColor(lightCss, '.sales-v2 .sales-faq summary', '#2f3833', 'FAQ questions must use dark ink');
+assert.match(contrastFixCss, /body\.conversion-page\.sales-v2-active/, 'Sales V2 contrast fix must only apply after the new landing activates');
+assert.match(contrastFixCss, /\.sales-v2 main h2/, 'Sales V2 contrast fix must outrank legacy phase2 heading colors');
+assert.match(contrastFixCss, /\.sales-v2 main p/, 'Sales V2 contrast fix must outrank legacy phase2 paragraph colors');
+assert.match(contrastFixCss, /color:\s*#2f3833/i, 'Sales V2 contrast fix must force dark heading ink');
+assert.match(contrastFixCss, /color:\s*#525b56/i, 'Sales V2 contrast fix must force readable paragraph ink');
 assert.match(js, /<img src="\/icon\.svg" alt="">/, 'commercial header/footer must use the canonical SVG logo');
 assert.match(logo, /<svg\b/i, 'canonical logo must remain vector');
 assert.doesNotMatch(logo, /<image\b/i, 'canonical logo must not embed a raster image');
@@ -61,6 +67,7 @@ assert.doesNotMatch(assetFix, /\['Financeiro',\s*'\/comercial\/assets\/screens\/
 assert.match(seo, /mobile-sales-v2\.css/);
 assert.match(seo, /brand-mark\.css\?v=20260921/, 'commercial edge markup must load the vector brand rendering fix');
 assert.match(seo, /commercial-light-theme\.css\?v=20260921-contrast/, 'commercial edge markup must cache-bust the contrast fix');
+assert.match(seo, /commercial-sales-v2-contrast-fix\.css\?v=20260921-2/, 'commercial edge markup must load the specificity isolation fix');
 assert.match(seo, /mobile-sales-v2\.js/);
 assert.match(seo, /mobile-assets-fix\.js\?v=20260921/, 'commercial edge markup must load the privacy-safe finance preview');
 assert.match(seo, /defer/);

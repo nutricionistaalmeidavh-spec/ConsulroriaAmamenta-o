@@ -1,0 +1,24 @@
+/* Sales V2 contrast isolation.
+   landing.js enables the legacy phase2 dark palette on <html>; those selectors
+   are more specific than the light-theme rules and were repainting Sales V2
+   headings/paragraphs with near-white ink on the light background. */
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 main h1,
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 main h2,
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 main h3 {
+  color: #2f3833;
+}
+
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 main p {
+  color: #525b56;
+}
+
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-hero h1 em {
+  color: #6b3f50;
+}
+
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-feature-grid p,
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-steps p,
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-faq details p,
+.phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-purchase-card p {
+  color: #727a75;
+}
