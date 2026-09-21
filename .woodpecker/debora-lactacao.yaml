@@ -4,8 +4,6 @@ labels:
 
 when:
   - event: manual
-  - event: push
-    branch: [main]
 
 steps:
   - name: preparar
