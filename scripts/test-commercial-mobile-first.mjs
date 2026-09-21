@@ -5,6 +5,8 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const js = read('public/comercial/mobile-sales-v2.js');
 const css = read('public/comercial/mobile-sales-v2.css');
 const brandCss = read('public/comercial/brand-mark.css');
+const lightCss = read('public/comercial/commercial-light-theme.css');
+const assetFix = read('public/comercial/mobile-assets-fix.js');
 const logo = read('public/icon.svg');
 const seo = read('worker/commercial-seo.js');
 
@@ -17,7 +19,9 @@ assert.match(js, /data-plan="pro_monthly"/);
 assert.match(js, /data-plan="pro_annual"/);
 assert.match(css, /@media\s*\(min-width:\s*768px\)/, 'mobile-first CSS needs tablet enhancement');
 assert.match(css, /@media\s*\(min-width:\s*1100px\)/, 'mobile-first CSS needs desktop enhancement');
-assert.match(css, /--sales-bg:\s*#140e16/i, 'approved dark plum direction must be encoded');
+assert.match(lightCss, /--sales-bg:\s*#f5edf0/i, 'commercial background must use the canonical brand-soft palette');
+assert.match(lightCss, /--sales-text:\s*#2f3833/i, 'commercial text must use the canonical ink token');
+assert.match(lightCss, /--sales-purple:\s*#6b3f50/i, 'commercial accents must use the canonical brand token');
 assert.match(js, /<img src="\/icon\.svg" alt="">/, 'commercial header/footer must use the canonical SVG logo');
 assert.match(logo, /<svg\b/i, 'canonical logo must remain vector');
 assert.doesNotMatch(logo, /<image\b/i, 'canonical logo must not embed a raster image');
@@ -25,12 +29,14 @@ assert.match(brandCss, /padding:\s*0\s*!important/i, 'brand wrapper must not shr
 assert.match(brandCss, /background:\s*transparent\s*!important/i, 'brand wrapper must not add a second gradient tile');
 assert.match(brandCss, /overflow:\s*hidden/i, 'brand wrapper must clip the SVG directly to the approved radius');
 assert.match(brandCss, /object-fit:\s*cover/i, 'canonical SVG must fill the brand mark surface');
+assert.match(assetFix, /FINANCE_DEMO_PATIENT\s*=\s*['"]Mariana Alves['"]/i, 'commercial finance preview must use a fictitious patient');
+assert.match(assetFix, /sales-finance-demo/i, 'finance card must render a sanitized demonstrative preview');
+assert.doesNotMatch(assetFix, /\['Financeiro',\s*'\/comercial\/assets\/screens\/financeiro\.webp'\]/, 'commercial landing must not expose the real finance screenshot');
 assert.match(seo, /mobile-sales-v2\.css/);
 assert.match(seo, /brand-mark\.css\?v=20260921/, 'commercial edge markup must load the vector brand rendering fix');
+assert.match(seo, /commercial-light-theme\.css\?v=20260921/, 'commercial edge markup must load the light brand palette');
 assert.match(seo, /mobile-sales-v2\.js/);
+assert.match(seo, /mobile-assets-fix\.js\?v=20260921/, 'commercial edge markup must load the privacy-safe finance preview');
 assert.match(seo, /defer/);
 
 console.log('Commercial mobile-first contract OK');
-
-
-
