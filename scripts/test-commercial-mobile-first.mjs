@@ -10,6 +10,22 @@ const assetFix = read('public/comercial/mobile-assets-fix.js');
 const logo = read('public/icon.svg');
 const seo = read('worker/commercial-seo.js');
 
+function assertSelectorColor(cssText, selector, color, message) {
+  const rules = [...cssText.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const matches = rules.filter(([, selectorList]) =>
+    selectorList
+      .split(',')
+      .map((item) => item.trim())
+      .includes(selector),
+  );
+
+  assert.ok(matches.length > 0, `${message}: selector ${selector} not found`);
+  assert.ok(
+    matches.some(([, , declarations]) => new RegExp(`color\\s*:\\s*${color.replace('#', '\\#')}`, 'i').test(declarations)),
+    `${message}: ${selector} must use ${color}`,
+  );
+}
+
 assert.match(js, /Sistema para consultoras de amamentação/i, 'hero must state commercial search intent');
 assert.ok((js.match(/data-purchase-card/g) || []).length >= 4, 'landing must contain multiple purchase cards');
 assert.match(js, /dashboard\.webp/);
@@ -22,15 +38,15 @@ assert.match(css, /@media\s*\(min-width:\s*1100px\)/, 'mobile-first CSS needs de
 assert.match(lightCss, /--sales-bg:\s*#f5edf0/i, 'commercial background must use the canonical brand-soft palette');
 assert.match(lightCss, /--sales-text:\s*#2f3833/i, 'commercial text must use the canonical ink token');
 assert.match(lightCss, /--sales-purple:\s*#6b3f50/i, 'commercial accents must use the canonical brand token');
-assert.match(lightCss, /\.sales-v2 \.sales-hero h1\s*\{[^}]*color:\s*#2f3833/is, 'hero title must remain readable on the light background');
-assert.match(lightCss, /\.sales-v2 \.sales-hero h1 em\s*\{[^}]*color:\s*#6b3f50/is, 'hero emphasis must use the canonical brand color');
-assert.match(lightCss, /\.sales-v2 \.sales-section-head h2\s*\{[^}]*color:\s*#2f3833/is, 'section titles must use dark ink');
-assert.match(lightCss, /\.sales-v2 \.sales-section-head p\s*\{[^}]*color:\s*#525b56/is, 'section descriptions must use readable secondary ink');
-assert.match(lightCss, /\.sales-v2 \.sales-feature-grid h3\s*\{[^}]*color:\s*#2f3833/is, 'feature titles must use dark ink');
-assert.match(lightCss, /\.sales-v2 \.sales-feature-grid p\s*\{[^}]*color:\s*#727a75/is, 'feature descriptions must use canonical muted text');
-assert.match(lightCss, /\.sales-v2 \.sales-plan-card h3\s*\{[^}]*color:\s*#2f3833/is, 'plan prices must use dark ink');
-assert.match(lightCss, /\.sales-v2 \.sales-plan-card p\s*\{[^}]*color:\s*#525b56/is, 'plan descriptions must remain readable');
-assert.match(lightCss, /\.sales-v2 \.sales-faq summary\s*\{[^}]*color:\s*#2f3833/is, 'FAQ questions must use dark ink');
+assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1', '#2f3833', 'hero title must remain readable on the light background');
+assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1 em', '#6b3f50', 'hero emphasis must use the canonical brand color');
+assertSelectorColor(lightCss, '.sales-v2 .sales-section-head h2', '#2f3833', 'section titles must use dark ink');
+assertSelectorColor(lightCss, '.sales-v2 .sales-section-head p', '#525b56', 'section descriptions must use readable secondary ink');
+assertSelectorColor(lightCss, '.sales-v2 .sales-feature-grid h3', '#2f3833', 'feature titles must use dark ink');
+assertSelectorColor(lightCss, '.sales-v2 .sales-feature-grid p', '#727a75', 'feature descriptions must use canonical muted text');
+assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card h3', '#2f3833', 'plan prices must use dark ink');
+assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card p', '#525b56', 'plan descriptions must remain readable');
+assertSelectorColor(lightCss, '.sales-v2 .sales-faq summary', '#2f3833', 'FAQ questions must use dark ink');
 assert.match(js, /<img src="\/icon\.svg" alt="">/, 'commercial header/footer must use the canonical SVG logo');
 assert.match(logo, /<svg\b/i, 'canonical logo must remain vector');
 assert.doesNotMatch(logo, /<image\b/i, 'canonical logo must not embed a raster image');
