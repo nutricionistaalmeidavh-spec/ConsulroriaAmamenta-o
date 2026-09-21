@@ -147,6 +147,76 @@ body.sales-v2-active .sales-v2 {
   color: #727a75;
 }
 
+/* Explicit light-theme typography overrides. The legacy dark theme contains
+   several literal pale colors, so inheriting tokens alone is not sufficient. */
+.sales-v2 .sales-hero h1 {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-hero h1 em {
+  color: #6b3f50;
+}
+
+.sales-v2 .sales-hero-copy > p {
+  color: #525b56;
+}
+
+.sales-v2 .sales-section-head h2 {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-section-head p {
+  color: #525b56;
+}
+
+.sales-v2 .sales-feature-grid h3,
+.sales-v2 .sales-steps strong {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-feature-grid p,
+.sales-v2 .sales-steps p {
+  color: #727a75;
+}
+
+.sales-v2 .sales-plan-card h3,
+.sales-v2 .sales-plan-card h3 small {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-plan-card p {
+  color: #525b56;
+}
+
+.sales-v2 .sales-plan-card li::before {
+  color: #8a5368;
+}
+
+.sales-v2 .sales-faq summary {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-faq details p {
+  color: #727a75;
+}
+
+.sales-v2 .sales-screen-card strong {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-screen-card span {
+  color: #727a75;
+}
+
+.sales-v2 .sales-purchase-card h3,
+.sales-v2 .sales-purchase-card .sales-purchase-row strong {
+  color: #2f3833;
+}
+
+.sales-v2 .sales-purchase-card p {
+  color: #727a75;
+}
+
 /* Privacy-safe Financeiro preview used only on the public commercial page. */
 .sales-v2 .sales-finance-demo {
   min-height: 430px;
