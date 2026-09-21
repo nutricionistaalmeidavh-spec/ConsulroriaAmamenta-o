@@ -22,6 +22,15 @@ assert.match(css, /@media\s*\(min-width:\s*1100px\)/, 'mobile-first CSS needs de
 assert.match(lightCss, /--sales-bg:\s*#f5edf0/i, 'commercial background must use the canonical brand-soft palette');
 assert.match(lightCss, /--sales-text:\s*#2f3833/i, 'commercial text must use the canonical ink token');
 assert.match(lightCss, /--sales-purple:\s*#6b3f50/i, 'commercial accents must use the canonical brand token');
+assert.match(lightCss, /\.sales-v2 \.sales-hero h1\s*\{[^}]*color:\s*#2f3833/is, 'hero title must remain readable on the light background');
+assert.match(lightCss, /\.sales-v2 \.sales-hero h1 em\s*\{[^}]*color:\s*#6b3f50/is, 'hero emphasis must use the canonical brand color');
+assert.match(lightCss, /\.sales-v2 \.sales-section-head h2\s*\{[^}]*color:\s*#2f3833/is, 'section titles must use dark ink');
+assert.match(lightCss, /\.sales-v2 \.sales-section-head p\s*\{[^}]*color:\s*#525b56/is, 'section descriptions must use readable secondary ink');
+assert.match(lightCss, /\.sales-v2 \.sales-feature-grid h3\s*\{[^}]*color:\s*#2f3833/is, 'feature titles must use dark ink');
+assert.match(lightCss, /\.sales-v2 \.sales-feature-grid p\s*\{[^}]*color:\s*#727a75/is, 'feature descriptions must use canonical muted text');
+assert.match(lightCss, /\.sales-v2 \.sales-plan-card h3\s*\{[^}]*color:\s*#2f3833/is, 'plan prices must use dark ink');
+assert.match(lightCss, /\.sales-v2 \.sales-plan-card p\s*\{[^}]*color:\s*#525b56/is, 'plan descriptions must remain readable');
+assert.match(lightCss, /\.sales-v2 \.sales-faq summary\s*\{[^}]*color:\s*#2f3833/is, 'FAQ questions must use dark ink');
 assert.match(js, /<img src="\/icon\.svg" alt="">/, 'commercial header/footer must use the canonical SVG logo');
 assert.match(logo, /<svg\b/i, 'canonical logo must remain vector');
 assert.doesNotMatch(logo, /<image\b/i, 'canonical logo must not embed a raster image');
@@ -34,7 +43,7 @@ assert.match(assetFix, /sales-finance-demo/i, 'finance card must render a saniti
 assert.doesNotMatch(assetFix, /\['Financeiro',\s*'\/comercial\/assets\/screens\/financeiro\.webp'\]/, 'commercial landing must not expose the real finance screenshot');
 assert.match(seo, /mobile-sales-v2\.css/);
 assert.match(seo, /brand-mark\.css\?v=20260921/, 'commercial edge markup must load the vector brand rendering fix');
-assert.match(seo, /commercial-light-theme\.css\?v=20260921/, 'commercial edge markup must load the light brand palette');
+assert.match(seo, /commercial-light-theme\.css\?v=20260921-contrast/, 'commercial edge markup must cache-bust the contrast fix');
 assert.match(seo, /mobile-sales-v2\.js/);
 assert.match(seo, /mobile-assets-fix\.js\?v=20260921/, 'commercial edge markup must load the privacy-safe finance preview');
 assert.match(seo, /defer/);
