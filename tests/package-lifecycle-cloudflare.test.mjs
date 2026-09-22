@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {handleCloudflareClinicalRuntime} from '../worker/cloudflare-clinical-runtime.js';
+import {handlePackageLifecycleRuntime} from '../worker/package-lifecycle-runtime.js';
 
 const billingSource=readFileSync(new URL('../public/billing-v2.js',import.meta.url),'utf8');
+const domainSource=readFileSync(new URL('../worker/domain-entry.js',import.meta.url),'utf8');
 
 class FakeStatement{
   constructor(db,sql,args=[]){this.db=db;this.sql=sql;this.args=args}
@@ -36,6 +38,11 @@ class FakeD1{
     }
     throw new Error(`unexpected run SQL: ${sql}`);
   }
+  async batch(statements){
+    const snapshot=new Map(this.records);
+    try{return await Promise.all(statements.map(statement=>statement.run()))}
+    catch(error){this.records=snapshot;throw error}
+  }
 }
 function b64url(bytes){return Buffer.from(bytes).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'')}
 async function accessToken({userId,email,secret}){
@@ -57,6 +64,17 @@ async function setup(){
   const token=await accessToken({userId:user.id,email:user.email,secret});
   return{db,user,env:{CLINICAL_DB:db,CLINICAL_AUTH_SECRET:secret},headers:{authorization:`Bearer ${token}`,'content-type':'application/json'}};
 }
+async function packageAware(request,env){
+  const url=new URL(request.url);
+  const intercepted=await handlePackageLifecycleRuntime(request,env,url);
+  return intercepted||handleCloudflareClinicalRuntime(request,env);
+}
+
+test('domain entry runs package lifecycle guard before the generic clinical runtime',()=>{
+  const guard=domainSource.indexOf('handlePackageLifecycleRuntime(request, env, url)');
+  const generic=domainSource.indexOf('handleCloudflareClinicalRuntime(request, env)');
+  assert.ok(guard>=0&&generic>=0&&guard<generic);
+});
 
 test('frontend ignores exhausted packages even when their persisted status is still active',()=>{
   const match=billingSource.match(/function bvUsablePackages\(packages\)\{[^\n]+\}/);
@@ -75,7 +93,7 @@ test('creating a new package heals stale exhausted active packages and keeps one
   const{db,user,env,headers}=await setup();
   db.seed('appointments','appt-1',user.id,{id:'appt-1',owner_id:user.id,mother_id:'mother-1',status:'Em atendimento'});
   db.seed('care_packages','old-package',user.id,{id:'old-package',owner_id:user.id,mother_id:'mother-1',service_label:'Plano antigo',total_cents:76000,sessions_total:4,sessions_used:4,status:'active'});
-  const response=await handleCloudflareClinicalRuntime(new Request('https://app.test/rest/v1/rpc/set_appointment_billing',{method:'POST',headers,body:JSON.stringify({
+  const response=await packageAware(new Request('https://app.test/rest/v1/rpc/set_appointment_billing',{method:'POST',headers,body:JSON.stringify({
     p_appointment_id:'appt-1',p_billing_mode:'package_new',p_service_label:'Novo acompanhamento',p_value_cents:90000,p_payment_method:'Pix',p_package_total_cents:90000,p_package_sessions_total:5,p_package_id:null
   })}),env);
   assert.equal(response.status,200);
@@ -97,7 +115,7 @@ test('manual package consumption is supported by Cloudflare and is idempotent',a
   db.seed('care_packages','package-1',user.id,{id:'package-1',owner_id:user.id,mother_id:'mother-1',service_label:'Plano',total_cents:76000,sessions_total:2,sessions_used:1,status:'active'});
   const body={p_package_id:'package-1',p_notes:'Baixa manual de teste',p_request_key:'req-1'};
   const request=()=>new Request('https://app.test/rest/v1/rpc/consume_care_package_session_manual',{method:'POST',headers,body:JSON.stringify(body)});
-  const first=await handleCloudflareClinicalRuntime(request(),env);
+  const first=await packageAware(request(),env);
   assert.equal(first.status,200);
   const firstPayload=await first.json();
   assert.equal(firstPayload.idempotent,false);
@@ -114,7 +132,7 @@ test('manual package consumption is supported by Cloudflare and is idempotent',a
   assert.equal(sessions[0].request_key,'req-1');
   assert.ok(sessions[0].consumed_at);
 
-  const second=await handleCloudflareClinicalRuntime(request(),env);
+  const second=await packageAware(request(),env);
   assert.equal(second.status,200);
   const secondPayload=await second.json();
   assert.equal(secondPayload.idempotent,true);
