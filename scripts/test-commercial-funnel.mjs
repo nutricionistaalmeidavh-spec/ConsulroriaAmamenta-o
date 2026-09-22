@@ -43,8 +43,7 @@ for (const required of [
   if (!commercial.includes(required.toLowerCase())) fail(`commercial funnel missing ${required}`);
 }
 
-// Frontend keeps the Supabase-shaped paths temporarily, but they now resolve
-// against the same-origin Cloudflare compatibility runtime.
+// Compatibility paths remain stable, but they resolve against the same-origin Cloudflare runtime.
 for (const endpoint of [
   '/auth/v1/signup',
   '/auth/v1/token?grant_type=password',
@@ -56,12 +55,13 @@ for (const endpoint of [
 
 if (!config.includes("backend: 'cloudflare-d1'")) fail('commercial browser config must select Cloudflare D1');
 if (!config.includes('apiBaseUrl: window.location.origin')) fail('commercial browser API must be same-origin');
-if (!config.includes("supabasePublishableKey: 'cloudflare-runtime'")) fail('legacy frontend key alias must point to Cloudflare runtime, not a Supabase key');
+if (!config.includes("clientRuntimeKey: 'cloudflare-runtime'")) fail('commercial runtime key must be Cloudflare-local');
+if (/supabase/i.test(config)) fail('commercial browser config must not carry legacy Supabase naming');
 if (/service[_-]?role/i.test(config)) fail('service role must never be present in browser config');
-if (/sb_publishable_/i.test(config)) fail('Supabase publishable key must not be required by the commercial browser config');
+if (/sb_publishable_/i.test(config)) fail('external publishable key must not be required by the commercial browser config');
 if (/eyJhbGciOi/i.test(config)) fail('legacy JWT anon key must not be committed to the commercial browser config');
 
-// Cloudflare performs owner scoping server-side instead of relying on Postgres RLS.
+// Cloudflare performs owner scoping server-side instead of relying on external database policies.
 for (const required of [
   "'professional_profiles','saas_accounts'",
   'async function recordOwnedByUser',
