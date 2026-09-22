@@ -1,4 +1,4 @@
-// Final contract: My Plan + Asaas-backed billing scaffold.
+// Final contract: My Plan + Cloudflare D1/Asaas billing scaffold.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,9 +6,8 @@ const root = process.cwd();
 const files = {
   planHtml: path.join(root, 'public', 'comercial', 'plano.html'),
   planJs: path.join(root, 'public', 'comercial', 'plan.js'),
-  migration: path.join(root, 'supabase', 'phase-saas-billing.sql'),
-  checkout: path.join(root, 'supabase', 'functions', 'saas-checkout', 'index.ts'),
-  webhook: path.join(root, 'supabase', 'functions', 'saas-billing-webhook', 'index.ts'),
+  schema: path.join(root, 'cloudflare', 'billing-schema.sql'),
+  runtime: path.join(root, 'worker', 'cloudflare-billing-runtime.js'),
 };
 
 function fail(message) {
@@ -23,37 +22,42 @@ if (process.exitCode) process.exit();
 
 const html = fs.readFileSync(files.planHtml, 'utf8').toLowerCase();
 const js = fs.readFileSync(files.planJs, 'utf8').toLowerCase();
-const sql = fs.readFileSync(files.migration, 'utf8').toLowerCase();
-const checkout = fs.readFileSync(files.checkout, 'utf8').toLowerCase();
-const webhook = fs.readFileSync(files.webhook, 'utf8').toLowerCase();
+const sql = fs.readFileSync(files.schema, 'utf8').toLowerCase();
+const runtime = fs.readFileSync(files.runtime, 'utf8').toLowerCase();
 
-for (const required of ['meu plano', 'r$ 49,90', 'r$ 499', 'pro_monthly', 'pro_annual']) {
+for (const required of ['meu plano', 'r$ 79,90', 'r$ 799,90', 'pro_monthly', 'pro_annual']) {
   if (!html.includes(required)) fail(`My Plan UI missing ${required}`);
 }
 if (!js.includes('/api/asaas/checkout')) fail('My Plan must call the authenticated Cloudflare checkout route');
+if (js.includes('functions/v1/saas-checkout')) fail('My Plan must not call the legacy checkout Edge Function');
 
 for (const required of [
   'billing_plan_catalog',
   'billing_checkout_requests',
   'billing_webhook_events',
-  'apply_freemium_entitlements',
-  'apply_billing_state',
+  'subscriptions',
   "'pro_monthly'",
   "'pro_annual'",
-  '4990',
-  '49900',
+  '7990',
+  '79990',
 ]) {
-  if (!sql.includes(required)) fail(`billing migration missing ${required}`);
+  if (!sql.includes(required)) fail(`D1 billing schema missing ${required}`);
 }
 
-if (!checkout.includes('pending_provider')) fail('checkout registry must persist the provider-pending state');
-if (!checkout.includes('authorization')) fail('checkout registry must use authenticated caller');
-if (!checkout.includes('attach_provider_checkout')) fail('checkout registry must bind the Asaas checkout to the authenticated request');
+for (const required of [
+  '/api/asaas/checkout',
+  '/api/webhooks/asaas',
+  'pending_provider',
+  'external_subscription_id',
+  'billing_webhook_events',
+  'activatependingsignup',
+]) {
+  if (!runtime.includes(required)) fail(`Cloudflare billing runtime missing ${required}`);
+}
 
-if (!webhook.includes('x-asaas-api-key')) fail('billing bridge must require the server-side Asaas credential');
-if (!webhook.includes('checkoutsession=')) fail('billing bridge must prove the payment belongs to the stored checkout session');
-if (!webhook.includes('apply_billing_state')) fail('billing bridge must converge on canonical billing state RPC');
-if (webhook.includes('billing_webhook_secret')) fail('billing bridge must not require an extra webhook secret');
-if (webhook.includes('billing_provider')) fail('billing bridge must not require an extra provider configuration secret');
+if (runtime.includes('/functions/v1/saas-checkout') || runtime.includes('/functions/v1/saas-billing-webhook')) {
+  fail('Cloudflare billing runtime must not call legacy Supabase Edge Functions');
+}
+if (runtime.includes('supabase_service_role_key')) fail('Cloudflare billing runtime must not require a Supabase service-role key');
 
-if (!process.exitCode) console.log('PASS: My Plan and Asaas billing scaffold are present');
+if (!process.exitCode) console.log('PASS: My Plan and Cloudflare D1/Asaas billing scaffold are present');
