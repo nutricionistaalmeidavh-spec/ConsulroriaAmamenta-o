@@ -1,6 +1,6 @@
 const runtime = window.SAAS_RUNTIME_CONFIG || {};
-const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
-const publishableKey = String(runtime.supabasePublishableKey || '');
+const apiBaseUrl = String(runtime.apiBaseUrl || window.location.origin || '').replace(/\/$/, '');
+const clientRuntimeKey = String(runtime.clientRuntimeKey || 'cloudflare-runtime');
 
 const API = Object.freeze({
   signup: '/auth/v1/signup',
@@ -146,17 +146,17 @@ function pendingCheckoutAfterLogin() {
 }
 
 async function request(path, { method = 'GET', token = null, body = null, prefer = null } = {}) {
-  if (!supabaseUrl || !publishableKey) throw new Error('Configuração comercial indisponível.');
+  if (!apiBaseUrl || !clientRuntimeKey) throw new Error('Configuração comercial indisponível.');
 
   const headers = {
-    apikey: publishableKey,
+    apikey: clientRuntimeKey,
     Accept: 'application/json',
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== null) headers['Content-Type'] = 'application/json';
   if (prefer) headers.Prefer = prefer;
 
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
     headers,
     body: body === null ? undefined : JSON.stringify(body),
