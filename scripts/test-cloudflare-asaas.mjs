@@ -29,9 +29,9 @@ assert.doesNotMatch(runtime, /\/functions\/v1\//);
 assert.doesNotMatch(runtime, /\/rest\/v1\/rpc\//);
 assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.match(runtime, /CLINICAL_DB/);
-assert.match(runtime, /billingBackend:'cloudflare-d1'/);
-assert.match(runtime, /webhookVerification:'asaas_api_lookup_and_cloudflare_d1_reconciliation'/);
-assert.match(runtime, /recurringReconciliation:'subscription_id'/);
+assert.match(runtime, /billingBackend\s*:\s*'cloudflare-d1'/);
+assert.match(runtime, /webhookVerification\s*:\s*'asaas_api_lookup_and_cloudflare_d1_reconciliation'/);
+assert.match(runtime, /recurringReconciliation\s*:\s*'subscription_id'/);
 
 // Provider calls remain server-side and secrets are only read from Worker env bindings.
 assert.match(runtime, /env\.ASAAS_SECRET/);
@@ -58,18 +58,18 @@ assert.match(runtime, /resolvePartnerOffer/);
 assert.match(runtime, /totalCents/);
 assert.match(runtime, /discountCents/);
 assert.match(runtime, /commissionCents/);
-assert.match(runtime, /value: priced\.totalCents \/ 100/);
-assert.match(runtime, /chargeTypes: \['RECURRENT'\]/);
-assert.match(runtime, /maxInstallmentCount: Math\.max\(1, Number\(priced\.plan\.installment_max \|\| 12\)\)/);
+assert.match(runtime, /value\s*:\s*priced\.totalCents \/ 100/);
+assert.match(runtime, /chargeTypes\s*:\s*\['RECURRENT'\]/);
+assert.match(runtime, /maxInstallmentCount\s*:\s*Math\.max\(1, Number\(priced\.plan\.installment_max \|\| 12\)\)/);
 
 // Webhook is only a trigger: payment is re-read from Asaas before D1 is mutated.
 assert.match(runtime, /incoming\?\.payment\?\.id/);
 assert.match(runtime, /`\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
-assert.match(runtime, /mapPayment\(env,payment,config\.provider,environment\)/);
+assert.match(runtime, /mapPayment\(env\s*,\s*payment\s*,\s*config\.provider\s*,\s*environment\)/);
 assert.match(runtime, /billing_webhook_events/);
 assert.match(runtime, /ON CONFLICT\(provider,external_event_id\) DO NOTHING/);
 assert.match(runtime, /external_subscription_id=\?/);
-assert.match(runtime, /renewal:mapped\.renewal/);
+assert.match(runtime, /renewal\s*:\s*mapped\.renewal/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
 assert.doesNotMatch(plan, /functions\/v1\/saas-checkout/);
