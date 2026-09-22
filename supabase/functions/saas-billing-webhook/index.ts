@@ -241,6 +241,22 @@ Deno.serve(async (req: Request) => {
     if (!checkoutUpdate.ok) { processed = false; rpcError = 'checkout_status_update_failed'; }
   }
 
+  if (processed) {
+    const attributionResponse = await serviceFetch(
+      supabaseUrl,
+      serviceKey,
+      '/rest/v1/rpc/apply_partner_attribution_state',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_checkout_request_id: requestId,
+          p_provider_status: providerStatus,
+        }),
+      },
+    );
+    if (!attributionResponse.ok) { processed = false; rpcError = 'partner_attribution_update_failed'; }
+  }
+
   await serviceFetch(
     supabaseUrl,
     serviceKey,
@@ -251,7 +267,7 @@ Deno.serve(async (req: Request) => {
     },
   );
 
-  if (!processed) return json(500, { error: 'billing_state_apply_failed', eventId });
+  if (!processed) return json(500, { error: 'billing_state_apply_failed', eventId, details: rpcError || undefined });
 
   if (environment === 'production' && transition === 'active') {
     const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
