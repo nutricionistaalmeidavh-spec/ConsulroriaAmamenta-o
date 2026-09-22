@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS billing_plan_catalog (
 
 INSERT INTO billing_plan_catalog(plan_code,display_name,billing_interval,price_cents,currency,installment_max,active)
 VALUES
-  ('pro_monthly','Plano Pro mensal','month',4990,'BRL',1,1),
-  ('pro_annual','Plano Pro anual','year',49900,'BRL',12,1)
+  ('pro_monthly','Plano Pro mensal','month',7990,'BRL',1,1),
+  ('pro_annual','Plano Pro anual','year',79990,'BRL',12,1)
 ON CONFLICT(plan_code) DO UPDATE SET
   display_name=excluded.display_name,
   billing_interval=excluded.billing_interval,
