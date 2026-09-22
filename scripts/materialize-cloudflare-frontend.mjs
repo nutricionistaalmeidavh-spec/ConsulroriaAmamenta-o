@@ -142,41 +142,6 @@ function ensureClinicalMaterializerHook() {
   return changed;
 }
 
-function ensureWorkflowHooks() {
-  const files = [
-    resolve(ROOT, '.github/workflows/validate-saas-foundation.yml'),
-    resolve(ROOT, '.github/workflows/validate-clinical-source-consolidation.yml'),
-  ];
-  let changed = false;
-
-  for (const path of files) {
-    let source = readFileSync(path, 'utf8');
-    const original = source;
-    if (!source.includes("scripts/materialize-cloudflare-frontend.mjs")) {
-      if (source.includes("      - 'scripts/normalize-growth-runtime.mjs'")) {
-        source = source.replaceAll(
-          "      - 'scripts/normalize-growth-runtime.mjs'",
-          "      - 'scripts/normalize-growth-runtime.mjs'\n      - 'scripts/materialize-cloudflare-frontend.mjs'",
-        );
-      } else if (source.includes("      - 'scripts/materialize-clinical-source.mjs'")) {
-        source = source.replaceAll(
-          "      - 'scripts/materialize-clinical-source.mjs'",
-          "      - 'scripts/materialize-clinical-source.mjs'\n      - 'scripts/materialize-cloudflare-frontend.mjs'",
-        );
-      }
-    }
-    source = source.replace(
-      'run: node --test tests/frontend-cloudflare-cutover.test.mjs',
-      'run: npm run test:frontend-cutover',
-    );
-    if (source !== original) {
-      if (MODE === 'write') writeFileSync(path, source, 'utf8');
-      changed = true;
-    }
-  }
-  return changed;
-}
-
 function assertSemanticConfigNames() {
   const offenders = [];
   for (const rel of CONFIG_SEMANTIC_PATHS) {
@@ -190,7 +155,6 @@ export function runCloudflareFrontendMaterializer() {
   const publicChanges = materializePublicRuntime();
   const packageChanged = ensurePackageScripts();
   const clinicalChanged = ensureClinicalMaterializerHook();
-  const workflowChanged = ensureWorkflowHooks();
 
   if (MODE === 'write' && clinicalChanged) {
     // Re-run the clinical materializer after installing its normalization hook so the
@@ -207,7 +171,7 @@ export function runCloudflareFrontendMaterializer() {
   const offenders = scanForRetiredMaterial();
   if (offenders.length) throw new Error(`retired backend material remains:\n${offenders.join('\n')}`);
   assertSemanticConfigNames();
-  return { publicChanges, packageChanged, clinicalChanged, workflowChanged };
+  return { publicChanges, packageChanged, clinicalChanged };
 }
 
 function requireNodeChildProcess() {
