@@ -1,7 +1,7 @@
 # Conta de demonstração isolada — Débora Lactação
 
 Data: 2026-09-22
-Status: design aprovado em conversa; aguardando revisão do documento antes da implementação
+Status: design aprovado em conversa; especificação pronta para revisão antes da implementação
 
 ## Objetivo
 
@@ -20,7 +20,7 @@ Criar um acesso de demonstração para apresentações comerciais do sistema Dé
 
 ## Identidade do demo
 
-E-mail proposto: `demonstracao@deboralactacao.com`.
+E-mail: `demonstracao@deboralactacao.com`.
 
 O usuário terá um UUID estável e reservado para a demonstração. O UUID e o e-mail podem constar no código como identificadores não secretos; a senha nunca deve ser persistida no repositório.
 
@@ -74,7 +74,7 @@ O cenário inicial deve ser coerente entre agenda, pacientes, bebês e prontuár
 
 Criar 6 mães e 6 ou 7 bebês, com variedade suficiente para demonstrar os principais estados do sistema.
 
-Sugestão de pares:
+Pares:
 
 1. Ana Martins / Helena
 2. Juliana Costa / Theo
@@ -152,7 +152,7 @@ A senha não deve ser colocada em:
 - commit;
 - logs do CI.
 
-O script aceitará a senha por variável de ambiente, por exemplo `DEMO_PASSWORD`, ou por entrada interativa local caso o ambiente permita. O hash deve seguir o contrato atual de `auth_credentials` (PBKDF2-SHA256, salt aleatório, número de iterações compatível com o runtime).
+O script aceitará a senha por variável de ambiente `DEMO_PASSWORD`. O hash deve seguir o contrato atual de `auth_credentials` (PBKDF2-SHA256, salt aleatório, número de iterações compatível com o runtime).
 
 ## Testes
 
