@@ -122,12 +122,14 @@ jobs:
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
         run: node scripts/test-public-seo.mjs
-      - name: Syntax-check changed commercial runtime
+      - name: Syntax-check Cloudflare-only runtime
         run: |
-          node --check worker/index.js
           node --check worker/cloudflare-auth-runtime.js
           node --check worker/cloudflare-auth-compat.js
           node --check worker/cloudflare-billing-runtime.js
+          node --check worker/cloudflare-clinical-runtime.js
+          node --check worker/cloudflare-growth-runtime.js
+          node --check worker/cloudflare-upsert-runtime.js
           node --check worker/package-lifecycle-runtime.js
           node --check worker/patient-write-runtime.js
           node --check worker/commercial-license-bootstrap.js
