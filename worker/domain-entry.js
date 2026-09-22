@@ -1,4 +1,3 @@
-import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
@@ -12,7 +11,6 @@ import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js'
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
-const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me', '/api/clinical/mothers', '/api/clinical/media/upload']);
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -141,8 +139,10 @@ export default {
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
     if (url.pathname.startsWith('/api/')) {
-      if (COMMERCIAL_GATED_PATHS.has(url.pathname)) await ensureExplicitCommercialMarker(request, env);
-      return withNoIndex(await coreWorker.fetch(request, env, ctx));
+      return withNoIndex(new Response(JSON.stringify({ error: 'api_not_found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      }));
     }
 
     const route = resolvePublicHostRoute(url);
@@ -161,7 +161,7 @@ export default {
       return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
     }
 
-    const response = await coreWorker.fetch(request, env, ctx);
+    const response = await env.ASSETS.fetch(request);
     if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },

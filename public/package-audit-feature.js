@@ -1,8 +1,8 @@
 import {createSingleFlight} from './runtime-guards.js';
 
 const PA_CONFIG=globalThis.DEBORA_APP_CONFIG||{};
-const PA_URL=PA_CONFIG.SUPABASE_URL||'https://zxowxdfhtksevhnjmeyu.supabase.co';
-const PA_KEY=PA_CONFIG.SUPABASE_PUBLISHABLE_KEY||'';
+const PA_URL=window.location.origin;
+const PA_KEY='cloudflare-runtime';
 const paFlight=createSingleFlight();
 let paTimer=null;
 

@@ -18,7 +18,7 @@ function replaceRequired(source, from, to, label) {
 }
 
 function replaceRegexRequired(source, pattern, replacement, label) {
-  if (typeof replacement === 'string' && source.includes(replacement)) return source;
+  if (typeof replacement === 'string' && replacement.length > 0 && source.includes(replacement)) return source;
   if (!pattern.test(source)) throw new Error(`cutover regex anchor missing: ${label}`);
   pattern.lastIndex = 0;
   return source.replace(pattern, replacement);

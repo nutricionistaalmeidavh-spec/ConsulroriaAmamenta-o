@@ -1,4 +1,4 @@
-import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clinical-runtime.js';
+import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-auth-runtime.js';
 import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
