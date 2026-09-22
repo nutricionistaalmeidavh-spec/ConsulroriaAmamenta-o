@@ -6,6 +6,7 @@ const read = (path) => readFileSync(path, 'utf8');
 const root = read('index.html');
 const appEntry = read('app/index.html');
 const bootstrap = read('src/bootstrap.js');
+const fetchBridge = read('src/cloudflare-fetch-bridge.js');
 const identityRuntime = read('public/canonical-identity-runtime.js');
 const manifest = read('public/manifest.webmanifest');
 const commercialBridge = read('public/comercial/app-entry-bridge.js');
@@ -19,6 +20,24 @@ assert.ok(existsSync('public/debora/index.html'), 'dedicated /debora landing mus
 assert.ok(existsSync('worker/domain-entry.js'), 'custom-domain worker entry must exist');
 assert.match(root, /src\/bootstrap\.js/, 'root compatibility entry must keep the canonical bootstrap');
 assert.match(appEntry, /src\/bootstrap\.js/, '/app must use the exact same canonical bootstrap');
+
+const rootBridgePos = root.indexOf('/src/cloudflare-fetch-bridge.js');
+const rootBootstrapPos = root.indexOf('/src/bootstrap.js');
+assert.ok(
+  rootBridgePos >= 0 && rootBootstrapPos >= 0 && rootBridgePos < rootBootstrapPos,
+  'root compatibility entry must install the Cloudflare fetch bridge before bootstrap',
+);
+const appBridgePos = appEntry.indexOf('/src/cloudflare-fetch-bridge.js');
+const appBootstrapPos = appEntry.indexOf('/src/bootstrap.js');
+assert.ok(
+  appBridgePos >= 0 && appBootstrapPos >= 0 && appBridgePos < appBootstrapPos,
+  '/app must install the Cloudflare fetch bridge before bootstrap so stale clinical artifacts cannot send Cloudflare JWTs to Supabase',
+);
+assert.match(fetchBridge, /LEGACY_SUPABASE_ORIGIN/, 'clinical bridge must recognize the legacy Supabase origin');
+for (const prefix of ['/auth/v1/', '/rest/v1/', '/storage/v1/']) {
+  assert.ok(fetchBridge.includes(`'${prefix}'`), `clinical bridge must cover ${prefix}`);
+}
+assert.match(fetchBridge, /window\.location\.origin/, 'legacy clinical traffic must be rewritten to the same-origin Cloudflare runtime');
 
 assert.deepEqual(resolveAppIdentity({ pathname: '/' }), {
   productName: 'Gestão de Amamentação',
