@@ -27,6 +27,7 @@ on:
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -56,6 +57,7 @@ on:
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -110,6 +112,8 @@ jobs:
         run: node scripts/test-cloudflare-billing-d1.mjs
       - name: Validate production deploy guard
         run: node scripts/test-production-deploy-contract.mjs
+      - name: Validate package lifecycle on Cloudflare
+        run: node --test tests/package-lifecycle-cloudflare.test.mjs
       - name: Validate SEO API contract
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
@@ -118,6 +122,7 @@ jobs:
         run: |
           node --check worker/index.js
           node --check worker/cloudflare-billing-runtime.js
+          node --check worker/package-lifecycle-runtime.js
           node --check worker/domain-entry.js
           node --check worker/seo-search-console.js
           node --check public/comercial/app.js

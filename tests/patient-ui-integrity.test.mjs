@@ -101,7 +101,7 @@ test('patient route guard still clears patient-only weight UI after leaving the 
 });
 
 test('new service worker cache revision includes patient UI integrity assets',()=>{
-  assert.match(serviceWorkerSource,/1\.13\.2-patient-ui/);
+  assert.match(serviceWorkerSource,/1\.13\.3-package-lifecycle/);
   for(const asset of ['billing-v2.js','phase68-loader.js','package-card-singleton-guard.js','p0-route-guard.js','weight-evolution-v5.js','weight-evolution-v5.css']){
     assert.ok(serviceWorkerSource.includes(asset),`missing ${asset} from service worker shell`);
   }

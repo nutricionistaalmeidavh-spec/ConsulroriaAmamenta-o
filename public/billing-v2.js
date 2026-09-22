@@ -74,9 +74,11 @@ async function bvAppointmentRow(id){
   const rows=await bvRest('appointments?id=eq.'+encodeURIComponent(id)+'&select=id,mother_id,billing_mode,service_label,payment_method,value_cents,package_id,package_total_cents,package_sessions_total&limit=1');
   return rows?.[0]||null;
 }
+function bvUsablePackages(packages){return(packages||[]).filter(p=>p?.status==='active'&&Number(p.sessions_used||0)<Number(p.sessions_total||0))}
 async function bvPackages(mid){
   if(!mid)return[];
-  return await bvRest('care_packages?mother_id=eq.'+encodeURIComponent(mid)+'&status=eq.active&select=id,service_label,total_cents,sessions_total,sessions_used,status,payment_method,created_at&order=created_at.desc');
+  const rows=await bvRest('care_packages?mother_id=eq.'+encodeURIComponent(mid)+'&status=neq.cancelled&select=id,service_label,total_cents,sessions_total,sessions_used,status,payment_method,created_at&order=created_at.desc');
+  return bvUsablePackages(rows);
 }
 function bvInitial(mid,row,packages){
   const draft=bvReadDraft();
