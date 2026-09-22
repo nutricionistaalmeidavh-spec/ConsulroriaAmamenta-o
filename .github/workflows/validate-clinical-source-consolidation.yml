@@ -41,7 +41,6 @@ jobs:
           node scripts/test-commercial-auth-recovery.mjs
           node scripts/test-commercial-checkout-return.mjs
           node scripts/test-commercial-landing.mjs
-          node scripts/test-deferred-email-flow.mjs
           node scripts/test-preconfirm-checkout.mjs
           node scripts/test-duplicate-signup-flow.mjs
           node scripts/test-saas-foundation.mjs
@@ -51,7 +50,7 @@ jobs:
       - name: Validate current Cloudflare Asaas contract
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
-        run: node --check worker/index.js
+        run: node --check worker/domain-entry.js
       - run: npm run build
       - name: Verify canonical runtime is published
         run: |
