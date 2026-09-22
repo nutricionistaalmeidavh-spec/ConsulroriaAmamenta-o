@@ -23,9 +23,9 @@ async function checkPayment() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.status || result.error);
 
-    if (result.status === 'email_confirmed') {
-      document.querySelector('#purchase-title').textContent = 'Pagamento e e-mail confirmados';
-      status.textContent = 'Seu acesso está liberado. Entre com o e-mail e a senha usados no cadastro para finalizar seu perfil.';
+    if (result.status === 'account_activated') {
+      document.querySelector('#purchase-title').textContent = 'Pagamento confirmado';
+      status.textContent = 'Pagamento aprovado e acesso Pro liberado. Entre com o e-mail e a senha usados no cadastro para finalizar seu perfil.';
       const steps = document.querySelector('#email-steps');
       if (steps) steps.hidden = true;
       sessionStorage.removeItem('commercial.saas.pending-signup.v2');
@@ -33,20 +33,7 @@ async function checkPayment() {
       return;
     }
 
-    if (result.status === 'email_sent') {
-      document.querySelector('#purchase-title').textContent = 'Pagamento confirmado';
-      status.textContent = 'Pagamento aprovado. Enviamos agora o e-mail de confirmação. Abra o link recebido para liberar o acesso.';
-      if (++attempts < 12) timer = setTimeout(checkPayment, 10000);
-      return;
-    }
-
-    if (result.status === 'email_delivery_unavailable') {
-      document.querySelector('#purchase-title').textContent = 'Pagamento confirmado';
-      status.textContent = 'O pagamento foi aprovado, mas o envio do e-mail de confirmação está temporariamente indisponível. Use “Verificar pagamento” novamente.';
-      return;
-    }
-
-    status.textContent = 'Aguardando a aprovação do pagamento. O e-mail de confirmação só será enviado depois da confirmação do Asaas.';
+    status.textContent = 'Aguardando a aprovação do pagamento. Assim que o Asaas confirmar, sua conta será ativada automaticamente.';
     if (++attempts < 12) timer = setTimeout(checkPayment, 10000);
   } catch {
     status.textContent = 'Ainda não foi possível atualizar a confirmação. Use “Verificar pagamento” novamente em instantes. Sua compra não será repetida.';
