@@ -22,6 +22,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Fix codemod empty replacement guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-cloudflare-only-cutover.mjs')
+          s = p.read_text()
+          old = "if (typeof replacement === 'string' && source.includes(replacement)) return source;"
+          new = "if (typeof replacement === 'string' && replacement.length > 0 && source.includes(replacement)) return source;"
+          if old not in s:
+              raise SystemExit('codemod guard anchor missing')
+          p.write_text(s.replace(old, new))
+          PY
       - name: Apply cutover transformations
         run: node scripts/apply-cloudflare-only-cutover.mjs
       - name: Commit generated cutover and remove one-shot workflow
