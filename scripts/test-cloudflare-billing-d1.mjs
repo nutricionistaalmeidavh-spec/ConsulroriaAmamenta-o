@@ -14,6 +14,8 @@ const runtime = read('worker/cloudflare-billing-runtime.js');
 const domainEntry = read('worker/domain-entry.js');
 const schema = read('cloudflare/runtime-schema.sql');
 const config = read('public/comercial/config.js');
+const app = read('public/comercial/app.js');
+const plan = read('public/comercial/plan.js');
 const purchaseStatus = read('public/comercial/purchase-status.js');
 const wrangler = read('wrangler.jsonc');
 
@@ -31,10 +33,14 @@ const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request,
 const legacyApi = domainEntry.indexOf('coreWorker.fetch(request, env, ctx)');
 assert.ok(billingGate >= 0 && legacyApi >= 0 && billingGate < legacyApi, 'D1 billing gate must run before legacy worker');
 
-// Commercial browser traffic stays on the Cloudflare origin.
+// Commercial browser traffic stays on the Cloudflare origin and no longer carries Supabase naming.
 assert.match(config, /window\.location\.origin/);
 assert.match(config, /backend:\s*'cloudflare-d1'/);
-assert.doesNotMatch(config, /supabase\.co/i);
+assert.doesNotMatch(config, /supabase/i);
+assert.doesNotMatch(app, /supabase/i);
+assert.doesNotMatch(plan, /supabase/i);
+assert.match(app, /apiBaseUrl/);
+assert.match(plan, /apiBaseUrl/);
 
 // D1 owns the complete billing/partner model and auth staging.
 for (const table of [
@@ -103,4 +109,4 @@ assert.equal(payload.externalReference, 'saas_checkout:22222222-2222-4222-8222-2
 assert.equal(payload.items[0].value, 39.92);
 assert.equal(payload.subscription.cycle, 'MONTHLY');
 
-console.log('Cloudflare D1 billing: origin routing, schema, partner pricing, Asaas recurrence and automatic post-payment activation OK');
+console.log('Cloudflare D1 billing: origin routing, Cloudflare client naming, schema, partner pricing, Asaas recurrence and automatic post-payment activation OK');
