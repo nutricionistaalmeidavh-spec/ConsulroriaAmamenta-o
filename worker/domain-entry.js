@@ -4,6 +4,8 @@ import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.j
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
+import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
+import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
@@ -126,6 +128,14 @@ export default {
 
     const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
     if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
+
+    // High-value clinical writes are intercepted by explicit D1 runtimes before the
+    // compatibility REST layer. This keeps them atomic and removes legacy fallbacks.
+    const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
+    if (growthResponse) return withNoIndex(growthResponse);
+
+    const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
+    if (upsertResponse) return withNoIndex(upsertResponse);
 
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
