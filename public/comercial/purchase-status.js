@@ -26,7 +26,7 @@ async function checkPayment() {
     if (result.status === 'account_activated') {
       document.querySelector('#purchase-title').textContent = 'Pagamento confirmado';
       status.textContent = 'Pagamento aprovado e acesso Pro liberado. Entre com o e-mail e a senha usados no cadastro para finalizar seu perfil.';
-      const steps = document.querySelector('#email-steps');
+      const steps = document.querySelector('#activation-steps');
       if (steps) steps.hidden = true;
       sessionStorage.removeItem('commercial.saas.pending-signup.v2');
       button.hidden = true;
