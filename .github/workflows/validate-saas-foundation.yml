@@ -17,6 +17,7 @@ on:
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
+      - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
@@ -50,6 +51,7 @@ on:
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
+      - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
@@ -101,10 +103,11 @@ jobs:
         run: node scripts/test-deferred-email-flow.mjs
       - name: Validate partner attribution, commissions and discounts
         run: node scripts/test-partner-attribution.mjs
-      - name: Validate migration on isolated PostgreSQL
+      - name: Validate migrations on isolated PostgreSQL
         run: |
           npm install --prefix "$RUNNER_TEMP/pro-checkout-test" @electric-sql/pglite@0.5.8 --ignore-scripts
           PGLITE_MODULE="$RUNNER_TEMP/pro-checkout-test/node_modules/@electric-sql/pglite/dist/index.js" node scripts/validate-deferred-email-migration.mjs
+          PGLITE_MODULE="$RUNNER_TEMP/pro-checkout-test/node_modules/@electric-sql/pglite/dist/index.js" node scripts/validate-partner-attribution-migration.mjs
       - name: Validate existing e-mail signup continuation
         run: node scripts/test-duplicate-signup-flow.mjs
       - name: Validate commercial password recovery
@@ -121,8 +124,12 @@ jobs:
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
         run: node scripts/test-public-seo.mjs
-      - name: Syntax-check Cloudflare worker
+      - name: Syntax-check changed commercial runtime
         run: |
           node --check worker/index.js
+          node --check worker/partner-admin.js
           node --check worker/domain-entry.js
           node --check worker/seo-search-console.js
+          node --check public/comercial/app.js
+          node --check public/comercial/plan.js
+          node --check public/comercial/parceiros.js
