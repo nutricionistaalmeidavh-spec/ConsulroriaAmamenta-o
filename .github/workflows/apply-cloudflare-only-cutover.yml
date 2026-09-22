@@ -30,15 +30,16 @@ jobs:
           s = p.read_text()
           old = "if (typeof replacement === 'string' && source.includes(replacement)) return source;"
           new = "if (typeof replacement === 'string' && replacement.length > 0 && source.includes(replacement)) return source;"
-          if old not in s:
+          if old not in s and new not in s:
               raise SystemExit('codemod guard anchor missing')
           p.write_text(s.replace(old, new))
           PY
       - name: Apply cutover transformations
         run: node scripts/apply-cloudflare-only-cutover.mjs
-      - name: Commit generated cutover and remove one-shot workflow
+      - name: Restore workflow files before push
+        run: git restore --source=HEAD --staged --worktree .github/workflows
+      - name: Commit generated runtime cutover
         run: |
-          rm .github/workflows/apply-cloudflare-only-cutover.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
