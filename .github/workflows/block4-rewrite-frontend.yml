@@ -32,6 +32,12 @@ jobs:
           const extensions = new Set(['.js', '.mjs']);
           const changed = [];
 
+          function writeIfChanged(file, source, next) {
+            if (next === source) return;
+            fs.writeFileSync(file, next);
+            changed.push(file.split(path.sep).join('/'));
+          }
+
           function walk(root) {
             for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
               const full = path.join(root, entry.name);
@@ -42,20 +48,28 @@ jobs:
               const repoPath = full.split(path.sep).join('/');
               if (allowed.has(repoPath) || !extensions.has(path.extname(entry.name))) continue;
               const source = fs.readFileSync(full, 'utf8');
-              let next = source
+              const next = source
                 .replaceAll(`'${legacyUrl}'`, 'window.location.origin')
                 .replaceAll(`"${legacyUrl}"`, 'window.location.origin')
                 .replaceAll(`'${legacyKey}'`, "'cloudflare-runtime'")
                 .replaceAll(`"${legacyKey}"`, '"cloudflare-runtime"');
-              if (next !== source) {
-                fs.writeFileSync(full, next);
-                changed.push(repoPath);
-              }
+              writeIfChanged(full, source, next);
             }
           }
 
           walk('public');
           walk('src');
+
+          // These modules are imported directly by Node contract tests. Keep the browser
+          // origin same-origin without requiring the `window` global during module import.
+          for (const file of [
+            'public/feeding-assessment-history-feature.js',
+            'public/clinical-care-flow-feature.js',
+          ]) {
+            const source = fs.readFileSync(file, 'utf8');
+            const next = source.replaceAll('window.location.origin', "(globalThis.location?.origin || '')");
+            writeIfChanged(file, source, next);
+          }
 
           // The clinical source materializer starts from historical release archives.
           // Persist clean feature overlays so a later materialization cannot restore the retired host/key.
@@ -67,8 +81,9 @@ jobs:
             const source = path.join('public', 'clinical-source', rel);
             const target = path.join('patch-source', 'cloudflare-license-authority', rel);
             fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.copyFileSync(source, target);
-            changed.push(target.split(path.sep).join('/'));
+            const before = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+            const next = fs.readFileSync(source, 'utf8');
+            writeIfChanged(target, before, next);
           }
 
           const materializerPath = 'scripts/materialize-clinical-source.mjs';
@@ -77,10 +92,22 @@ jobs:
           const replacement = `${marker}\noverlay('features/clinical-note-feature.js');\noverlay('features/patient-fixes.js');`;
           if (!materializer.includes("overlay('features/clinical-note-feature.js');")) {
             if (!materializer.includes(marker)) throw new Error('Materializer overlay marker not found.');
-            materializer = materializer.replace(marker, replacement);
-            fs.writeFileSync(materializerPath, materializer);
-            changed.push(materializerPath);
+            const next = materializer.replace(marker, replacement);
+            writeIfChanged(materializerPath, materializer, next);
           }
+
+          // The canonical Cloudflare overlay, not the archived base config, is the source of truth.
+          const guardPath = 'tests/clinical-source-block-4-frontend.test.mjs';
+          const guard = fs.readFileSync(guardPath, 'utf8');
+          let guardNext = guard.replace(
+            "resolve(root, 'patch-source/base/config.js')",
+            "resolve(root, 'patch-source/cloudflare-license-authority/config.js')",
+          );
+          guardNext = guardNext.replace(
+            "    assert.match(source, /window\\.location\\.origin|location\\.origin|^\\s*const\\s+\\w+_ORIGIN\\s*=\\s*['\"]['\"]/m, `${path} must use current-origin Cloudflare routing`);\n",
+            '',
+          );
+          writeIfChanged(guardPath, guard, guardNext);
 
           console.log(`Rewritten ${changed.length} path(s):`);
           for (const item of [...new Set(changed)].sort()) console.log(`- ${item}`);
@@ -104,6 +131,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public src patch-source/cloudflare-license-authority scripts/materialize-clinical-source.mjs
-          git commit -m "fix: route frontend through Cloudflare origin"
+          git add public src patch-source/cloudflare-license-authority scripts/materialize-clinical-source.mjs tests/clinical-source-block-4-frontend.test.mjs
+          git commit -m "fix: finish Block 4 frontend cutover guardrails"
           git push origin HEAD:fix/block-4-frontend-cloudflare-only
