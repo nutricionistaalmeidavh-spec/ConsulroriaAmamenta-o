@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 -- Pro signups are staged entirely in D1 until Asaas confirms payment.
 -- Password material uses the same PBKDF2-SHA256 representation as the Cloudflare auth runtime;
--- plaintext passwords and signup nonces are never persisted.
+-- only derived credential material and a nonce digest are persisted.
 CREATE TABLE IF NOT EXISTS billing_pending_signups (
   user_id TEXT PRIMARY KEY,
   email TEXT NOT NULL COLLATE NOCASE UNIQUE,
