@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { syncLegacyClinicalRows } from '../worker/cloudflare-auth-compat.js';
 
 function fakeD1() {
@@ -74,4 +75,10 @@ test('legacy clinical sync restores missing rows and repairs null ownership with
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('password login repair must not be skipped just because some mother row already exists in D1', () => {
+  const source = readFileSync(new URL('../worker/cloudflare-auth-compat.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /needsLegacyClinicalRepair/);
+  assert.doesNotMatch(source, /COUNT\(\*\).*supabase_records.*table_name\s*=\s*'mothers'.*owner_id\s*=\s*\?/s);
 });

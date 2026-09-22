@@ -189,14 +189,6 @@ async function legacyClinicalTableRows(table, accessToken) {
   return Array.isArray(payload) ? payload : [];
 }
 
-async function needsLegacyClinicalRepair(env, userId) {
-  if (!env.CLINICAL_DB || !userId) return false;
-  const row = await env.CLINICAL_DB.prepare(
-    "SELECT COUNT(*) AS n FROM supabase_records WHERE table_name = 'mothers' AND owner_id = ?",
-  ).bind(userId).first();
-  return Number(row?.n || 0) === 0;
-}
-
 export async function syncLegacyClinicalRows(env, accessToken, userId) {
   if (!env.CLINICAL_DB || !accessToken || !userId) return { synced: 0, failures: [] };
   let synced = 0;
@@ -235,8 +227,7 @@ export async function syncLegacyClinicalRows(env, accessToken, userId) {
   return { synced, failures };
 }
 
-async function repairLegacyClinicalRowsIfNeeded(env, email, password, userId, existingLegacy = null) {
-  if (!await needsLegacyClinicalRepair(env, userId)) return;
+async function repairLegacyClinicalRows(env, email, password, userId, existingLegacy = null) {
   const legacy = existingLegacy || await legacyPasswordLogin(email, password);
   if (!legacy?.response?.ok || !legacy?.payload?.access_token || String(legacy?.payload?.user?.id || '') !== String(userId)) return;
   const result = await syncLegacyClinicalRows(env, legacy.payload.access_token, userId);
@@ -312,7 +303,7 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     let row = await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?) LIMIT 1').bind(email).first();
     if (row && await verifyStoredCredential(env, row.user_id, password)) {
-      await repairLegacyClinicalRowsIfNeeded(env, email, password, row.user_id).catch((error) => {
+      await repairLegacyClinicalRows(env, email, password, row.user_id).catch((error) => {
         console.warn('legacy clinical repair failed without blocking local login', error);
       });
       const now = new Date().toISOString();
@@ -330,7 +321,7 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     row = await upsertLegacyUser(env, legacy.payload.user);
     await storeCredential(env, row.user_id, password);
-    await repairLegacyClinicalRowsIfNeeded(env, email, password, row.user_id, legacy).catch((error) => {
+    await repairLegacyClinicalRows(env, email, password, row.user_id, legacy).catch((error) => {
       console.warn('legacy clinical repair failed without blocking migrated login', error);
     });
     const migrated = publicUser(await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE user_id = ? LIMIT 1').bind(row.user_id).first());
