@@ -1,6 +1,6 @@
 const runtime = window.SAAS_RUNTIME_CONFIG || {};
-const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
-const publishableKey = String(runtime.supabasePublishableKey || '');
+const apiBaseUrl = String(runtime.apiBaseUrl || window.location.origin || '').replace(/\/$/, '');
+const clientRuntimeKey = String(runtime.clientRuntimeKey || 'cloudflare-runtime');
 const SESSION_KEY = 'commercial.saas.session.v1';
 const REFERRAL_KEY = 'commercial.saas.partner-code.v1';
 const REFERRAL_SOURCE_KEY = 'commercial.saas.partner-source.v1';
@@ -76,10 +76,10 @@ function setMessage(text = '', tone = '') {
 }
 
 async function api(path, token, options = {}) {
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     headers: {
-      apikey: publishableKey,
+      apikey: clientRuntimeKey,
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -111,8 +111,8 @@ async function workerApi(path, token, options = {}) {
 }
 
 async function loadPatientCount(ownerId, token) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/mothers?owner_id=eq.${encodeURIComponent(ownerId)}&select=id&limit=1`, {
-    headers: { apikey: publishableKey, Authorization: `Bearer ${token}`, Prefer: 'count=exact' },
+  const response = await fetch(`${apiBaseUrl}/rest/v1/mothers?owner_id=eq.${encodeURIComponent(ownerId)}&select=id&limit=1`, {
+    headers: { apikey: clientRuntimeKey, Authorization: `Bearer ${token}`, Prefer: 'count=exact' },
   });
   if (!response.ok) return null;
   const total = (response.headers.get('content-range') || '').split('/')[1];
@@ -189,7 +189,7 @@ function paintAccess(access, patientCount) {
 }
 
 async function init() {
-  if (!supabaseUrl || !publishableKey) {
+  if (!apiBaseUrl || !clientRuntimeKey) {
     setMessage('Configuração comercial indisponível.', 'error');
     showSignedOut();
     return;
