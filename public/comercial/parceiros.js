@@ -5,7 +5,7 @@ const list = document.querySelector('#partner-list');
 const salesBody = document.querySelector('#sales-body');
 const filters = {
   partnerId: document.querySelector('#sales-partner-filter'),
-  planCode: document.querySelector('#sales-plan-filter'),
+  plan: document.querySelector('#sales-plan-filter'),
   status: document.querySelector('#sales-status-filter'),
   commissionStatus: document.querySelector('#sales-commission-filter'),
   from: document.querySelector('#sales-from-filter'),
@@ -65,7 +65,7 @@ function renderPartnerList() {
   }
   list.innerHTML = partners.map((partner) => `
     <div class="partner-item">
-      <div><strong>${escapeHtml(partner.name)}</strong><small>${escapeHtml(partner.code)} · ${partner.active ? 'ativo' : 'inativo'} · comissão ${escapeHtml(partner.commission_type)} ${escapeHtml(partner.commission_value)}</small></div>
+      <div><strong>${escapeHtml(partner.name)}</strong><small>${escapeHtml(partner.code)} · ${Number(partner.active) === 1 || partner.active === true ? 'ativo' : 'inativo'} · comissão ${escapeHtml(partner.commission_type)} ${escapeHtml(partner.commission_value)}</small></div>
       <button class="button secondary small" type="button" data-edit-partner="${escapeHtml(partner.id)}">Editar</button>
     </div>`).join('');
   list.querySelectorAll('[data-edit-partner]').forEach((button) => {
@@ -99,7 +99,7 @@ function editPartner(id) {
   form.elements.commissionValue.value = partner.commission_value ?? 0;
   form.elements.discountType.value = partner.discount_type || 'none';
   form.elements.discountValue.value = partner.discount_value ?? 0;
-  form.elements.active.checked = partner.active !== false;
+  form.elements.active.checked = Number(partner.active) === 1 || partner.active === true;
   document.querySelector('#partner-form-title').textContent = `Editar ${partner.name}`;
   form.scrollIntoView({ behavior:'smooth', block:'start' });
 }
@@ -113,12 +113,13 @@ async function loadPartners() {
 
 function renderSales(payload) {
   const summary = payload.summary || {};
+  currentSales = Array.isArray(payload.sales) ? payload.sales : [];
+  const discountCents = summary.discountCents ?? currentSales.reduce((sum, sale) => sum + Number(sale.discount_cents || 0), 0);
   document.querySelector('#metric-sales').textContent = String(summary.paidSales || 0);
   document.querySelector('#metric-revenue').textContent = money(summary.revenueCents);
-  document.querySelector('#metric-discounts').textContent = money(summary.discountCents);
+  document.querySelector('#metric-discounts').textContent = money(discountCents);
   document.querySelector('#metric-pending').textContent = money(summary.pendingCommissionCents);
   document.querySelector('#metric-approved').textContent = money(summary.approvedCommissionCents);
-  currentSales = Array.isArray(payload.sales) ? payload.sales : [];
   if (!currentSales.length) {
     salesBody.innerHTML = '<tr><td colspan="8">Nenhuma venda atribuída neste filtro.</td></tr>';
     return;
@@ -155,7 +156,10 @@ function salesQuery() {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, element]) => {
     const value = String(element?.value || '').trim();
-    if (value) params.set(key, value);
+    if (!value) return;
+    if (key === 'from') params.set(key, `${value}T00:00:00.000Z`);
+    else if (key === 'to') params.set(key, `${value}T23:59:59.999Z`);
+    else params.set(key, value);
   });
   const query = params.toString();
   return query ? `?${query}` : '';

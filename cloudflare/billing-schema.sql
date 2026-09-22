@@ -1,50 +1,5 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS auth_credentials (
-  user_id TEXT PRIMARY KEY,
-  password_salt TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  password_iterations INTEGER NOT NULL DEFAULT 100000,
-  password_algorithm TEXT NOT NULL DEFAULT 'PBKDF2-SHA256',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
-  token_hash TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_used_at TEXT,
-  revoked_at TEXT,
-  FOREIGN KEY (user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS auth_refresh_sessions_user_idx ON auth_refresh_sessions(user_id, expires_at);
-
-CREATE TABLE IF NOT EXISTS runtime_state (
-  state_key TEXT PRIMARY KEY,
-  state_value TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS billing_pending_signups (
-  user_id TEXT PRIMARY KEY,
-  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-  password_salt TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  password_iterations INTEGER NOT NULL DEFAULT 100000,
-  plan_code TEXT NOT NULL CHECK (plan_code IN ('pro_monthly','pro_annual')),
-  signup_nonce_hash TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending','paid','activated','cancelled','expired')),
-  payment_confirmed_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  activated_at TEXT
-);
-CREATE INDEX IF NOT EXISTS billing_pending_signups_status_idx ON billing_pending_signups(status,created_at DESC);
-
 CREATE TABLE IF NOT EXISTS billing_plan_catalog (
   plan_code TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,
@@ -186,13 +141,13 @@ CREATE INDEX IF NOT EXISTS partner_attributions_partner_idx ON partner_attributi
 CREATE INDEX IF NOT EXISTS partner_attributions_owner_idx ON partner_attributions(owner_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS partner_attributions_commission_idx ON partner_attributions(commission_status,created_at DESC);
 
--- Preserve historical commercial billing copied during the Supabase -> D1 migration.
+-- Preserve billing history already copied during the Supabase -> Cloudflare migration.
+-- These inserts are idempotent and only fill rows not yet materialized into dedicated D1 tables.
 INSERT OR IGNORE INTO billing_plan_catalog(plan_code,display_name,billing_interval,price_cents,currency,installment_max,active,created_at,updated_at)
 SELECT
   json_extract(record_json,'$.plan_code'),
   COALESCE(json_extract(record_json,'$.display_name'),json_extract(record_json,'$.plan_code')),
-  CASE COALESCE(json_extract(record_json,'$.billing_interval'),'month')
-    WHEN 'annual' THEN 'year' WHEN 'year' THEN 'year' WHEN 'one_time' THEN 'one_time' ELSE 'month' END,
+  CASE COALESCE(json_extract(record_json,'$.billing_interval'),'month') WHEN 'annual' THEN 'year' WHEN 'year' THEN 'year' ELSE 'month' END,
   CAST(COALESCE(json_extract(record_json,'$.price_cents'),1) AS INTEGER),
   COALESCE(json_extract(record_json,'$.currency'),'BRL'),
   CAST(COALESCE(json_extract(record_json,'$.installment_max'),1) AS INTEGER),
@@ -210,8 +165,7 @@ SELECT
   json_extract(record_json,'$.owner_id'),
   json_extract(record_json,'$.plan_code'),
   CASE WHEN json_extract(record_json,'$.provider')='asaas_sandbox' THEN 'asaas_sandbox' ELSE 'asaas' END,
-  CASE WHEN json_extract(record_json,'$.status') IN ('pending_provider','checkout_created','paid','past_due','cancelled','failed','expired')
-    THEN json_extract(record_json,'$.status') ELSE 'failed' END,
+  COALESCE(json_extract(record_json,'$.status'),'failed'),
   json_extract(record_json,'$.external_checkout_id'),
   json_extract(record_json,'$.checkout_url'),
   COALESCE(json_extract(record_json,'$.metadata'),'{}'),
@@ -224,7 +178,7 @@ WHERE table_name='billing_checkout_requests'
   AND json_extract(record_json,'$.plan_code') IN ('pro_monthly','pro_annual');
 
 INSERT OR IGNORE INTO subscriptions(
-  id,owner_id,provider,external_customer_id,external_subscription_id,origin_checkout_request_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
+  id,owner_id,provider,external_customer_id,external_subscription_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
 )
 SELECT
   COALESCE(json_extract(record_json,'$.id'),json_extract(record_json,'$.owner_id') || ':' || COALESCE(json_extract(record_json,'$.provider'),'asaas')),
@@ -232,10 +186,11 @@ SELECT
   CASE WHEN json_extract(record_json,'$.provider')='asaas_sandbox' THEN 'asaas_sandbox' ELSE 'asaas' END,
   json_extract(record_json,'$.external_customer_id'),
   json_extract(record_json,'$.external_subscription_id'),
-  NULL,
   json_extract(record_json,'$.plan_code'),
-  CASE WHEN json_extract(record_json,'$.status') IN ('active','trialing','past_due','cancelled','expired')
-    THEN json_extract(record_json,'$.status') ELSE 'cancelled' END,
+  CASE
+    WHEN json_extract(record_json,'$.status') IN ('active','trialing','past_due','cancelled','expired') THEN json_extract(record_json,'$.status')
+    ELSE 'cancelled'
+  END,
   json_extract(record_json,'$.current_period_end'),
   COALESCE(json_extract(record_json,'$.metadata'),'{}'),
   COALESCE(json_extract(record_json,'$.created_at'),CURRENT_TIMESTAMP),
@@ -244,10 +199,6 @@ FROM supabase_records
 WHERE table_name='subscriptions'
   AND json_extract(record_json,'$.owner_id') IS NOT NULL
   AND json_extract(record_json,'$.plan_code') IN ('pro_monthly','pro_annual');
-
-INSERT INTO runtime_state(state_key,state_value,updated_at)
-VALUES ('clinical_backend','cloudflare-d1-r2',CURRENT_TIMESTAMP)
-ON CONFLICT(state_key) DO UPDATE SET state_value=excluded.state_value,updated_at=CURRENT_TIMESTAMP;
 
 INSERT INTO runtime_state(state_key,state_value,updated_at)
 VALUES ('billing_backend','cloudflare-d1',CURRENT_TIMESTAMP)

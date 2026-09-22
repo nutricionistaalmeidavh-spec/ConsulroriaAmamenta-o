@@ -8,38 +8,33 @@ on:
       - feature/pro-checkout-before-email-confirmation
       - fix/commercial-duplicate-signup-flow
       - feat/partner-attribution-asaas
+      - fix/cloudflare-d1-asaas-core
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
       - 'scripts/test-commercial-landing.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
-      - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
       - 'scripts/test-asaas-recurring-renewal.mjs'
-      - 'scripts/validate-deferred-email-migration.mjs'
-      - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-cloudflare-billing-d1.mjs'
+      - 'scripts/test-production-deploy-contract.mjs'
+      - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
-      - 'supabase/phase-pro-checkout-deferred-email.sql'
-      - 'supabase/phase-saas-partners.sql'
-      - 'supabase/functions/_shared/**'
-      - 'supabase/phase-saas-foundation.sql'
-      - 'supabase/phase-saas-enforcement.sql'
-      - 'supabase/phase-saas-billing.sql'
-      - 'supabase/functions/saas-checkout/**'
-      - 'supabase/functions/saas-billing-webhook/**'
+      - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
       - 'public/admin/seo/**'
       - 'public/robots.txt'
       - 'public/sitemap.xml'
       - 'worker/**'
+      - 'package.json'
       - 'wrangler.jsonc'
       - '.github/workflows/validate-saas-foundation.yml'
   pull_request:
@@ -49,32 +44,26 @@ on:
       - 'scripts/test-commercial-landing.mjs'
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
-      - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
       - 'scripts/test-asaas-recurring-renewal.mjs'
-      - 'scripts/validate-deferred-email-migration.mjs'
-      - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
       - 'scripts/test-saas-plans.mjs'
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-cloudflare-billing-d1.mjs'
+      - 'scripts/test-production-deploy-contract.mjs'
+      - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
-      - 'supabase/phase-pro-checkout-deferred-email.sql'
-      - 'supabase/phase-saas-partners.sql'
-      - 'supabase/functions/_shared/**'
-      - 'supabase/phase-saas-foundation.sql'
-      - 'supabase/phase-saas-enforcement.sql'
-      - 'supabase/phase-saas-billing.sql'
-      - 'supabase/functions/saas-checkout/**'
-      - 'supabase/functions/saas-billing-webhook/**'
+      - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
       - 'public/admin/seo/**'
       - 'public/robots.txt'
       - 'public/sitemap.xml'
       - 'worker/**'
+      - 'package.json'
       - 'wrangler.jsonc'
       - '.github/workflows/validate-saas-foundation.yml'
   workflow_dispatch:
@@ -99,19 +88,12 @@ jobs:
         run: node scripts/test-commercial-landing.mjs
       - name: Validate commercial checkout continuation
         run: node scripts/test-commercial-checkout-return.mjs
-      - name: Validate Pro checkout before e-mail confirmation
+      - name: Validate D1 staged Pro signup and automatic activation
         run: node scripts/test-preconfirm-checkout.mjs
-      - name: Validate deferred email behavior
-        run: node scripts/test-deferred-email-flow.mjs
-      - name: Validate partner attribution, commissions and discounts
+      - name: Validate D1 partner attribution, commissions and discounts
         run: node scripts/test-partner-attribution.mjs
-      - name: Validate recurring Asaas renewal reconciliation
+      - name: Validate D1 recurring Asaas reconciliation
         run: node scripts/test-asaas-recurring-renewal.mjs
-      - name: Validate migrations on isolated PostgreSQL
-        run: |
-          npm install --prefix "$RUNNER_TEMP/pro-checkout-test" @electric-sql/pglite@0.5.8 --ignore-scripts
-          PGLITE_MODULE="$RUNNER_TEMP/pro-checkout-test/node_modules/@electric-sql/pglite/dist/index.js" node scripts/validate-deferred-email-migration.mjs
-          PGLITE_MODULE="$RUNNER_TEMP/pro-checkout-test/node_modules/@electric-sql/pglite/dist/index.js" node scripts/validate-partner-attribution-migration.mjs
       - name: Validate existing e-mail signup continuation
         run: node scripts/test-duplicate-signup-flow.mjs
       - name: Validate commercial password recovery
@@ -122,8 +104,12 @@ jobs:
         run: node scripts/test-saas-enforcement.mjs
       - name: Validate My Plan and billing scaffold
         run: node scripts/test-billing-scaffold.mjs
-      - name: Validate Cloudflare Asaas worker contract
+      - name: Validate Cloudflare D1 Asaas worker contract
         run: node scripts/test-cloudflare-asaas.mjs
+      - name: Validate Cloudflare billing, partner attribution and automatic post-payment activation
+        run: node scripts/test-cloudflare-billing-d1.mjs
+      - name: Validate production deploy guard
+        run: node scripts/test-production-deploy-contract.mjs
       - name: Validate SEO API contract
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
@@ -131,9 +117,10 @@ jobs:
       - name: Syntax-check changed commercial runtime
         run: |
           node --check worker/index.js
-          node --check worker/partner-admin.js
+          node --check worker/cloudflare-billing-runtime.js
           node --check worker/domain-entry.js
           node --check worker/seo-search-console.js
           node --check public/comercial/app.js
           node --check public/comercial/plan.js
           node --check public/comercial/parceiros.js
+          node --check public/comercial/purchase-status.js

@@ -2,45 +2,49 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const app = readFileSync('public/comercial/app.js', 'utf8');
-const worker = readFileSync('worker/index.js', 'utf8');
-const checkoutFunction = readFileSync('supabase/functions/saas-checkout/index.ts', 'utf8');
+const runtime = readFileSync('worker/cloudflare-billing-runtime.js', 'utf8');
+const schema = readFileSync('cloudflare/billing-auth-schema.sql', 'utf8');
 const completeHtml = readFileSync('public/comercial/compra-concluida.html', 'utf8');
+const statusJs = readFileSync('public/comercial/purchase-status.js', 'utf8');
 
-// Pro signup must be able to continue to Asaas before e-mail confirmation/session exists.
-assert.match(app, /crypto\.getRandomValues/);
-assert.match(app, /signup_nonce/);
+// Pro can reach Asaas without an authenticated session, but credentials stay staged in D1.
+assert.match(app, /\/api\/asaas\/signup/);
 assert.match(app, /\/api\/asaas\/preauth-checkout/);
-assert.match(app, /result\?\.user\?\.id|result\.user\.id/);
-assert.match(app, /pro_monthly/);
-assert.match(app, /pro_annual/);
-assert.match(app, /confirmationRedirectUrl/);
+assert.match(runtime, /billing_pending_signups/);
+assert.match(runtime, /cloudflarePasswordHash\(/);
+assert.match(runtime, /signup_nonce_hash/);
+assert.match(schema, /password_hash TEXT NOT NULL/);
+assert.match(schema, /signup_nonce_hash TEXT NOT NULL/);
+assert.doesNotMatch(schema, /password_plain|plaintext/i);
+assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
+assert.doesNotMatch(runtime, /\/functions\/v1\/saas-checkout/);
 
-// Confirmation callback should be able to recover the Supabase session from the e-mail redirect.
-assert.match(app, /access_token/);
-assert.match(app, /refresh_token/);
-assert.match(app, /location\.hash|window\.location\.hash/);
+// Existing Pro accounts are handed to login instead of looking like a failed new purchase.
+assert.match(app, /existing_account_login_required/);
+assert.match(app, /CHECKOUT_AFTER_LOGIN_KEY/);
+assert.match(app, /showView\('login'\)/);
 
-// Worker owns provider credentials and creates the checkout from a verified pending signup.
-assert.match(worker, /\/api\/asaas\/preauth-checkout/);
-assert.match(worker, /create_pending_request/);
-assert.match(worker, /attach_pending_provider_checkout/);
-assert.match(worker, /requestSecret/);
-assert.match(worker, /compra-concluida\.html/);
-assert.match(worker, /env\.ASAAS_SECRET/);
+// Asaas is the activation gate. A verified active payment materializes the account immediately.
+assert.match(runtime, /async function activatePendingSignup/);
+assert.match(runtime, /INSERT INTO auth_users/);
+assert.match(runtime, /INSERT INTO auth_credentials/);
+assert.match(runtime, /if \(!mapped\.renewal && transition === 'active'\)/);
+assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
+assert.match(runtime, /payment_confirmed_at/);
+assert.match(runtime, /status='activated'/);
 
-// Supabase verifies the unconfirmed auth user + nonce server-side before creating billing state.
-assert.match(checkoutFunction, /create_pending_request/);
-assert.match(checkoutFunction, /\/auth\/v1\/admin\/users\//);
-assert.match(checkoutFunction, /signup_nonce/);
-assert.match(checkoutFunction, /signup_source/);
-assert.match(checkoutFunction, /commercial_saas/);
-assert.match(checkoutFunction, /request_secret_hash/);
-assert.match(checkoutFunction, /attach_pending_provider_checkout/);
-assert.match(checkoutFunction, /crypto\.subtle\.digest/);
+// Checkout activation must not depend on transactional e-mail or confirmation links.
+assert.doesNotMatch(runtime, /sendPaidConfirmationEmail/);
+assert.doesNotMatch(runtime, /env\.EMAIL/);
+assert.doesNotMatch(runtime, /\/api\/asaas\/confirm-email/);
+assert.doesNotMatch(runtime, /email_verification_token_hash/);
+assert.doesNotMatch(schema, /email_sent|email_verification_/);
 
-// Post-checkout page must not claim access until both payment and e-mail confirmation are complete.
-assert.match(completeHtml, /confirmar.*e-mail|confirme.*e-mail/i);
-assert.match(completeHtml, /pagamento|compra|checkout/i);
-assert.match(completeHtml, /acesso/i);
+// Purchase status becomes usable as soon as the verified webhook activates the account.
+assert.match(statusJs, /account_activated/);
+assert.match(statusJs, /Pagamento confirmado/i);
+assert.doesNotMatch(statusJs, /e-mail de confirmação|email_sent|email_delivery_unavailable/i);
+assert.match(completeHtml, /Cloudflare D1/i);
+assert.match(completeHtml, /pagamento/i);
 
-console.log('Pro checkout before e-mail confirmation contract: OK');
+console.log('Pro pre-payment signup: staged in D1; verified Asaas payment activates auth and Pro automatically, with existing-account login handoff and no e-mail gate.');

@@ -1,6 +1,6 @@
 const runtime = window.SAAS_RUNTIME_CONFIG || {};
-const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
-const publishableKey = String(runtime.supabasePublishableKey || '');
+const apiBaseUrl = String(runtime.apiBaseUrl || window.location.origin || '').replace(/\/$/, '');
+const clientRuntimeKey = String(runtime.clientRuntimeKey || 'cloudflare-runtime');
 
 const API = Object.freeze({
   signup: '/auth/v1/signup',
@@ -146,17 +146,17 @@ function pendingCheckoutAfterLogin() {
 }
 
 async function request(path, { method = 'GET', token = null, body = null, prefer = null } = {}) {
-  if (!supabaseUrl || !publishableKey) throw new Error('Configuração comercial indisponível.');
+  if (!apiBaseUrl || !clientRuntimeKey) throw new Error('Configuração comercial indisponível.');
 
   const headers = {
-    apikey: publishableKey,
+    apikey: clientRuntimeKey,
     Accept: 'application/json',
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== null) headers['Content-Type'] = 'application/json';
   if (prefer) headers.Prefer = prefer;
 
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
     headers,
     body: body === null ? undefined : JSON.stringify(body),
@@ -241,6 +241,7 @@ function setBusy(form, busy) {
 function friendlyError(error) {
   const raw = String(error?.message || '').toLowerCase();
   const messages = {
+    existing_account_login_required: 'Este e-mail já possui uma conta. Entre com sua senha para continuar para o pagamento.',
     signup_credentials_invalid: 'Confira seu e-mail e senha. Se já tem conta, use a senha cadastrada ou recupere o acesso.',
     invalid_signup_fields: 'Informe um e-mail válido e uma senha com pelo menos 8 caracteres.',
     signup_rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente novamente.',
@@ -383,7 +384,7 @@ async function startCheckout(planCode, environment = 'production') {
 }
 
 async function startPreconfirmCheckout(userId, signupNonce, planCode) {
-  setMessage('Conta criada. Abrindo pagamento seguro no Asaas…');
+  setMessage('Cadastro preparado. Abrindo pagamento seguro no Asaas…');
   const partnerCode = currentPartnerCode();
   const attributionSource = currentAttributionSource();
   const response = await fetch('/api/asaas/preauth-checkout', {
@@ -414,7 +415,7 @@ async function continueAfterOnboarding() {
     showView('complete');
     setMessage(
       ['pro_monthly', 'pro_annual'].includes(selectedPlan)
-        ? 'E-mail confirmado e perfil salvo. O acesso Pro será liberado assim que o pagamento for confirmado.'
+        ? 'Pagamento confirmado e perfil salvo. Seu acesso Pro está liberado.'
         : 'E-mail confirmado e perfil salvo. Seu acesso Freemium está pronto.',
       'success',
     );
@@ -522,7 +523,17 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
         body: JSON.stringify({ email, password, planCode: selectedPlan, partnerCode, attributionSource }),
       });
       const pending = await response.json().catch(() => ({}));
-      if (!response.ok) throw new ApiError(pending.error || 'Falha ao preparar cadastro.', response.status, pending);
+      if (!response.ok) {
+        if (response.status === 409 && pending.error === 'existing_account_login_required') {
+          sessionStorage.setItem(CHECKOUT_AFTER_LOGIN_KEY, selectedPlan);
+          const loginEmail = document.querySelector('#login-form input[name="email"]');
+          if (loginEmail) loginEmail.value = email;
+          showView('login');
+          setMessage('Este e-mail já possui uma conta. Entre com sua senha para continuar para o pagamento.', 'error');
+          return;
+        }
+        throw new ApiError(pending.error || 'Falha ao preparar cadastro.', response.status, pending);
+      }
       if (pending.session?.access_token) saveSession(pending.session);
       if (pending.session?.access_token && !pending.userId) {
         sessionStorage.setItem(CHECKOUT_AFTER_LOGIN_KEY, selectedPlan);
@@ -619,29 +630,23 @@ document.querySelector('#onboarding-form').addEventListener('submit', async (eve
 
     const values = {
       professionalName: String(data.get('professionalName') || '').trim(),
-      businessName: String(data.get('businessName') || '').trim(),
+      businessName: String(data.get('businessName') || '').trim() || null,
       phone: String(data.get('phone') || '').trim(),
-      accountType: String(data.get('accountType') || 'individual'),
-      city: String(data.get('city') || '').trim(),
+      city: String(data.get('city') || '').trim() || null,
+      accountType: String(data.get('accountType') || 'solo'),
     };
 
     const account = await ensureAccount(user.id, values.accountType);
     await saveProfessionalProfile(account, values);
     await continueAfterOnboarding();
   } catch (error) {
-    if (error?.status === 401) {
-      clearSession();
-      showView('login');
-    }
     setMessage(friendlyError(error), 'error');
   } finally {
     setBusy(form, false);
   }
 });
 
+captureAuthCallbackSession();
 ensurePartnerCodeField();
 updateSignupSubmitLabel();
-const capturedAuthCallback = captureAuthCallbackSession();
-if (capturedAuthCallback || currentSession?.access_token) {
-  routeAuthenticatedSession().catch(() => clearSession());
-}
+if (currentSession?.access_token) routeAuthenticatedSession().catch((error) => setMessage(friendlyError(error), 'error'));
