@@ -36,6 +36,20 @@ test('active browser and worker runtime contains no retired Supabase backend rou
   }
 });
 
+test('browser feature modules resolve same-origin without requiring window during Node imports', () => {
+  for (const path of [
+    'public/billing-v2.js',
+    'public/package-audit-feature.js',
+    'public/clinical-care-flow-feature.js',
+    'public/feeding-assessment-history-feature.js',
+    'public/growth-feature.js',
+  ]) {
+    const source = read(path);
+    assert.doesNotMatch(source, /=window\.location\.origin/);
+    assert.match(source, /globalThis\.location\?\.origin/);
+  }
+});
+
 test('browser entrypoints no longer install the legacy fetch bridge', () => {
   assert.doesNotMatch(read('index.html'), /cloudflare-fetch-bridge/);
   assert.doesNotMatch(read('app/index.html'), /cloudflare-fetch-bridge/);
