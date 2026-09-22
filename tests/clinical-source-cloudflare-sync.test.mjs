@@ -82,3 +82,11 @@ test('password login repair must not be skipped just because some mother row alr
   assert.doesNotMatch(source, /needsLegacyClinicalRepair/);
   assert.doesNotMatch(source, /COUNT\(\*\).*supabase_records.*table_name\s*=\s*'mothers'.*owner_id\s*=\s*\?/s);
 });
+
+test('password login must not await legacy clinical repair', () => {
+  const source = readFileSync(new URL('../worker/cloudflare-auth-compat.js', import.meta.url), 'utf8');
+  const start = source.indexOf('export async function handleCloudflarePasswordCompat');
+  assert.notEqual(start, -1, 'password compatibility handler must exist');
+  const handlerSource = source.slice(start);
+  assert.doesNotMatch(handlerSource, /await\s+repairLegacyClinicalRows\s*\(/, 'login response must not wait for legacy clinical recovery');
+});
