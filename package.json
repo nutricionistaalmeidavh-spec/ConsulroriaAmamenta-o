@@ -11,6 +11,9 @@
     "test:billing": "node scripts/test-cloudflare-billing-d1.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
+    "test:demo": "node --test tests/demo-account-*.test.mjs",
+    "demo:seed": "node scripts/seed-demo-account.mjs",
+    "demo:reset": "node scripts/reset-demo-account.mjs",
     "deploy:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-cloudflare-billing.ps1"
   },
   "dependencies": {
