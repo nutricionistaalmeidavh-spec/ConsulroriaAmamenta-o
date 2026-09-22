@@ -66,7 +66,7 @@ test('legacy clinical sync restores missing rows and repairs null ownership with
     assert.equal(db.rows.size, 2, 'repeated sync must not duplicate records');
     assert.equal(db.rows.get('mothers:mother-1')?.ownerId, 'user-1', 'null migrated owner must be repaired');
     assert.equal(db.rows.get('mothers:mother-1')?.record?.name, 'Paciente preservada');
-    assert.equal(db.rows.get('babies:mother-1')?.record?.mother_id, 'mother-1');
+    assert.equal(db.rows.get('babies:baby-1')?.record?.mother_id, 'mother-1');
     assert.ok(db.statements.some((sql) => sql.includes('DO UPDATE SET owner_id')));
     assert.ok(requested.some((item) => item.url.includes('/rest/v1/mothers')));
     assert.ok(requested.some((item) => item.url.includes('/rest/v1/babies')));
