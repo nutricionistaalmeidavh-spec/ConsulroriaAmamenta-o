@@ -1,4 +1,5 @@
-import {authenticateClinicalRequest,runtimeJson} from './cloudflare-clinical-runtime.js';
+import {authenticateClinicalRequest} from './cloudflare-auth-runtime.js';
+import {runtimeJson} from './cloudflare-clinical-runtime.js';
 
 function db(env){if(!env.CLINICAL_DB)throw new Error('clinical_db_not_configured');return env.CLINICAL_DB}
 async function tableRows(env,table){
