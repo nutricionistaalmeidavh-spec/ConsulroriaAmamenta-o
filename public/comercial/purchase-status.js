@@ -5,11 +5,12 @@ try { proof = JSON.parse(sessionStorage.getItem('commercial.saas.pending-signup.
 let busy = false;
 let attempts = 0;
 let timer;
+
 async function checkPayment() {
   if (busy) return;
   clearTimeout(timer);
   if (!proof?.userId || !proof?.signupNonce) {
-    status.textContent = 'O pagamento será atualizado na sua conta após a aprovação. O e-mail de confirmação será enviado depois disso. Entre na sua conta para acompanhar.';
+    status.textContent = 'O pagamento será atualizado automaticamente após a aprovação do Asaas. Entre na sua conta para acompanhar.';
     button.hidden = true;
     return;
   }
@@ -21,17 +22,16 @@ async function checkPayment() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.status || result.error);
-    const sent = ['email_sent', 'legacy_confirmation', 'email_confirmed'].includes(result.status);
-    if (sent) {
+    if (result.status === 'account_activated') {
       document.querySelector('#purchase-title').textContent = 'Pagamento confirmado';
-      status.textContent = result.status === 'email_confirmed'
-        ? 'Pagamento e e-mail confirmados. Entre para finalizar seu perfil.'
-        : 'Pagamento confirmado. Confira sua caixa de entrada para confirmar o e-mail e liberar seu acesso.';
-      document.querySelector('#email-steps').hidden = result.status === 'email_confirmed';
+      status.textContent = 'Pagamento confirmado e conta ativada. Entre com o e-mail e a senha usados no cadastro para finalizar seu perfil.';
+      const steps = document.querySelector('#email-steps');
+      if (steps) steps.hidden = true;
+      sessionStorage.removeItem('commercial.saas.pending-signup.v2');
       button.hidden = true;
       return;
     }
-    status.textContent = 'Aguardando a aprovação do pagamento. A confirmação de e-mail será enviada depois da aprovação.';
+    status.textContent = 'Aguardando a aprovação do pagamento. Sua conta será ativada automaticamente depois da confirmação do Asaas.';
     if (++attempts < 12) timer = setTimeout(checkPayment, 10000);
   } catch {
     status.textContent = 'Ainda não foi possível atualizar a confirmação. Use “Verificar pagamento” novamente em instantes. Sua compra não será repetida.';
@@ -40,5 +40,6 @@ async function checkPayment() {
     button.disabled = false;
   }
 }
+
 button.addEventListener('click', checkPayment);
 checkPayment();
