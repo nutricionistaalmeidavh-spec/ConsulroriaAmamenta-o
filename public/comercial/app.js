@@ -15,18 +15,63 @@ const PLAN_KEY = 'commercial.saas.plan-intent.v1';
 const RETURN_KEY = 'commercial.saas.return.v1';
 const PENDING_SIGNUP_KEY = 'commercial.saas.pending-signup.v2';
 const CHECKOUT_AFTER_LOGIN_KEY = 'commercial.saas.checkout-after-login.v1';
+const REFERRAL_KEY = 'commercial.saas.partner-code.v1';
+const REFERRAL_SOURCE_KEY = 'commercial.saas.partner-source.v1';
 const modal = document.querySelector('#auth-modal');
 const message = document.querySelector('#form-message');
 const planIntent = document.querySelector('#plan-intent');
 const signupSubmit = document.querySelector('#signup-form [type="submit"]');
 const pageUrl = new URL(window.location.href);
 
+function normalizePartnerCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '').slice(0, 64);
+}
+
+function currentPartnerCode() {
+  return normalizePartnerCode(sessionStorage.getItem(REFERRAL_KEY) || '');
+}
+
+function currentAttributionSource() {
+  return sessionStorage.getItem(REFERRAL_SOURCE_KEY) === 'ref_link' ? 'ref_link' : 'manual_code';
+}
+
+function rememberPartnerCode(code, source = 'manual_code') {
+  const normalized = normalizePartnerCode(code);
+  if (!normalized) {
+    sessionStorage.removeItem(REFERRAL_KEY);
+    sessionStorage.removeItem(REFERRAL_SOURCE_KEY);
+    return '';
+  }
+  sessionStorage.setItem(REFERRAL_KEY, normalized);
+  sessionStorage.setItem(REFERRAL_SOURCE_KEY, source === 'ref_link' ? 'ref_link' : 'manual_code');
+  return normalized;
+}
+
+function ensurePartnerCodeField() {
+  const form = document.querySelector('#signup-form');
+  if (!form || form.querySelector('input[name="partnerCode"]')) return;
+  const label = document.createElement('label');
+  label.textContent = 'Cupom ou código do parceiro';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.name = 'partnerCode';
+  input.maxLength = 64;
+  input.autocomplete = 'off';
+  input.placeholder = 'Opcional';
+  input.value = currentPartnerCode();
+  label.appendChild(input);
+  const planLabel = planIntent?.closest('label');
+  form.insertBefore(label, planLabel || signupSubmit || null);
+}
+
 const requestedReturn = pageUrl.searchParams.get('return');
 const requestedPlan = pageUrl.searchParams.get('plan');
+const requestedReferral = normalizePartnerCode(pageUrl.searchParams.get('ref'));
 if (requestedReturn === 'sandbox') sessionStorage.setItem(RETURN_KEY, 'sandbox');
 if (['freemium', 'pro_monthly', 'pro_annual'].includes(requestedPlan)) {
   sessionStorage.setItem(PLAN_KEY, requestedPlan);
 }
+if (requestedReferral) rememberPartnerCode(requestedReferral, 'ref_link');
 
 let previousFocus = null;
 let currentSession = readSession();
@@ -160,6 +205,9 @@ function openModal(viewName = 'signup', plan = null) {
     sessionStorage.setItem(PLAN_KEY, selectedPlan);
   }
   if (planIntent) planIntent.value = selectedPlan;
+  ensurePartnerCodeField();
+  const partnerInput = document.querySelector('#signup-form input[name="partnerCode"]');
+  if (partnerInput) partnerInput.value = currentPartnerCode();
   updateSignupSubmitLabel();
 
   previousFocus = document.activeElement;
@@ -198,6 +246,9 @@ function friendlyError(error) {
     signup_rate_limited: 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente novamente.',
     checkout_in_progress: 'Seu pagamento está sendo preparado. Aguarde alguns instantes antes de tentar novamente.',
     pending_checkout_other_plan: 'Já existe uma compra pendente em outro plano. Selecione o plano dessa compra para continuar.',
+    pending_checkout_partner_mismatch: 'Já existe um checkout em andamento com outro código de parceiro. Conclua ou aguarde esse checkout antes de trocar o código.',
+    invalid_partner_code: 'Cupom ou código do parceiro inválido ou inativo.',
+    partner_lookup_failed: 'Não foi possível validar o código do parceiro agora. Tente novamente em instantes.',
     signup_lookup_unavailable: 'O cadastro está temporariamente indisponível. Tente novamente em instantes.',
     signup_auth_unavailable: 'Não foi possível validar o cadastro agora. Tente novamente em instantes.',
   };
@@ -312,13 +363,15 @@ async function startCheckout(planCode, environment = 'production') {
     ? 'Abrindo checkout de teste no Asaas Sandbox…'
     : 'Abrindo checkout seguro no Asaas…');
 
+  const partnerCode = currentPartnerCode();
+  const attributionSource = currentAttributionSource();
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ planCode }),
+    body: JSON.stringify({ planCode, partnerCode, attributionSource }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -331,10 +384,12 @@ async function startCheckout(planCode, environment = 'production') {
 
 async function startPreconfirmCheckout(userId, signupNonce, planCode) {
   setMessage('Conta criada. Abrindo pagamento seguro no Asaas…');
+  const partnerCode = currentPartnerCode();
+  const attributionSource = currentAttributionSource();
   const response = await fetch('/api/asaas/preauth-checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, signupNonce, planCode }),
+    body: JSON.stringify({ userId, signupNonce, planCode, partnerCode, attributionSource }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -440,6 +495,15 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
   const email = String(data.get('email') || '').trim();
   const password = String(data.get('password') || '');
   const confirmPassword = String(data.get('confirmPassword') || '');
+  const submittedPartnerCode = normalizePartnerCode(data.get('partnerCode'));
+  const storedPartnerCode = currentPartnerCode();
+  const partnerSource = submittedPartnerCode && submittedPartnerCode === storedPartnerCode
+    ? currentAttributionSource()
+    : 'manual_code';
+  if (submittedPartnerCode) rememberPartnerCode(submittedPartnerCode, partnerSource);
+  else rememberPartnerCode('', 'manual_code');
+  const partnerCode = currentPartnerCode();
+  const attributionSource = currentAttributionSource();
   selectedPlan = String(data.get('planIntent') || selectedPlan || 'freemium');
   sessionStorage.setItem(PLAN_KEY, selectedPlan);
 
@@ -455,7 +519,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
     if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
       const response = await fetch('/api/asaas/signup', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, planCode: selectedPlan }),
+        body: JSON.stringify({ email, password, planCode: selectedPlan, partnerCode, attributionSource }),
       });
       const pending = await response.json().catch(() => ({}));
       if (!response.ok) throw new ApiError(pending.error || 'Falha ao preparar cadastro.', response.status, pending);
@@ -466,7 +530,6 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
         return;
       }
       if (!pending.userId || !pending.signupNonce) throw new Error('Não foi possível preparar o cadastro.');
-      // A limited purchase proof, never the password or an authenticated clinical session.
       sessionStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ userId: pending.userId, signupNonce: pending.signupNonce }));
       await startPreconfirmCheckout(pending.userId, pending.signupNonce, selectedPlan);
       return;
@@ -576,6 +639,7 @@ document.querySelector('#onboarding-form').addEventListener('submit', async (eve
   }
 });
 
+ensurePartnerCodeField();
 updateSignupSubmitLabel();
 const capturedAuthCallback = captureAuthCallbackSession();
 if (capturedAuthCallback || currentSession?.access_token) {

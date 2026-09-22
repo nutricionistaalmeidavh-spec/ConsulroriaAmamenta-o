@@ -11,6 +11,14 @@ const ASAAS_SANDBOX_API_URL = 'https://api-sandbox.asaas.com/v3';
 
 type JsonRecord = Record<string, unknown>;
 
+type BillingContext = {
+  ownerId: string;
+  planCode: string;
+  requestId: string | null;
+  externalCheckoutId: string | null;
+  mappedBy: 'checkout' | 'subscription';
+};
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
@@ -88,6 +96,31 @@ async function storedPeriodEnd(url: string, serviceKey: string, ownerId: string,
   return response.ok && Array.isArray(rows) ? rows[0]?.current_period_end || null : null;
 }
 
+async function subscriptionContext(
+  supabaseUrl: string,
+  serviceKey: string,
+  provider: string,
+  externalSubscriptionId: string,
+) {
+  if (!externalSubscriptionId) return null;
+  const response = await serviceFetch(
+    supabaseUrl,
+    serviceKey,
+    `/rest/v1/subscriptions?provider=eq.${encodeURIComponent(provider)}&external_subscription_id=eq.${encodeURIComponent(externalSubscriptionId)}&select=id,owner_id,plan_code,current_period_end&limit=2`,
+  );
+  const rows = await response.json().catch(() => []);
+  if (!response.ok || !Array.isArray(rows) || rows.length !== 1) return null;
+  const row = rows[0];
+  if (!row?.owner_id || !row?.plan_code) return null;
+  return {
+    ownerId: String(row.owner_id),
+    planCode: String(row.plan_code),
+    requestId: null,
+    externalCheckoutId: null,
+    mappedBy: 'subscription' as const,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
@@ -118,44 +151,67 @@ Deno.serve(async (req: Request) => {
   if (paymentResponse.status === 404) return json(200, { status: 'ignored_payment_not_found', environment });
   if (!paymentResponse.ok || String(payment?.id || '') !== paymentId) return json(502, { error: 'asaas_payment_verification_failed' });
 
-  const requestId = parseCheckoutReference(payment?.externalReference);
-  if (!requestId) return json(200, { status: 'ignored_unmapped_payment', paymentId, environment });
-
-  const checkoutResponse = await serviceFetch(
-    supabaseUrl,
-    serviceKey,
-    `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}&select=id,account_id,owner_id,plan_code,status,external_checkout_id&limit=1`,
-  );
-  const checkoutRows = await checkoutResponse.json().catch(() => []);
-  const checkoutRequest = Array.isArray(checkoutRows) ? checkoutRows[0] : null;
-  if (!checkoutResponse.ok) return json(500, { error: 'checkout_lookup_failed' });
-  if (!checkoutRequest?.external_checkout_id) return json(200, { status: 'ignored_unknown_checkout', paymentId, environment });
-
-  const { response: checkoutPaymentsResponse, payload: checkoutPayments } = await asaasFetch(
-    apiKey,
-    `/payments?checkoutSession=${encodeURIComponent(checkoutRequest.external_checkout_id)}&limit=100`,
-    environment,
-  );
-  if (!checkoutPaymentsResponse.ok) return json(401, { error: 'checkout_account_verification_failed' });
-  const checkoutPaymentRows = Array.isArray(checkoutPayments?.data) ? checkoutPayments.data : [];
-  let belongsToOurCheckout = checkoutPaymentRows.some((item: JsonRecord) => String(item?.id || '') === paymentId);
-
   const externalSubscriptionId = payment?.subscription ? String(payment.subscription) : '';
-  if (!belongsToOurCheckout && externalSubscriptionId) {
-    const subscriptionResponse = await serviceFetch(
+  const requestId = parseCheckoutReference(payment?.externalReference);
+  let context: BillingContext | null = null;
+
+  if (requestId) {
+    const checkoutResponse = await serviceFetch(
       supabaseUrl,
       serviceKey,
-      `/rest/v1/subscriptions?owner_id=eq.${encodeURIComponent(checkoutRequest.owner_id)}&provider=eq.${encodeURIComponent(provider)}&external_subscription_id=eq.${encodeURIComponent(externalSubscriptionId)}&plan_code=eq.${encodeURIComponent(checkoutRequest.plan_code)}&select=id&limit=1`,
+      `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}&select=id,account_id,owner_id,plan_code,status,external_checkout_id&limit=1`,
     );
-    const subscriptionRows = await subscriptionResponse.json().catch(() => []);
-    belongsToOurCheckout = subscriptionResponse.ok && Array.isArray(subscriptionRows) && subscriptionRows.length === 1;
+    const checkoutRows = await checkoutResponse.json().catch(() => []);
+    const checkoutRequest = Array.isArray(checkoutRows) ? checkoutRows[0] : null;
+    if (!checkoutResponse.ok) return json(500, { error: 'checkout_lookup_failed' });
+    if (!checkoutRequest?.external_checkout_id) return json(200, { status: 'ignored_unknown_checkout', paymentId, environment });
+
+    const { response: checkoutPaymentsResponse, payload: checkoutPayments } = await asaasFetch(
+      apiKey,
+      `/payments?checkoutSession=${encodeURIComponent(checkoutRequest.external_checkout_id)}&limit=100`,
+      environment,
+    );
+    if (!checkoutPaymentsResponse.ok) return json(401, { error: 'checkout_account_verification_failed' });
+    const checkoutPaymentRows = Array.isArray(checkoutPayments?.data) ? checkoutPayments.data : [];
+    let belongsToOurCheckout = checkoutPaymentRows.some((item: JsonRecord) => String(item?.id || '') === paymentId);
+
+    if (!belongsToOurCheckout && externalSubscriptionId) {
+      const knownSubscription = await subscriptionContext(supabaseUrl, serviceKey, provider, externalSubscriptionId);
+      belongsToOurCheckout = Boolean(
+        knownSubscription
+        && knownSubscription.ownerId === String(checkoutRequest.owner_id)
+        && knownSubscription.planCode === String(checkoutRequest.plan_code),
+      );
+    }
+    if (!belongsToOurCheckout) return json(401, { error: 'payment_not_from_registered_checkout' });
+
+    context = {
+      ownerId: String(checkoutRequest.owner_id),
+      planCode: String(checkoutRequest.plan_code),
+      requestId,
+      externalCheckoutId: String(checkoutRequest.external_checkout_id),
+      mappedBy: 'checkout',
+    };
+  } else if (externalSubscriptionId) {
+    // Recurring charges created after a RECURRENT checkout have their own lifecycle.
+    // They may no longer carry the checkout externalReference, so reconcile them by the
+    // Asaas subscription ID that was persisted after the first verified payment.
+    context = await subscriptionContext(supabaseUrl, serviceKey, provider, externalSubscriptionId);
   }
-  if (!belongsToOurCheckout) return json(401, { error: 'payment_not_from_registered_checkout' });
+
+  if (!context) {
+    return json(200, {
+      status: 'ignored_unmapped_payment',
+      paymentId,
+      externalSubscriptionId: externalSubscriptionId || null,
+      environment,
+    });
+  }
 
   const providerStatus = String(payment?.status || '').toUpperCase();
   const transition = billingTransition(providerStatus);
   if (!transition) return json(200, { status: 'ignored_no_billing_transition', paymentId, providerStatus, environment });
-  const currentPeriodEnd = transition === 'active' ? addPlanPeriod(checkoutRequest.plan_code) : null;
+  const currentPeriodEnd = transition === 'active' ? addPlanPeriod(context.planCode) : null;
 
   const eventId = `payment:${paymentId}:${providerStatus}`;
   const eventResponse = await serviceFetch(
@@ -170,7 +226,15 @@ Deno.serve(async (req: Request) => {
         external_event_id: eventId,
         event_type: `PAYMENT_${providerStatus}`,
         status: 'received',
-        payload: { source: metadataSource, environment, payment_id: paymentId, checkout_request_id: requestId, provider_status: providerStatus },
+        payload: {
+          source: metadataSource,
+          environment,
+          payment_id: paymentId,
+          checkout_request_id: context.requestId,
+          external_subscription_id: externalSubscriptionId || null,
+          mapping: context.mappedBy,
+          provider_status: providerStatus,
+        },
       }),
     },
   );
@@ -183,18 +247,19 @@ Deno.serve(async (req: Request) => {
     if (!existingResponse.ok || !existing[0]) return json(503, { error: 'event_lookup_failed' });
     if (existing[0].status === 'received') return json(503, { error: 'event_in_progress' });
     if (existing[0].status === 'processed') {
-      if (environment === 'production' && transition === 'active') {
-        const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
+      if (environment === 'production' && transition === 'active' && context.requestId) {
+        const email = await sendPaidConfirmation(supabaseUrl, serviceKey, context.ownerId);
         if (!email.ok) return json(503, { error: email.status, eventId });
       }
       return json(200, {
         status: 'duplicate_ignored',
         eventId,
         paymentId,
-        ownerId: checkoutRequest.owner_id,
-        planCode: checkoutRequest.plan_code,
+        ownerId: context.ownerId,
+        planCode: context.planCode,
         billingStatus: transition,
-        currentPeriodEnd: await storedPeriodEnd(supabaseUrl, serviceKey, checkoutRequest.owner_id, provider, checkoutRequest.plan_code),
+        currentPeriodEnd: await storedPeriodEnd(supabaseUrl, serviceKey, context.ownerId, provider, context.planCode),
+        mappedBy: context.mappedBy,
         environment,
       });
     }
@@ -207,8 +272,8 @@ Deno.serve(async (req: Request) => {
     {
       method: 'POST',
       body: JSON.stringify({
-        p_owner_id: checkoutRequest.owner_id,
-        p_plan_code: checkoutRequest.plan_code,
+        p_owner_id: context.ownerId,
+        p_plan_code: context.planCode,
         p_status: transition,
         p_provider: provider,
         p_external_subscription_id: externalSubscriptionId || null,
@@ -217,7 +282,9 @@ Deno.serve(async (req: Request) => {
           source: metadataSource,
           environment,
           external_event_id: eventId,
-          checkout_request_id: requestId,
+          checkout_request_id: context.requestId,
+          external_subscription_id: externalSubscriptionId || null,
+          mapping: context.mappedBy,
           payment_id: paymentId,
           provider_status: providerStatus,
         },
@@ -228,17 +295,33 @@ Deno.serve(async (req: Request) => {
   let processed = rpcResponse.ok;
   let rpcError = processed ? null : (await rpcResponse.text()).slice(0, 1000);
 
-  if (processed && (transition === 'active' || transition === 'cancelled')) {
+  if (processed && context.requestId && (transition === 'active' || transition === 'cancelled')) {
     const checkoutUpdate = await serviceFetch(
       supabaseUrl,
       serviceKey,
-      `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(requestId)}&provider=eq.${encodeURIComponent(provider)}`,
+      `/rest/v1/billing_checkout_requests?id=eq.${encodeURIComponent(context.requestId)}&provider=eq.${encodeURIComponent(provider)}`,
       {
         method: 'PATCH',
         body: JSON.stringify({ status: transition === 'active' ? 'paid' : 'cancelled', updated_at: new Date().toISOString() }),
       },
     );
     if (!checkoutUpdate.ok) { processed = false; rpcError = 'checkout_status_update_failed'; }
+  }
+
+  if (processed && context.requestId) {
+    const attributionResponse = await serviceFetch(
+      supabaseUrl,
+      serviceKey,
+      '/rest/v1/rpc/apply_partner_attribution_state',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_checkout_request_id: context.requestId,
+          p_provider_status: providerStatus,
+        }),
+      },
+    );
+    if (!attributionResponse.ok) { processed = false; rpcError = 'partner_attribution_update_failed'; }
   }
 
   await serviceFetch(
@@ -251,10 +334,10 @@ Deno.serve(async (req: Request) => {
     },
   );
 
-  if (!processed) return json(500, { error: 'billing_state_apply_failed', eventId });
+  if (!processed) return json(500, { error: 'billing_state_apply_failed', eventId, details: rpcError || undefined });
 
-  if (environment === 'production' && transition === 'active') {
-    const email = await sendPaidConfirmation(supabaseUrl, serviceKey, checkoutRequest.owner_id);
+  if (environment === 'production' && transition === 'active' && context.requestId) {
+    const email = await sendPaidConfirmation(supabaseUrl, serviceKey, context.ownerId);
     if (!email.ok) return json(503, { error: email.status, eventId });
   }
 
@@ -262,10 +345,11 @@ Deno.serve(async (req: Request) => {
     status: 'processed',
     eventId,
     paymentId,
-    ownerId: checkoutRequest.owner_id,
-    planCode: checkoutRequest.plan_code,
+    ownerId: context.ownerId,
+    planCode: context.planCode,
     billingStatus: transition,
     currentPeriodEnd,
+    mappedBy: context.mappedBy,
     environment,
   });
 });
