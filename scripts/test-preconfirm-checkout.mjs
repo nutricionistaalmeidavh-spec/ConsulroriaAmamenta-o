@@ -19,26 +19,27 @@ assert.doesNotMatch(schema, /password_plain|plaintext/i);
 assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(runtime, /\/functions\/v1\/saas-checkout/);
 
-// Payment is confirmed first; only then is a confirmation e-mail issued.
-assert.match(runtime, /async function sendPaidConfirmationEmail/);
-assert.match(runtime, /checkout\?\.status !== 'paid'/);
-assert.match(runtime, /status='paid'/);
-assert.match(runtime, /status='email_sent'/);
-assert.match(statusJs, /O e-mail de confirmação só será enviado depois da confirmação do Asaas/i);
-
-// The real auth user/credential is materialized only after the paid e-mail confirmation link is valid.
+// Asaas is the activation gate. A verified active payment materializes the account immediately.
 assert.match(runtime, /async function activatePendingSignup/);
 assert.match(runtime, /INSERT INTO auth_users/);
 assert.match(runtime, /INSERT INTO auth_credentials/);
-assert.match(runtime, /await activatePendingSignup\(env, userId\)/);
-assert.match(runtime, /email_confirmed_at/);
-assert.match(runtime, /email_verification_token_hash/);
-assert.match(runtime, /confirmation_link_expired/);
+assert.match(runtime, /if \(!mapped\.renewal && transition === 'active'\)/);
+assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
+assert.match(runtime, /payment_confirmed_at/);
+assert.match(runtime, /status='activated'/);
 
-// Purchase status reflects the Cloudflare payment -> e-mail -> activation lifecycle.
-assert.match(statusJs, /email_sent/);
-assert.match(statusJs, /email_confirmed/);
+// Checkout activation must not depend on transactional e-mail or confirmation links.
+assert.doesNotMatch(runtime, /sendPaidConfirmationEmail/);
+assert.doesNotMatch(runtime, /env\.EMAIL/);
+assert.doesNotMatch(runtime, /\/api\/asaas\/confirm-email/);
+assert.doesNotMatch(runtime, /email_verification_token_hash/);
+assert.doesNotMatch(schema, /email_sent|email_verification_/);
+
+// Purchase status becomes usable as soon as the verified webhook activates the account.
+assert.match(statusJs, /account_activated/);
+assert.match(statusJs, /Pagamento confirmado/i);
+assert.doesNotMatch(statusJs, /e-mail de confirmação|email_sent|email_delivery_unavailable/i);
 assert.match(completeHtml, /Cloudflare D1/i);
 assert.match(completeHtml, /pagamento/i);
 
-console.log('Pro pre-payment signup: staged in D1; e-mail is sent only after verified Asaas payment; auth activates after confirmation.');
+console.log('Pro pre-payment signup: staged in D1; verified Asaas payment activates auth and Pro automatically, with no e-mail gate.');
