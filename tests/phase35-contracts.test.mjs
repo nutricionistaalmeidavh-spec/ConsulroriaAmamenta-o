@@ -86,6 +86,16 @@ test('phase 3-5 loader is wired additively',()=>{
   assert.match(loader,/referrals-feature\.js/);
 });
 
+test('album and referrals cancel stale async mounts so patient cards stay singleton',()=>{
+  for(const file of ['public/album-feature.js','public/referrals-feature.js']){
+    const src=readFileSync(file,'utf8');
+    assert.match(src,/mountRevision/);
+    assert.match(src,/const revision=\+\+mountRevision/);
+    assert.match(src,/if\(revision!==mountRevision\)return/);
+    assert.match(src,/document\.querySelectorAll\('\[data-(?:af|rf)-card\]'\)\.forEach\(x=>x\.remove\(\)\)/);
+  }
+});
+
 test('referral prefill uses recorded values and keeps missing clinical motive explicit',()=>{
   const draft=buildReferralDraft({
     specialty:'fonoaudiologia',
