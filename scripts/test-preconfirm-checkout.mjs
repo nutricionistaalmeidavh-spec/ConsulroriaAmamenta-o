@@ -19,6 +19,11 @@ assert.doesNotMatch(schema, /password_plain|plaintext/i);
 assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(runtime, /\/functions\/v1\/saas-checkout/);
 
+// Existing Pro accounts are handed to login instead of looking like a failed new purchase.
+assert.match(app, /existing_account_login_required/);
+assert.match(app, /CHECKOUT_AFTER_LOGIN_KEY/);
+assert.match(app, /showView\('login'\)/);
+
 // Asaas is the activation gate. A verified active payment materializes the account immediately.
 assert.match(runtime, /async function activatePendingSignup/);
 assert.match(runtime, /INSERT INTO auth_users/);
@@ -42,4 +47,4 @@ assert.doesNotMatch(statusJs, /e-mail de confirmação|email_sent|email_delivery
 assert.match(completeHtml, /Cloudflare D1/i);
 assert.match(completeHtml, /pagamento/i);
 
-console.log('Pro pre-payment signup: staged in D1; verified Asaas payment activates auth and Pro automatically, with no e-mail gate.');
+console.log('Pro pre-payment signup: staged in D1; verified Asaas payment activates auth and Pro automatically, with existing-account login handoff and no e-mail gate.');
