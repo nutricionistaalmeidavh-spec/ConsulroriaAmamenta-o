@@ -28,6 +28,7 @@ on:
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -58,6 +59,7 @@ on:
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -114,6 +116,8 @@ jobs:
         run: node scripts/test-production-deploy-contract.mjs
       - name: Validate package lifecycle on Cloudflare
         run: node --test tests/package-lifecycle-cloudflare.test.mjs
+      - name: Validate D1-only authentication
+        run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate SEO API contract
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
@@ -121,8 +125,12 @@ jobs:
       - name: Syntax-check changed commercial runtime
         run: |
           node --check worker/index.js
+          node --check worker/cloudflare-auth-runtime.js
+          node --check worker/cloudflare-auth-compat.js
           node --check worker/cloudflare-billing-runtime.js
           node --check worker/package-lifecycle-runtime.js
+          node --check worker/patient-write-runtime.js
+          node --check worker/commercial-license-bootstrap.js
           node --check worker/domain-entry.js
           node --check worker/seo-search-console.js
           node --check public/comercial/app.js
