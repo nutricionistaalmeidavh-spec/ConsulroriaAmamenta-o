@@ -88,7 +88,7 @@ jobs:
         run: node scripts/test-commercial-landing.mjs
       - name: Validate commercial checkout continuation
         run: node scripts/test-commercial-checkout-return.mjs
-      - name: Validate D1 staged Pro signup
+      - name: Validate D1 staged Pro signup and automatic activation
         run: node scripts/test-preconfirm-checkout.mjs
       - name: Validate D1 partner attribution, commissions and discounts
         run: node scripts/test-partner-attribution.mjs
@@ -106,7 +106,7 @@ jobs:
         run: node scripts/test-billing-scaffold.mjs
       - name: Validate Cloudflare D1 Asaas worker contract
         run: node scripts/test-cloudflare-asaas.mjs
-      - name: Validate Cloudflare owns billing, partner attribution and post-payment e-mail
+      - name: Validate Cloudflare billing, partner attribution and automatic post-payment activation
         run: node scripts/test-cloudflare-billing-d1.mjs
       - name: Validate production deploy guard
         run: node scripts/test-production-deploy-contract.mjs
