@@ -3,8 +3,16 @@ const message = document.querySelector('#admin-message');
 const form = document.querySelector('#partner-form');
 const list = document.querySelector('#partner-list');
 const salesBody = document.querySelector('#sales-body');
-const salesFilter = document.querySelector('#sales-partner-filter');
+const filters = {
+  partnerId: document.querySelector('#sales-partner-filter'),
+  planCode: document.querySelector('#sales-plan-filter'),
+  status: document.querySelector('#sales-status-filter'),
+  commissionStatus: document.querySelector('#sales-commission-filter'),
+  from: document.querySelector('#sales-from-filter'),
+  to: document.querySelector('#sales-to-filter'),
+};
 let partners = [];
+let currentSales = [];
 
 function readSession() {
   try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }
@@ -15,6 +23,11 @@ function token() { return readSession()?.access_token || ''; }
 function money(cents) { return new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(Number(cents || 0) / 100); }
 function setMessage(text = '', tone = '') { message.textContent = text; message.className = `message${tone ? ` ${tone}` : ''}`; }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function displayDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('pt-BR', { dateStyle:'short', timeStyle:'short' }).format(date);
+}
 
 async function api(path, options = {}) {
   const accessToken = token();
@@ -35,6 +48,10 @@ async function api(path, options = {}) {
       partner_admin_not_configured: 'O backend de parceiros ainda não foi configurado no ambiente.',
       partner_code_conflict: 'Já existe um parceiro com esse código.',
       commission_approval_failed: 'A comissão não está pendente ou a venda ainda não foi confirmada.',
+      invalid_date_filter: 'Revise o período informado.',
+      invalid_plan_filter: 'Plano de filtro inválido.',
+      invalid_status_filter: 'Status de venda inválido.',
+      invalid_commission_status_filter: 'Status de comissão inválido.',
     };
     throw new Error(messages[payload?.error] || payload?.message || payload?.error || `Erro HTTP ${response.status}`);
   }
@@ -57,9 +74,9 @@ function renderPartnerList() {
 }
 
 function renderPartnerFilter() {
-  const current = salesFilter.value;
-  salesFilter.innerHTML = '<option value="">Todos</option>' + partners.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} · ${escapeHtml(p.code)}</option>`).join('');
-  if ([...salesFilter.options].some((option) => option.value === current)) salesFilter.value = current;
+  const current = filters.partnerId.value;
+  filters.partnerId.innerHTML = '<option value="">Todos</option>' + partners.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} · ${escapeHtml(p.code)}</option>`).join('');
+  if ([...filters.partnerId.options].some((option) => option.value === current)) filters.partnerId.value = current;
 }
 
 function resetForm() {
@@ -98,18 +115,20 @@ function renderSales(payload) {
   const summary = payload.summary || {};
   document.querySelector('#metric-sales').textContent = String(summary.paidSales || 0);
   document.querySelector('#metric-revenue').textContent = money(summary.revenueCents);
+  document.querySelector('#metric-discounts').textContent = money(summary.discountCents);
   document.querySelector('#metric-pending').textContent = money(summary.pendingCommissionCents);
   document.querySelector('#metric-approved').textContent = money(summary.approvedCommissionCents);
-  const sales = Array.isArray(payload.sales) ? payload.sales : [];
-  if (!sales.length) {
-    salesBody.innerHTML = '<tr><td colspan="7">Nenhuma venda atribuída neste filtro.</td></tr>';
+  currentSales = Array.isArray(payload.sales) ? payload.sales : [];
+  if (!currentSales.length) {
+    salesBody.innerHTML = '<tr><td colspan="8">Nenhuma venda atribuída neste filtro.</td></tr>';
     return;
   }
-  salesBody.innerHTML = sales.map((sale) => {
+  salesBody.innerHTML = currentSales.map((sale) => {
     const partnerName = sale.partners?.name || sale.partner_code_snapshot || '—';
     const approve = sale.status === 'paid' && sale.commission_status === 'pending'
       ? `<button class="button small" type="button" data-approve="${escapeHtml(sale.id)}">Aprovar</button>` : '—';
     return `<tr>
+      <td>${escapeHtml(displayDate(sale.created_at))}</td>
       <td><strong>${escapeHtml(partnerName)}</strong><br><small>${escapeHtml(sale.partner_code_snapshot || '')}</small></td>
       <td>${escapeHtml(sale.plan_code)}</td>
       <td><span class="status">${escapeHtml(sale.status)}</span><br><small>${escapeHtml(sale.commission_status)}</small></td>
@@ -132,9 +151,55 @@ function renderSales(payload) {
   });
 }
 
+function salesQuery() {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, element]) => {
+    const value = String(element?.value || '').trim();
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 async function loadSales() {
-  const query = salesFilter.value ? `?partnerId=${encodeURIComponent(salesFilter.value)}` : '';
-  renderSales(await api(`/api/admin/partner-sales${query}`));
+  renderSales(await api(`/api/admin/partner-sales${salesQuery()}`));
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function exportSalesCsv() {
+  if (!currentSales.length) {
+    setMessage('Não há vendas no filtro atual para exportar.', 'error');
+    return;
+  }
+  const headers = ['Data','Parceiro','Código','Origem','Plano','Status da venda','Status da comissão','Subtotal','Desconto','Total','Comissão'];
+  const rows = currentSales.map((sale) => [
+    displayDate(sale.created_at),
+    sale.partners?.name || '',
+    sale.partner_code_snapshot || '',
+    sale.attribution_source || '',
+    sale.plan_code || '',
+    sale.status || '',
+    sale.commission_status || '',
+    (Number(sale.subtotal_cents || 0) / 100).toFixed(2),
+    (Number(sale.discount_cents || 0) / 100).toFixed(2),
+    (Number(sale.total_cents || 0) / 100).toFixed(2),
+    (Number(sale.commission_cents || 0) / 100).toFixed(2),
+  ]);
+  const csv = '\ufeff' + [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `parceiros-vendas-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  setMessage('CSV exportado com o filtro atual.', 'success');
 }
 
 async function reloadAll() {
@@ -176,5 +241,8 @@ form.addEventListener('submit', async (event) => {
 
 document.querySelector('#partner-reset').addEventListener('click', resetForm);
 document.querySelector('#reload').addEventListener('click', reloadAll);
-salesFilter.addEventListener('change', () => loadSales().catch((error) => setMessage(error.message, 'error')));
+document.querySelector('#export-sales').addEventListener('click', exportSalesCsv);
+Object.values(filters).forEach((filter) => {
+  filter.addEventListener('change', () => loadSales().catch((error) => setMessage(error.message, 'error')));
+});
 reloadAll();
