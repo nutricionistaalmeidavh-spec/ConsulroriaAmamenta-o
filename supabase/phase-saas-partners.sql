@@ -57,9 +57,9 @@ create table if not exists public.partner_attributions (
   discount_type_snapshot text not null default 'none'
     check (discount_type_snapshot in ('none', 'percent', 'fixed')),
   discount_value_snapshot numeric(12,2) not null default 0,
-  subtotal_cents integer not null check (subtotal_cents >= 0),
+  subtotal_cents integer not null check (subtotal_cents >= 1),
   discount_cents integer not null default 0 check (discount_cents >= 0),
-  total_cents integer not null check (total_cents >= 0),
+  total_cents integer not null check (total_cents >= 1),
   commission_cents integer not null default 0 check (commission_cents >= 0),
   status text not null default 'captured'
     check (status in ('captured', 'checkout_created', 'paid', 'cancelled', 'refunded', 'chargeback')),
@@ -132,15 +132,17 @@ begin
   from public.billing_plan_catalog c
   where c.plan_code = p_plan_code and c.active is true
   limit 1;
-  if not found then return; end if;
+  if not found or v_subtotal < 1 then return; end if;
 
   if v_partner.discount_type = 'percent' then
     v_discount := round(v_subtotal::numeric * v_partner.discount_value / 100)::integer;
   elsif v_partner.discount_type = 'fixed' then
     v_discount := round(v_partner.discount_value * 100)::integer;
   end if;
-  v_discount := greatest(0, least(v_subtotal, v_discount));
-  v_total := greatest(0, v_subtotal - v_discount);
+  -- Asaas checkout remains a paid transaction. Even a 100% configured coupon is capped
+  -- so the provider amount and the stored snapshot cannot diverge.
+  v_discount := greatest(0, least(v_subtotal - 1, v_discount));
+  v_total := v_subtotal - v_discount;
 
   if v_partner.commission_type = 'percent' then
     v_commission := round(v_total::numeric * v_partner.commission_value / 100)::integer;
@@ -209,16 +211,20 @@ begin
     coalesce(nullif(new.attribution_source, ''), 'manual_code'),
     v_partner.commission_type, v_partner.commission_value,
     v_partner.discount_type, v_partner.discount_value,
-    coalesce(new.subtotal_cents, new.total_cents, 0), coalesce(new.discount_cents, 0),
-    coalesce(new.total_cents, new.subtotal_cents, 0), coalesce(new.commission_cents, 0),
+    coalesce(new.subtotal_cents, new.total_cents, 1), coalesce(new.discount_cents, 0),
+    coalesce(new.total_cents, new.subtotal_cents, 1), coalesce(new.commission_cents, 0),
     v_status, v_commission_status,
-    case when v_status = 'paid' then coalesce(now(), now()) else null end,
+    case when v_status = 'paid' then now() else null end,
     now()
   )
   on conflict (checkout_request_id) do update set
     status = excluded.status,
     commission_status = case
-      when public.partner_attributions.commission_status = 'approved' and excluded.status = 'paid'
+      -- Preserve an approved payout until the verified provider event can explicitly
+      -- convert it to reversed. The checkout trigger must not erase that audit state.
+      when public.partner_attributions.commission_status = 'approved'
+        then public.partner_attributions.commission_status
+      when public.partner_attributions.commission_status = 'reversed'
         then public.partner_attributions.commission_status
       else excluded.commission_status
     end,
@@ -272,6 +278,7 @@ begin
       when v_status = 'paid' and a.commission_cents > 0 and a.commission_status <> 'approved' then 'pending'
       when v_status = 'paid' and a.commission_cents = 0 then 'none'
       when v_status in ('refunded', 'chargeback', 'cancelled') and a.commission_status = 'approved' then 'reversed'
+      when v_status in ('refunded', 'chargeback', 'cancelled') and a.commission_status = 'reversed' then 'reversed'
       when v_status in ('refunded', 'chargeback', 'cancelled') then 'cancelled'
       else a.commission_status
     end,
