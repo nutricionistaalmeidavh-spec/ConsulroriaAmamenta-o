@@ -2,7 +2,7 @@ import { pbkdf2Sync, randomBytes } from 'node:crypto';
 
 export const DEMO_EMAIL = 'demonstracao@deboralactacao.com';
 export const DEMO_USER_ID = '3e1a72f7-0c6e-4f47-b4d8-3b931fc8d001';
-export const DEMO_PASSWORD_ITERATIONS = 210000;
+export const DEMO_PASSWORD_ITERATIONS = 100000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -32,6 +32,7 @@ export function deriveDemoCredential(password, { salt = randomBytes(18), iterati
   const saltBytes = Buffer.from(salt);
   if (saltBytes.length < 16) throw new Error('demo_password_salt_too_short');
   if (!Number.isInteger(iterations) || iterations < 100000) throw new Error('demo_password_iterations_too_low');
+  if (iterations > DEMO_PASSWORD_ITERATIONS) throw new Error('demo_password_iterations_unsupported');
   return {
     password_salt: saltBytes.toString('base64url'),
     password_hash: pbkdf2Sync(Buffer.from(value, 'utf8'), saltBytes, iterations, 32, 'sha256').toString('base64url'),

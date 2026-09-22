@@ -17,11 +17,11 @@ test('demo identity is stable and presentation-specific', () => {
 
 test('deriveDemoCredential matches the runtime PBKDF2-SHA256 contract', () => {
   const salt = Buffer.alloc(18, 7);
-  const result = deriveDemoCredential(TEST_PASSWORD, { salt, iterations: 210000 });
-  const expected = pbkdf2Sync(Buffer.from(TEST_PASSWORD), salt, 210000, 32, 'sha256').toString('base64url');
+  const result = deriveDemoCredential(TEST_PASSWORD, { salt });
+  const expected = pbkdf2Sync(Buffer.from(TEST_PASSWORD), salt, 100000, 32, 'sha256').toString('base64url');
   assert.equal(result.password_salt, salt.toString('base64url'));
   assert.equal(result.password_hash, expected);
-  assert.equal(result.password_iterations, 210000);
+  assert.equal(result.password_iterations, 100000);
   assert.equal(result.password_algorithm, 'PBKDF2-SHA256');
 });
 
