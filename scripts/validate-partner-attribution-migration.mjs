@@ -9,7 +9,7 @@ const checkoutId = '22222222-2222-4222-8222-222222222222';
 await db.exec(`
   create role anon;
   create role authenticated;
-  create role service_role;
+  create role service_role bypassrls;
   create table public.billing_plan_catalog (
     plan_code text primary key,
     price_cents integer not null,
