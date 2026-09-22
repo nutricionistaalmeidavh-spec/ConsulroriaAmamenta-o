@@ -19,8 +19,11 @@ test('REST conflict upsert keeps incoming values instead of restoring stale data
   assert.equal(merged.updated_at, '2026-09-22T22:00:00.000Z');
 
   const upsertRuntime = read('worker/cloudflare-upsert-runtime.js');
+  const facade = read('worker/cloudflare-clinical-runtime.js');
   const domain = read('worker/domain-entry.js');
   assert.doesNotMatch(upsertRuntime, /Object\.assign\(row,\s*existing\.record/);
+  assert.doesNotMatch(facade, /Object\.assign\(row,\s*existing\.record/);
+  assert.match(facade, /handleCloudflareUpsertRuntime/);
   const upsertPos = domain.indexOf('handleCloudflareUpsertRuntime(request, env, url)');
   const compatibilityPos = domain.indexOf('handleCloudflareClinicalRuntime(request, env)');
   assert.ok(upsertPos >= 0 && compatibilityPos >= 0 && upsertPos < compatibilityPos,
@@ -31,24 +34,33 @@ test('growth measurement RPC is handled by a dedicated Cloudflare runtime before
   const growthRuntimeUrl = new URL('../worker/cloudflare-growth-runtime.js', import.meta.url);
   assert.equal(existsSync(growthRuntimeUrl), true, 'dedicated Cloudflare growth runtime is missing');
   const growthRuntime = read('worker/cloudflare-growth-runtime.js');
+  const facade = read('worker/cloudflare-clinical-runtime.js');
   const domain = read('worker/domain-entry.js');
   assert.match(growthRuntime, /record_growth_measurement/);
   assert.match(growthRuntime, /CLINICAL_DB/);
   assert.match(growthRuntime, /authenticateClinicalRequest/);
   assert.match(growthRuntime, /\.batch\(/, 'growth write must be atomic');
+  assert.match(facade, /handleCloudflareGrowthRuntime/);
   const growthPos = domain.indexOf('handleCloudflareGrowthRuntime(request, env, url)');
   const compatibilityPos = domain.indexOf('handleCloudflareClinicalRuntime(request, env)');
   assert.ok(growthPos >= 0 && compatibilityPos >= 0 && growthPos < compatibilityPos,
     'growth RPC must be intercepted before the compatibility REST runtime');
 });
 
-test('growth runtime served by dev/build never targets the retired Supabase host and resolves WHO data from the site root', () => {
-  const normalized = normalizeGrowthRuntimeSource(read('public/growth-feature.js'));
+test('committed growth entry is fail-closed and dev/build materialize a Cloudflare-only implementation', () => {
+  const committedEntry = read('public/growth-feature.js');
+  const legacyTemplate = read('patch-source/legacy/growth-feature.supabase-template.js');
+  const normalized = normalizeGrowthRuntimeSource(legacyTemplate);
+
+  assert.doesNotMatch(committedEntry, /zxowxdfhtksevhnjmeyu|supabase\.co|sb_publishable_/i);
+  assert.match(committedEntry, /served before Cloudflare runtime materialization/);
   assert.doesNotMatch(normalized, /zxowxdfhtksevhnjmeyu|supabase\.co/i);
   assert.match(normalized, /const SB_URL=window\.location\.origin/);
   assert.match(normalized, /const WHO_BASE='\/who\/v2026-08-30\/'/);
 
   const pkg = JSON.parse(read('package.json'));
   assert.match(pkg.scripts.dev, /normalize-growth-runtime\.mjs/);
+  assert.match(pkg.scripts.dev, /materialize-clinical-source\.mjs --write/);
   assert.match(pkg.scripts.build, /normalize-growth-runtime\.mjs/);
+  assert.match(pkg.scripts.build, /materialize-clinical-source\.mjs --write/);
 });
