@@ -21,87 +21,18 @@ on:
       - 'public/comercial/**'
       - 'scripts/materialize-clinical-source.mjs'
       - 'scripts/test-canonical-app-routing.mjs'
+      - 'scripts/test-block4-built-runtime.mjs'
       - 'tests/clinical-source-*.test.mjs'
       - '.github/workflows/validate-clinical-source-consolidation.yml'
-
-permissions:
-  contents: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply one-time Block 4 frontend rewrite
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/block-4-frontend-cloudflare-only'
-        shell: bash
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const legacyUrl = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
-          const legacyKey = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
-          const allowed = new Set(['src/cloudflare-fetch-bridge.js']);
-          const extensions = new Set(['.js', '.mjs']);
-          function walk(root) {
-            for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-              const full = path.join(root, entry.name);
-              if (entry.isDirectory()) { walk(full); continue; }
-              const repoPath = full.split(path.sep).join('/');
-              if (allowed.has(repoPath) || !extensions.has(path.extname(entry.name))) continue;
-              const source = fs.readFileSync(full, 'utf8');
-              const next = source
-                .replaceAll(`'${legacyUrl}'`, 'window.location.origin')
-                .replaceAll(`"${legacyUrl}"`, 'window.location.origin')
-                .replaceAll(`'${legacyKey}'`, "'cloudflare-runtime'")
-                .replaceAll(`"${legacyKey}"`, '"cloudflare-runtime"');
-              if (next !== source) fs.writeFileSync(full, next);
-            }
-          }
-          walk('public');
-          walk('src');
-
-          for (const rel of ['features/clinical-note-feature.js', 'features/patient-fixes.js']) {
-            const source = path.join('public', 'clinical-source', rel);
-            const target = path.join('patch-source', 'cloudflare-license-authority', rel);
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.copyFileSync(source, target);
-          }
-
-          const materializerPath = 'scripts/materialize-clinical-source.mjs';
-          let materializer = fs.readFileSync(materializerPath, 'utf8');
-          const marker = "overlay('core/lib/repositories.js');";
-          if (!materializer.includes("overlay('features/clinical-note-feature.js');")) {
-            if (!materializer.includes(marker)) throw new Error('Materializer overlay marker not found.');
-            materializer = materializer.replace(marker, `${marker}\noverlay('features/clinical-note-feature.js');\noverlay('features/patient-fixes.js');`);
-            fs.writeFileSync(materializerPath, materializer);
-          }
-          NODE
-          git diff --check
-          git diff --name-only -- '*.js' '*.mjs' | while read -r file; do
-            [ -z "$file" ] && continue
-            node --check "$file"
-          done
-      - name: Persist Block 4 rewrite on PR branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/block-4-frontend-cloudflare-only'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet; then
-            echo "No rewrite changes to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add public src patch-source/cloudflare-license-authority scripts/materialize-clinical-source.mjs
-            git commit -m "fix: route frontend through Cloudflare origin"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
       - run: npm install
       - run: node --test tests/clinical-source-*.test.mjs
       - name: Validate canonical multi-client routing
@@ -126,6 +57,8 @@ jobs:
           node --check worker/index.js
           node --check worker/cloudflare-clinical-runtime.js
       - run: npm run build
+      - name: Guard built runtime against retired Supabase origin
+        run: node scripts/test-block4-built-runtime.mjs
       - name: Verify canonical runtime is published
         run: |
           test -f dist/index.html
