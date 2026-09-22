@@ -1,0 +1,45 @@
+name: Validate demo account
+
+on:
+  push:
+    branches:
+      - feat/demo-account-seed-final
+    paths:
+      - 'scripts/demo-account-*.mjs'
+      - 'scripts/seed-demo-account.mjs'
+      - 'scripts/reset-demo-account.mjs'
+      - 'tests/demo-account-*.test.mjs'
+      - 'package.json'
+      - '.github/workflows/validate-demo-account.yml'
+  pull_request:
+    paths:
+      - 'scripts/demo-account-*.mjs'
+      - 'scripts/seed-demo-account.mjs'
+      - 'scripts/reset-demo-account.mjs'
+      - 'tests/demo-account-*.test.mjs'
+      - 'package.json'
+      - '.github/workflows/validate-demo-account.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demo-account:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate demo account contracts
+        run: npm run test:demo
+      - name: Validate auth runtime regressions
+        run: npm run test:auth-runtime
+      - name: Validate production deploy safety
+        run: npm run test:deploy-safety
+      - name: Build application
+        run: npm run build
