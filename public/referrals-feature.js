@@ -1,7 +1,7 @@
 import {REFERRAL_SPECIALTIES,buildReferralDraft,getReferralSpecialty} from './referral-templates.js';
 
 const DOC=window.DeboraDocuments;
-let currentMother='',layer=null,lastTrigger=null;
+let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
 
 const fmtDate=value=>{
   if(!value)return 'Sem data';
@@ -157,20 +157,26 @@ function cardMarkup(motherId,rows){
   </section>`;
 }
 async function mount(motherId){
-  if(!motherId||motherId===currentMother&&document.querySelector('[data-rf-card]'))return;
+  const revision=++mountRevision;
+  if(!motherId)return;
+  if(motherId===currentMother&&document.querySelector('[data-rf-card]'))return;
   currentMother=motherId;document.querySelectorAll('[data-rf-card]').forEach(x=>x.remove());
   const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;
   try{
-    const rows=await referralRows(motherId),wrap=document.createElement('div');wrap.innerHTML=cardMarkup(motherId,rows);const card=wrap.firstElementChild;
+    const rows=await referralRows(motherId);
+    if(revision!==mountRevision)return;
+    document.querySelectorAll('[data-rf-card]').forEach(x=>x.remove());
+    const wrap=document.createElement('div');wrap.innerHTML=cardMarkup(motherId,rows);const card=wrap.firstElementChild;
     const album=screen.querySelector('[data-af-card]'),terms=screen.querySelector('[data-df-terms-card]'),target=album||terms||screen.querySelector('[data-pf-prontuario]')||screen.querySelector('.patient-detail-grid')||screen.lastElementChild;
     target?.after?target.after(card):screen.appendChild(card);
     card.querySelector('[data-rf-new-button]').addEventListener('click',event=>openNew(motherId,event.currentTarget).catch(e=>DOC.toast(e.message||'Não foi possível criar o encaminhamento.','error')));
     card.querySelectorAll('[data-rf-open]').forEach(btn=>btn.addEventListener('click',()=>openExisting(motherId,btn.dataset.rfOpen,btn).catch(e=>DOC.toast(e.message||'Não foi possível abrir o encaminhamento.','error'))));
   }catch(error){
+    if(revision!==mountRevision)return;
     if(/clinical_documents|schema cache|relation .* does not exist/i.test(error.message||''))return;
     if(!/Sessão não encontrada/.test(error.message||''))DOC.toast(error.message||'Não foi possível carregar encaminhamentos.','error');
   }
 }
-window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{currentMother='';document.querySelectorAll('[data-rf-card]').forEach(x=>x.remove())}});
+window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{mountRevision++;currentMother='';document.querySelectorAll('[data-rf-card]').forEach(x=>x.remove())}});
 window.addEventListener('debora:clinical-document-finalized',event=>{const motherId=event.detail?.motherId;if(motherId===DOC.currentMotherId()){currentMother='';mount(motherId)}});
 window.DeboraReferrals={openNew,openExisting,refresh:()=>{currentMother='';const id=DOC.currentMotherId();if(id)mount(id)}};
