@@ -27,13 +27,15 @@ assert.match(schema, /external_subscription_id TEXT/);
 assert.match(schema, /subscriptions_external_idx/);
 assert.match(runtime, /const subscriptionId = String\(payment\?\.subscription \|\| ''\)/);
 assert.match(runtime, /WHERE provider=\? AND external_subscription_id=\? LIMIT 1/);
-assert.match(runtime, /renewal: true/);
+assert.match(runtime, /renewal:\s*true/);
 assert.match(runtime, /external_subscription_id=CASE WHEN excluded\.external_subscription_id<>''/);
 
-// A renewal updates subscription/license state but cannot pay a second partner commission.
+// A renewal updates subscription/license state but cannot pay a second partner commission
+// or retrigger the first-purchase confirmation e-mail.
 assert.match(runtime, /if \(mapped\.renewal \|\| !mapped\.checkout\?\.id\) return/);
-assert.match(runtime, /renewal:mapped\.renewal/);
-assert.doesNotMatch(runtime, /sendPaidConfirmation/);
+assert.match(runtime, /renewal:\s*mapped\.renewal/);
+assert.match(runtime, /if \(!mapped\.renewal && transition === 'active'\)/);
+assert.match(runtime, /sendPaidConfirmationEmail\(env, fresh/);
 assert.doesNotMatch(runtime, /saas-billing-webhook/);
 assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 
@@ -42,4 +44,4 @@ assert.match(schema, /UNIQUE\(provider,external_event_id\)/);
 assert.match(runtime, /ON CONFLICT\(provider,external_event_id\) DO NOTHING/);
 assert.match(runtime, /duplicate_ignored/);
 
-console.log('Asaas recurring renewal: D1 subscription mapping, idempotency and no duplicate first-sale commission OK.');
+console.log('Asaas recurring renewal: D1 subscription mapping, idempotency and no duplicate first-sale side effects OK.');
