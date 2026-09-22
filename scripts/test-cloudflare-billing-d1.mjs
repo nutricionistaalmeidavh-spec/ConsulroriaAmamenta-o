@@ -16,6 +16,7 @@ const schema = read('cloudflare/runtime-schema.sql');
 const config = read('public/comercial/config.js');
 const app = read('public/comercial/app.js');
 const plan = read('public/comercial/plan.js');
+const planHtml = read('public/comercial/plano.html');
 const purchaseStatus = read('public/comercial/purchase-status.js');
 const wrangler = read('wrangler.jsonc');
 
@@ -43,7 +44,7 @@ assert.doesNotMatch(plan, /supabase/i);
 assert.match(app, /apiBaseUrl/);
 assert.match(plan, /apiBaseUrl/);
 
-// D1 owns the complete billing/partner model and auth staging.
+// D1 owns the complete billing/partner model and current canonical list prices.
 for (const table of [
   'billing_pending_signups', 'billing_plan_catalog', 'billing_checkout_requests',
   'subscriptions', 'billing_webhook_events', 'partners', 'partner_attributions',
@@ -53,6 +54,10 @@ for (const table of [
 assert.match(schema, /billing_backend','cloudflare-d1'/);
 assert.match(schema, /password_iterations INTEGER NOT NULL DEFAULT 100000/);
 assert.doesNotMatch(schema, /DEFAULT 210000/);
+assert.match(schema, /\('pro_monthly','Plano Pro mensal','month',7990,'BRL',1,1\)/);
+assert.match(schema, /\('pro_annual','Plano Pro anual','year',79990,'BRL',12,1\)/);
+assert.match(planHtml, /R\$ 79,90/);
+assert.match(planHtml, /R\$ 799,90/);
 
 // Payment confirmation activates access directly; no e-mail transport is required by billing.
 assert.doesNotMatch(wrangler, /"send_email"|BILLING_EMAIL_FROM|"name":\s*"EMAIL"/);
@@ -88,26 +93,26 @@ const fakeDb = {
     return { bind() { return { async first() { return partner; } }; } };
   },
 };
-const offer = await resolvePartnerOffer({ CLINICAL_DB: fakeDb }, 'ana10', { price_cents: 4990 });
-assert.equal(offer.subtotalCents, 4990);
-assert.equal(offer.discountCents, 998);
-assert.equal(offer.totalCents, 3992);
-assert.equal(offer.commissionCents, 399);
+const offer = await resolvePartnerOffer({ CLINICAL_DB: fakeDb }, 'ana10', { price_cents: 7990 });
+assert.equal(offer.subtotalCents, 7990);
+assert.equal(offer.discountCents, 1598);
+assert.equal(offer.totalCents, 6392);
+assert.equal(offer.commissionCents, 639);
 
 const floorPartner = { ...partner, discount_value: 100 };
 const floorDb = {
   prepare() { return { bind() { return { async first() { return floorPartner; } }; } }; },
 };
-const floor = await resolvePartnerOffer({ CLINICAL_DB: floorDb }, 'ANA10', { price_cents: 4990 });
+const floor = await resolvePartnerOffer({ CLINICAL_DB: floorDb }, 'ANA10', { price_cents: 7990 });
 assert.equal(floor.totalCents, 1);
-assert.equal(floor.discountCents, 4989);
+assert.equal(floor.discountCents, 7989);
 
 const payload = checkoutPayload('pro_monthly', '22222222-2222-4222-8222-222222222222', 'https://comercial.deboralactacao.com', 'production', 'authenticated', {
   ...offer,
   plan: { installment_max: 1 },
 });
 assert.equal(payload.externalReference, 'saas_checkout:22222222-2222-4222-8222-222222222222');
-assert.equal(payload.items[0].value, 39.92);
+assert.equal(payload.items[0].value, 63.92);
 assert.equal(payload.subscription.cycle, 'MONTHLY');
 
-console.log('Cloudflare D1 billing: origin routing, Cloudflare client naming, schema, partner pricing, Asaas recurrence and automatic post-payment activation OK');
+console.log('Cloudflare D1 billing: origin routing, Cloudflare client naming, current prices, partner pricing, Asaas recurrence and automatic post-payment activation OK');
