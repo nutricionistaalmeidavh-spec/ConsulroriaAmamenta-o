@@ -23,9 +23,8 @@ assert.match(runtime, /CLINICAL_DB/);
 assert.match(runtime, /billingBackend:\s*'cloudflare-d1'/);
 assert.match(runtime, /subscriptionId/);
 assert.match(runtime, /external_subscription_id/);
-assert.match(runtime, /email_verification_token_hash/);
-assert.match(runtime, /env\.EMAIL\.send/);
-assert.match(runtime, /\/api\/asaas\/confirm-email/);
+assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
+assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 
 // The domain entry must intercept billing before legacy coreWorker routes can run.
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
@@ -48,13 +47,11 @@ assert.match(schema, /billing_backend','cloudflare-d1'/);
 assert.match(schema, /password_iterations INTEGER NOT NULL DEFAULT 100000/);
 assert.doesNotMatch(schema, /DEFAULT 210000/);
 
-// Cloudflare Email Service is the post-payment confirmation transport.
-assert.match(wrangler, /"send_email"/);
-assert.match(wrangler, /"name":\s*"EMAIL"/);
-assert.match(wrangler, /BILLING_EMAIL_FROM/);
-assert.match(purchaseStatus, /email_sent/);
-assert.match(purchaseStatus, /email_confirmed/);
-assert.match(purchaseStatus, /só será enviado depois da confirmação do Asaas/i);
+// Payment confirmation activates access directly; no e-mail transport is required by billing.
+assert.doesNotMatch(wrangler, /"send_email"|BILLING_EMAIL_FROM|"name":\s*"EMAIL"/);
+assert.match(purchaseStatus, /account_activated/);
+assert.match(purchaseStatus, /acesso Pro liberado/i);
+assert.doesNotMatch(purchaseStatus, /email_sent|email_confirmed|e-mail de confirmação/i);
 
 assert.equal(CLOUDFLARE_PBKDF2_ITERATIONS, 100000);
 assert.equal(normalizePartnerCode(' ana 10 '), 'ANA10');
@@ -106,4 +103,4 @@ assert.equal(payload.externalReference, 'saas_checkout:22222222-2222-4222-8222-2
 assert.equal(payload.items[0].value, 39.92);
 assert.equal(payload.subscription.cycle, 'MONTHLY');
 
-console.log('Cloudflare D1 billing: origin routing, schema, partner pricing, Asaas recurrence and post-payment email contract OK');
+console.log('Cloudflare D1 billing: origin routing, schema, partner pricing, Asaas recurrence and automatic post-payment activation OK');
