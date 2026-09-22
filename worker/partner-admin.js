@@ -2,6 +2,10 @@ export const PARTNER_ADMIN_EMAILS_CONFIG = 'PARTNER_ADMIN_EMAILS';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CODE_RE = /^[A-Z0-9_-]{2,64}$/;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SALE_STATUSES = new Set(['captured', 'checkout_created', 'paid', 'cancelled', 'refunded', 'chargeback']);
+const COMMISSION_STATUSES = new Set(['none', 'pending', 'approved', 'cancelled', 'reversed']);
+const PLAN_CODES = new Set(['pro_monthly', 'pro_annual']);
 
 function allowedAdminEmails(env) {
   return new Set(String(env[PARTNER_ADMIN_EMAILS_CONFIG] || '')
@@ -54,6 +58,13 @@ function normalizePartner(input) {
   };
 }
 
+function dateBoundary(value, endOfDay = false) {
+  const raw = String(value || '');
+  if (!raw) return '';
+  if (!ISO_DATE_RE.test(raw)) return null;
+  return `${raw}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+}
+
 export async function handlePartnerAdminRequest(request, env, url, helpers) {
   const { authenticateUser, serviceFetch, json } = helpers;
   const admin = await requireAdmin(request, env, authenticateUser);
@@ -94,12 +105,22 @@ export async function handlePartnerAdminRequest(request, env, url, helpers) {
 
   if (url.pathname === '/api/admin/partner-sales' && request.method === 'GET') {
     const partnerId = String(url.searchParams.get('partnerId') || '');
-    const from = String(url.searchParams.get('from') || '');
-    const to = String(url.searchParams.get('to') || '');
+    const planCode = String(url.searchParams.get('planCode') || '');
+    const status = String(url.searchParams.get('status') || '');
+    const commissionStatus = String(url.searchParams.get('commissionStatus') || '');
+    const from = dateBoundary(url.searchParams.get('from'), false);
+    const to = dateBoundary(url.searchParams.get('to'), true);
     if (partnerId && !UUID_RE.test(partnerId)) return json(400, { error: 'invalid_partner_id' });
+    if (planCode && !PLAN_CODES.has(planCode)) return json(400, { error: 'invalid_plan_filter' });
+    if (status && !SALE_STATUSES.has(status)) return json(400, { error: 'invalid_status_filter' });
+    if (commissionStatus && !COMMISSION_STATUSES.has(commissionStatus)) return json(400, { error: 'invalid_commission_status_filter' });
+    if (from === null || to === null) return json(400, { error: 'invalid_date_filter' });
 
     let path = '/rest/v1/partner_attributions?select=id,partner_id,checkout_request_id,owner_id,plan_code,partner_code_snapshot,attribution_source,status,subtotal_cents,discount_cents,total_cents,commission_cents,commission_status,provider_status,paid_at,commission_approved_at,created_at,partners(name,code)&order=created_at.desc&limit=500';
     if (partnerId) path += `&partner_id=eq.${encodeURIComponent(partnerId)}`;
+    if (planCode) path += `&plan_code=eq.${encodeURIComponent(planCode)}`;
+    if (status) path += `&status=eq.${encodeURIComponent(status)}`;
+    if (commissionStatus) path += `&commission_status=eq.${encodeURIComponent(commissionStatus)}`;
     if (from) path += `&created_at=gte.${encodeURIComponent(from)}`;
     if (to) path += `&created_at=lte.${encodeURIComponent(to)}`;
 
@@ -112,6 +133,7 @@ export async function handlePartnerAdminRequest(request, env, url, helpers) {
         acc.paidSales += 1;
         acc.revenueCents += Number(sale.total_cents || 0);
       }
+      acc.discountCents += Number(sale.discount_cents || 0);
       if (sale.commission_status === 'pending') acc.pendingCommissionCents += Number(sale.commission_cents || 0);
       if (sale.commission_status === 'approved') acc.approvedCommissionCents += Number(sale.commission_cents || 0);
       if (sale.commission_status === 'reversed') acc.reversedCommissionCents += Number(sale.commission_cents || 0);
@@ -120,6 +142,7 @@ export async function handlePartnerAdminRequest(request, env, url, helpers) {
       attributions: 0,
       paidSales: 0,
       revenueCents: 0,
+      discountCents: 0,
       pendingCommissionCents: 0,
       approvedCommissionCents: 0,
       reversedCommissionCents: 0,
