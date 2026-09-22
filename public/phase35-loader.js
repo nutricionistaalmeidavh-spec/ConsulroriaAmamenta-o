@@ -5,8 +5,8 @@ async function start(){
   if(!window.DeboraDocuments||!document.querySelector('[data-app-root]')){setTimeout(start,90);return}
   phase35Started=true;
   try{
-    css('./album-feature.css','phase35-album');
-    css('./referrals-feature.css','phase35-referrals');
+    css('/album-feature.css','phase35-album');
+    css('/referrals-feature.css','phase35-referrals');
     await import('./album-feature.js');
     await import('./referrals-feature.js');
   }catch(error){phase35Started=false;console.error('Falha ao carregar fases clínicas 3-5',error);setTimeout(start,900)}
