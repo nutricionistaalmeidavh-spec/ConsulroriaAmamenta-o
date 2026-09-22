@@ -23,6 +23,7 @@ on:
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-cloudflare-billing-d1.mjs'
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
@@ -51,6 +52,7 @@ on:
       - 'scripts/test-saas-enforcement.mjs'
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
+      - 'scripts/test-cloudflare-billing-d1.mjs'
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
@@ -104,6 +106,8 @@ jobs:
         run: node scripts/test-billing-scaffold.mjs
       - name: Validate Cloudflare D1 Asaas worker contract
         run: node scripts/test-cloudflare-asaas.mjs
+      - name: Validate Cloudflare owns billing, partner attribution and post-payment e-mail
+        run: node scripts/test-cloudflare-billing-d1.mjs
       - name: Validate production deploy guard
         run: node scripts/test-production-deploy-contract.mjs
       - name: Validate SEO API contract
