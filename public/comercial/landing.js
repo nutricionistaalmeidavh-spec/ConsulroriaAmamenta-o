@@ -390,13 +390,13 @@ if (proCard) {
     const setBilling = (mode) => {
       const annual = mode === 'annual';
       proCard.dataset.billing = annual ? 'annual' : 'monthly';
-      priceStrong.textContent = annual ? 'R$ 499' : 'R$ 49,90';
+      priceStrong.textContent = annual ? 'R$ 799,90' : 'R$ 79,90';
       priceSuffix.textContent = annual ? '/ ano' : '/ mês';
       monthlyCta.hidden = annual;
       annualCta.hidden = !annual;
       if (annual) {
-        annualCta.querySelector('strong').textContent = 'Assinar anual — R$ 499';
-        annualCta.querySelector('small').textContent = 'Economize R$ 99,80 por ano · até 12x no cartão';
+        annualCta.querySelector('strong').textContent = 'Assinar anual — R$ 799,90';
+        annualCta.querySelector('small').textContent = 'Economize R$ 158,90 por ano · em até 12x no cartão';
       }
       billingButtons.forEach((button) => {
         const active = button.dataset.billing === mode;
