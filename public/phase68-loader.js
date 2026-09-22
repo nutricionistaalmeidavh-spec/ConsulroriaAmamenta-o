@@ -5,10 +5,10 @@ async function start(){
   if(!window.DeboraDocuments||!window.DeboraReferrals||!window.DeboraAlbum||!document.querySelector('[data-app-root]')){setTimeout(start,100);return}
   phase68Started=true;
   try{
-    css('./record-export-feature.css','phase68-export');
-    css('./patient-records-hub.css','phase68-hub');
-    css('./patient-workspace.css','phase68-workspace');
-    css('./package-audit-feature.css','phase68-package-audit');
+    css('/record-export-feature.css','phase68-export');
+    css('/patient-records-hub.css','phase68-hub');
+    css('/patient-workspace.css','phase68-workspace');
+    css('/package-audit-feature.css','phase68-package-audit');
     await import('./package-card-singleton-guard.js');
     await import('./referral-finalization.js');
     await import('./record-export-feature.js');
