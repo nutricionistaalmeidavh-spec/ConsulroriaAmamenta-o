@@ -5,6 +5,16 @@
   "main": "worker/domain-entry.js",
   "compatibility_date": "2026-09-06",
   "keep_vars": true,
+  "vars": {
+    "BILLING_EMAIL_FROM": "no-reply@deboralactacao.com"
+  },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true,
+      "allowed_sender_addresses": ["no-reply@deboralactacao.com"]
+    }
+  ],
   "routes": [
     { "pattern": "deboralactacao.com", "custom_domain": true },
     { "pattern": "www.deboralactacao.com", "custom_domain": true },
