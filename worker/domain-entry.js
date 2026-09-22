@@ -1,6 +1,7 @@
 import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
+import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { handleCloudflarePasswordCompat } from './cloudflare-auth-compat.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
@@ -20,16 +21,10 @@ function isPrivateRobotsPath(pathname) {
 }
 
 export function withNoIndex(response) {
-  // Responses created by this Worker have mutable headers. Mutating them in place
-  // preserves ownership of the original body stream instead of rebinding the same
-  // ReadableStream into a second Response, which can surface as a disturbed/locked
-  // body in browser Fetch implementations.
   try {
     response.headers.set('x-robots-tag', 'noindex, nofollow');
     return response;
   } catch {
-    // Fetch-derived responses can expose immutable headers. Clone first so the
-    // fallback never transfers the original response's live body stream.
     const copy = response.clone();
     const headers = new Headers(copy.headers);
     headers.set('x-robots-tag', 'noindex, nofollow');
@@ -58,20 +53,19 @@ export default {
       return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
     }
 
-    // Existing accounts are migrated on first successful login. Cloudflare Workers
-    // caps PBKDF2 at 100k iterations, so password login uses the compatibility bridge
-    // before entering the general clinical runtime.
     const passwordCompatResponse = await handleCloudflarePasswordCompat(request, env, url);
     if (passwordCompatResponse) return withNoIndex(passwordCompatResponse);
 
-    // A migrated saas_accounts row is an explicit commercial marker. Promote it into
-    // the central Artisys license authority before the first Cloudflare license read.
+    // Billing and partner attribution are D1-native whenever CLINICAL_DB is bound.
+    // This gate deliberately runs before the legacy commercial worker so no Asaas
+    // route can silently fall back to Supabase Edge Functions after Cloudflare cutover.
+    const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
+    if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
+
     if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
       await ensureExplicitCommercialMarker(request, env);
     }
 
-    // CLINICAL_DB is the cutover switch. Without the binding this returns null and
-    // the current Supabase-backed runtime remains available as an immediate rollback.
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
