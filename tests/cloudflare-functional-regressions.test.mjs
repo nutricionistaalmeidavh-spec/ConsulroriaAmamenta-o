@@ -45,7 +45,7 @@ test('growth measurement RPC is handled by a dedicated Cloudflare runtime before
 test('growth runtime served by dev/build never targets the retired Supabase host and resolves WHO data from the site root', () => {
   const normalized = normalizeGrowthRuntimeSource(read('public/growth-feature.js'));
   assert.doesNotMatch(normalized, /zxowxdfhtksevhnjmeyu|supabase\.co/i);
-  assert.match(normalized, /const SB_URL=window\.location\.origin/);
+  assert.match(normalized, /const SB_URL=globalThis\.location\?\.origin\|\|''/);
   assert.match(normalized, /const WHO_BASE='\/who\/v2026-08-30\/'/);
 
   const pkg = JSON.parse(read('package.json'));
