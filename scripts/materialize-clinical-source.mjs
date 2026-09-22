@@ -121,6 +121,8 @@ if (release['features/patient-fixes.css']) add('features/patient-fixes.css', rel
 overlay('config.js');
 overlay('core/lib/supabase-client.js');
 overlay('core/lib/repositories.js');
+overlay('features/clinical-note-feature.js');
+overlay('features/patient-fixes.js');
 
 const oldConfigured = `export function configured() {
   return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&

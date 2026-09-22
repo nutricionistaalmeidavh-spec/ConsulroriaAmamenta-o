@@ -3,7 +3,7 @@ import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentit
 
 window.__deboraUnzipSync = unzipSync;
 
-const AUTH_ORIGIN = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
+const AUTH_ORIGIN = window.location.origin;
 const APP_CONTEXT = resolveAppIdentity(window.location);
 window.CANONICAL_APP_CONTEXT = APP_CONTEXT;
 const APP_URL = `${window.location.origin}${APP_CONTEXT.basePath}`;
