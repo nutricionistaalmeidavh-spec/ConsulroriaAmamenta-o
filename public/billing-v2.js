@@ -2,7 +2,7 @@ const BV_CONFIG=globalThis.DEBORA_APP_CONFIG||{};
 const BV_URL=BV_CONFIG.SUPABASE_URL||'https://zxowxdfhtksevhnjmeyu.supabase.co';
 const BV_KEY=BV_CONFIG.SUPABASE_PUBLISHABLE_KEY||'';
 const BV_DRAFT='debora-billing-v2-draft';
-let bvBusy=false,bvTimer=null,bvLoadedAppointment=null,bvLoadedMother=null;
+let bvBusy=false,bvTimer=null,bvLoadedAppointment=null,bvLoadedMother=null,bvPatientPlanRevision=0;
 
 function bvWalk(v){if(!v)return null;if(typeof v==='string'){try{return bvWalk(JSON.parse(v))}catch{return v.split('.').length===3?v:null}}if(Array.isArray(v)){for(const x of v){const t=bvWalk(x);if(t)return t}}if(typeof v==='object'){if(v.access_token)return v.access_token;if(v.session?.access_token)return v.session.access_token;for(const x of Object.values(v)){const t=bvWalk(x);if(t)return t}}return null}
 function bvToken(){const runtime=window.__deboraAccessToken||sessionStorage.getItem('debora-runtime-access-token');if(runtime?.split('.').length===3)return runtime;for(const st of [localStorage,sessionStorage])for(let i=0;i<st.length;i++){const t=bvWalk(st.getItem(st.key(i)));if(t?.split('.').length===3)return t}return null}
@@ -228,12 +228,24 @@ function bvPlanMarkup(bundle){
 }
 async function bvMountPatientPlan(force=false){
   const mid=bvPatientMotherId(),screen=document.querySelector('[data-screen="patient"]');if(!mid||!screen)return;
-  let host=document.querySelector('[data-bv-patient-plan]');
-  if(!force&&host?.dataset.motherId===mid)return;
+  const initialHosts=[...screen.querySelectorAll('[data-bv-patient-plan]')];
+  let host=initialHosts.find(node=>node.dataset.motherId===mid)||initialHosts[0]||null;
+  if(!force&&host?.dataset.motherId===mid){
+    initialHosts.forEach(node=>{if(node!==host)node.remove()});
+    return;
+  }
+  const revision=++bvPatientPlanRevision;
   const bundle=await bvPatientPackage(mid);
-  if(!host){host=document.createElement('div');host.dataset.bvPatientPlan='';const anchor=screen.querySelector('.baby-selector-wrap');anchor?.insertAdjacentElement('afterend',host)}
-  if(!host)return;
+  if(revision!==bvPatientPlanRevision||mid!==bvPatientMotherId())return;
+  const hosts=[...screen.querySelectorAll('[data-bv-patient-plan]')];
+  host=hosts.find(node=>node.dataset.motherId===mid)||hosts[0]||null;
+  hosts.forEach(node=>{if(node!==host)node.remove()});
+  if(!host){
+    const anchor=screen.querySelector('.baby-selector-wrap');if(!anchor)return;
+    host=document.createElement('div');host.dataset.bvPatientPlan='';anchor.insertAdjacentElement('afterend',host);
+  }
   host.dataset.motherId=mid;host.innerHTML=bvPlanMarkup(bundle);
+  window.DeboraPackageCardGuard?.collapse?.();
 }
 function bvClosePlanDialog(){document.querySelector('[data-bv-plan-dialog]')?.remove()}
 function bvOpenPlanDialog(packageId){
