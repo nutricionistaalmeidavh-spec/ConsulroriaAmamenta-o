@@ -63,7 +63,7 @@ assert.match(runtime, /chargeTypes: \['RECURRENT'\]/);
 assert.match(runtime, /maxInstallmentCount: Math\.max\(1, Number\(priced\.plan\.installment_max \|\| 12\)\)/);
 
 // Webhook is only a trigger: payment is re-read from Asaas before D1 is mutated.
-assert.match(runtime, /payload\?\.payment\?\.id/);
+assert.match(runtime, /incoming\?\.payment\?\.id/);
 assert.match(runtime, /`\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
 assert.match(runtime, /mapPayment\(env,payment,config\.provider,environment\)/);
 assert.match(runtime, /billing_webhook_events/);
