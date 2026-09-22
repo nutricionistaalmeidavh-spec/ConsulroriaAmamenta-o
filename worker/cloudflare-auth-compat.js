@@ -218,7 +218,8 @@ export async function syncLegacyClinicalRows(env, accessToken, userId) {
       const key = await legacyRecordKey(table, row);
       await env.CLINICAL_DB.prepare(`INSERT INTO supabase_records(
         table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
-      ) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO NOTHING`).bind(
+      ) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET
+        owner_id=CASE WHEN supabase_records.owner_id IS NULL THEN excluded.owner_id ELSE supabase_records.owner_id END`).bind(
         table,
         key,
         row.owner_id || null,
