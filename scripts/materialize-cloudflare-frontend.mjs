@@ -7,6 +7,7 @@ const PUBLIC = resolve(ROOT, 'public');
 const OLD_ORIGIN = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
 const OLD_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 const MODE = process.argv.includes('--write') ? 'write' : 'check';
+const SAME_ORIGIN_EXPRESSION = "(globalThis.location?.origin || '')";
 
 const CONFIG_SEMANTIC_PATHS = new Set([
   'public/billing-v2.js',
@@ -16,6 +17,23 @@ const CONFIG_SEMANTIC_PATHS = new Set([
   'public/clinical-source/config.js',
   'public/clinical-source/core/app-shell.js',
   'public/clinical-source/core/lib/supabase-client.js',
+]);
+
+const SAME_ORIGIN_TARGETS = new Set([
+  'public/billing-v2.js',
+  'public/canonical-identity-runtime.js',
+  'public/clinical-care-flow-feature.js',
+  'public/clinical-source/config.js',
+  'public/clinical-source/features/clinical-note-feature.js',
+  'public/clinical-source/features/patient-fixes.js',
+  'public/demo-feature.js',
+  'public/documents-feature.js',
+  'public/feeding-assessment-history-feature.js',
+  'public/library-feature.js',
+  'public/library-organizer.js',
+  'public/member-feature.js',
+  'public/package-audit-feature.js',
+  'public/patient-fixes-v2.js',
 ]);
 
 const RETIRED_PATTERNS = [
@@ -47,8 +65,12 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   let next = String(source);
 
   if (/\.(?:js|mjs)$/i.test(relativePath)) {
-    next = replaceQuotedLiteral(next, OLD_ORIGIN, 'window.location.origin');
+    next = replaceQuotedLiteral(next, OLD_ORIGIN, SAME_ORIGIN_EXPRESSION);
     next = replaceQuotedLiteral(next, OLD_KEY, "'cloudflare-runtime'");
+  }
+
+  if (SAME_ORIGIN_TARGETS.has(relativePath)) {
+    next = next.replace(/\bwindow\.location\.origin\b/g, SAME_ORIGIN_EXPRESSION);
   }
 
   if (CONFIG_SEMANTIC_PATHS.has(relativePath)) {
@@ -62,7 +84,7 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
 
   if (relativePath === 'public/documents-feature.js') {
     next = next
-      .replace("String(CONFIG.API_BASE_URL||'')", 'String(CONFIG.API_BASE_URL||window.location.origin)')
+      .replace("String(CONFIG.API_BASE_URL||'')", `String(CONFIG.API_BASE_URL||${SAME_ORIGIN_EXPRESSION})`)
       .replace("String(CONFIG.CLIENT_RUNTIME_KEY||'')", "String(CONFIG.CLIENT_RUNTIME_KEY||'cloudflare-runtime')");
   }
 
@@ -157,8 +179,6 @@ export function runCloudflareFrontendMaterializer() {
   const clinicalChanged = ensureClinicalMaterializerHook();
 
   if (MODE === 'write' && clinicalChanged) {
-    // Re-run the clinical materializer after installing its normalization hook so the
-    // committed canonical source matches what dev/build will publish.
     const { spawnSync } = requireNodeChildProcess();
     const result = spawnSync(process.execPath, [resolve(ROOT, 'scripts/materialize-clinical-source.mjs'), '--write'], {
       cwd: ROOT,
