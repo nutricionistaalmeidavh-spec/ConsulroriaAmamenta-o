@@ -26,8 +26,8 @@ assert.match(domain, /ensureExplicitCommercialMarker/);
 assert.match(bootstrap, /saas_accounts/);
 assert.match(bootstrap, /access\?\.commercial===true/);
 assert.match(bootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
-assert.match(bootstrap, /migrated_saas_account/);
-assert.match(bootstrap, /supabase_saas_account/);
+assert.match(bootstrap, /source:'d1_saas_account'/);
+assert.doesNotMatch(bootstrap, /migrated_saas_account|supabase_saas_account|supabase\.co|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY/i);
 
 assert.doesNotMatch(plan, /\/rest\/v1\/entitlements/);
 assert.doesNotMatch(plan, /\/rest\/v1\/subscriptions/);
@@ -48,14 +48,14 @@ for (const required of [
   'delete from public.entitlements',
 ]) assert.ok(migration.toLowerCase().includes(required), `missing migration contract: ${required}`);
 
-assert.equal(versionedMigration, migration, 'versioned Supabase migration must exactly match the reviewed phase migration');
+assert.equal(versionedMigration, migration, 'versioned Supabase migration must exactly match the reviewed historical phase migration');
 assert.doesNotMatch(migration, /apply_pro_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /apply_freemium_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /create policy[\s\S]{0,80}mothers[\s\S]{0,80}for insert/i);
 assert.match(migration, /PDFs and other non-photo\/video clinical files/i);
 
-// Previous hybrid publisher remains available as rollback tooling and applies only
-// the reviewed central D1 migration before any optional Supabase finalization.
+// Historical rollback tooling is still present until the later operations-cleanup
+// block, but the active licensing bootstrap above must be D1-only.
 assert.match(publisher, /0008_product_license_authority\.sql/);
 assert.match(publisher, /d1 execute obra-na-mao-comercial --remote/);
 assert.match(publisher, /obra-na-mao-comercial\.nutricionistaalmeidavh\.workers\.dev/);
