@@ -12,7 +12,6 @@ const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me', '/api/clinical/mother
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
-  '/api/asaas/confirm-email',
   '/api/asaas/health',
   '/api/asaas/preauth-checkout',
   '/api/asaas/checkout',
@@ -79,7 +78,7 @@ export default {
     if (passwordCompatResponse) return withNoIndex(passwordCompatResponse);
 
     // Billing and partner attribution are Cloudflare D1-only. These routes are never
-    // allowed to fall through to the legacy Supabase-backed commercial worker.
+    // allowed to fall through to the legacy commercial worker.
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
