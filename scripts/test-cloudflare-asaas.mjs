@@ -1,115 +1,78 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const worker = readFileSync('worker/index.js', 'utf8');
+const runtime = readFileSync('worker/cloudflare-billing-runtime.js', 'utf8');
+const domain = readFileSync('worker/domain-entry.js', 'utf8');
+const schema = readFileSync('cloudflare/billing-schema.sql', 'utf8');
+const pendingSchema = readFileSync('cloudflare/billing-auth-schema.sql', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
 const planHtml = readFileSync('public/comercial/plano.html', 'utf8');
-const checkoutFunction = readFileSync('supabase/functions/saas-checkout/index.ts', 'utf8');
-const billingFunction = readFileSync('supabase/functions/saas-billing-webhook/index.ts', 'utf8');
 
 assert.match(wrangler, /"main"\s*:\s*"worker\/domain-entry\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
-assert.match(wrangler, /"not_found_handling"\s*:\s*"single-page-application"/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
-assert.doesNotMatch(wrangler, /"secrets"\s*:/);
 
-assert.match(worker, /env\.ASAAS_SECRET/);
-assert.doesNotMatch(worker, /env\.ASSAS_SECRET/);
-assert.match(worker, /env\.ASSAS_SANDBOX_SECRET/);
-assert.doesNotMatch(worker, /ASAAS_WEBHOOK_SECRET/);
-assert.doesNotMatch(worker, /asaas-access-token/);
-// The shared Worker also hosts owner-scoped clinical proxy routes, which legitimately
-// read the Supabase service-role secret. Keep the Asaas contract focused on preventing
-// hard-coded/leaked credentials rather than forbidding an unrelated runtime binding.
-assert.match(worker, /env\.SUPABASE_SERVICE_ROLE_KEY/);
-assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY\s*=\s*['"][^'"]+['"]/);
+// With CLINICAL_DB bound, every commercial billing route is intercepted before the legacy worker.
+assert.match(domain, /handleCloudflareBillingRuntime/);
+assert.match(domain, /cloudflareBillingResponse[\s\S]*coreWorker\.fetch/);
+assert.match(runtime, /if \(!env\.CLINICAL_DB \|\| !ROUTES\.has\(url\.pathname\)\) return null/);
+assert.match(runtime, /\/api\/asaas\/checkout/);
+assert.match(runtime, /\/api\/webhooks\/asaas/);
+assert.match(runtime, /\/api\/asaas\/preauth-checkout/);
+assert.match(runtime, /\/api\/admin\/partners/);
 
-// Production stays unchanged except for matching the configured runtime secret name.
-assert.match(worker, /\/api\/asaas\/checkout/);
-assert.match(worker, /\/api\/webhooks\/asaas/);
-assert.match(worker, /https:\/\/api\.asaas\.com\/v3/);
-assert.match(worker, /https:\/\/asaas\.com\/checkoutSession\/show\?id=/);
-assert.match(worker, /cloudflareSecretsRequired:\s*\[environment === 'sandbox' \? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET',\s*'LICENSE_SERVICE_SECRET',\s*'SUPABASE_SERVICE_ROLE_KEY'\]/);
+// Billing is Cloudflare/D1-native: no Supabase Edge Function, PostgreSQL RPC or service-role dependency.
+assert.doesNotMatch(runtime, /supabase/i);
+assert.doesNotMatch(runtime, /\/functions\/v1\//);
+assert.doesNotMatch(runtime, /\/rest\/v1\/rpc\//);
+assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
+assert.match(runtime, /CLINICAL_DB/);
+assert.match(runtime, /billingBackend:'cloudflare-d1'/);
+assert.match(runtime, /webhookVerification:'asaas_api_lookup_and_cloudflare_d1_reconciliation'/);
+assert.match(runtime, /recurringReconciliation:'subscription_id'/);
 
-// Sandbox is isolated behind separate routes and a separate temporary secret.
-assert.match(worker, /\/api\/sandbox\/asaas\/health/);
-assert.match(worker, /\/api\/sandbox\/asaas\/checkout/);
-assert.match(worker, /\/api\/sandbox\/webhooks\/asaas/);
-assert.match(worker, /https:\/\/api-sandbox\.asaas\.com\/v3/);
-assert.match(worker, /https:\/\/sandbox\.asaas\.com\/checkoutSession\/show\//);
-assert.match(worker, /ASSAS_SANDBOX_SECRET/);
-assert.match(worker, /asaas_sandbox/);
-assert.match(worker, /cloudflare-asaas-sandbox/);
+// Provider calls remain server-side and secrets are only read from Worker env bindings.
+assert.match(runtime, /env\.ASAAS_SECRET/);
+assert.match(runtime, /env\.ASSAS_SANDBOX_SECRET/);
+assert.doesNotMatch(runtime, /ASAAS_SECRET\s*=\s*['"][^'"]+['"]/);
+assert.doesNotMatch(runtime, /ASSAS_SANDBOX_SECRET\s*=\s*['"][^'"]+['"]/);
+assert.match(runtime, /https:\/\/api\.asaas\.com\/v3/);
+assert.match(runtime, /https:\/\/api-sandbox\.asaas\.com\/v3/);
+assert.match(runtime, /\/wallets\//);
 
-// Health must distinguish "secret exists" from "credential actually authenticates" without leaking it.
-assert.match(worker, /\$aact_hmlg_/);
-assert.match(worker, /\$aact_prod_/);
-assert.match(worker, /credentialEnvironment/);
-assert.match(worker, /asaasApiValid/);
-assert.match(worker, /asaasAuthStatus/);
-assert.match(worker, /asaasFetch\(env, '\/wallets\/', \{ method: 'GET' \}, environment\)/);
+// D1 owns the canonical billing state and partner snapshots.
+for (const table of [
+  'billing_plan_catalog','billing_checkout_requests','subscriptions','billing_webhook_events','partners','partner_attributions',
+]) {
+  assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, 'i'));
+}
+assert.match(pendingSchema, /CREATE TABLE IF NOT EXISTS billing_pending_signups/i);
+assert.match(pendingSchema, /password_hash/i);
+assert.match(pendingSchema, /signup_nonce_hash/i);
+assert.doesNotMatch(pendingSchema, /password_plain|plaintext/i);
 
-// Canonical list prices remain the fallback, while an attributed checkout may use the
-// server-resolved effective price. The browser never sends an amount to Asaas.
-assert.match(worker, /planCode === 'pro_monthly' \? 4990 : 49900/);
-assert.match(worker, /effectivePriceCents/);
-assert.match(worker, /itemValue = effectivePriceCents \/ 100/);
-assert.match(worker, /value:\s*itemValue/);
-assert.match(worker, /maxInstallmentCount:\s*Math\.max\(1, Number\(plan\?\.installment_max \|\| 12\)\)/);
-assert.match(worker, /chargeTypes:\s*\['RECURRENT'\]/);
+// Asaas amounts come from the D1 plan/partner snapshot, never from browser-supplied money.
+assert.match(runtime, /resolvePartnerOffer/);
+assert.match(runtime, /totalCents/);
+assert.match(runtime, /discountCents/);
+assert.match(runtime, /commissionCents/);
+assert.match(runtime, /value: priced\.totalCents \/ 100/);
+assert.match(runtime, /chargeTypes: \['RECURRENT'\]/);
+assert.match(runtime, /maxInstallmentCount: Math\.max\(1, Number\(priced\.plan\.installment_max \|\| 12\)\)/);
 
-// Checkout is registered in Supabase using the authenticated user's JWT before and after provider creation.
-assert.match(worker, /\/functions\/v1\/saas-checkout/);
-assert.match(worker, /action:\s*'create_request'/);
-assert.match(worker, /action:\s*'attach_provider_checkout'/);
-assert.match(worker, /saas_checkout:\$\{requestId\}/);
-assert.match(worker, /externalCheckoutId:\s*result\.id/);
-assert.match(worker, /registered\.payload\?\.plan/);
-
-// A webhook is only a trigger. The provider payment is re-read before forwarding.
-assert.match(worker, /payload\?\.payment\?\.id/);
-assert.match(worker, /\/payments\/\$\{encodeURIComponent\(paymentId\)\}/);
-assert.match(worker, /\/functions\/v1\/saas-billing-webhook/);
-assert.match(worker, /'x-asaas-api-key'/);
-assert.match(worker, /'x-billing-source'/);
-assert.match(worker, /JSON\.stringify\(\{ paymentId \}\)/);
-assert.doesNotMatch(worker, /\/rest\/v1\/rpc\/apply_billing_state/);
-assert.doesNotMatch(worker, /billing_webhook_events\?/);
-
-// Supabase checkout adapter supports production and sandbox providers without arbitrary provider input.
-assert.match(checkoutFunction, /create_request/);
-assert.match(checkoutFunction, /attach_provider_checkout/);
-assert.match(checkoutFunction, /owner_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
-assert.match(checkoutFunction, /external_checkout_id/);
-assert.match(checkoutFunction, /status:\s*'checkout_created'/);
-assert.match(checkoutFunction, /asaas_sandbox/);
-assert.match(checkoutFunction, /environment/);
-assert.match(checkoutFunction, /resolve_partner_offer/);
-assert.match(checkoutFunction, /effective_price_cents/);
-
-// Billing bridge independently verifies against the matching Asaas environment.
-assert.match(billingFunction, /x-asaas-api-key/);
-assert.match(billingFunction, /x-billing-source/);
-assert.match(billingFunction, /api-sandbox\.asaas\.com\/v3/);
-assert.match(billingFunction, /cloudflare-asaas-sandbox/);
-assert.match(billingFunction, /const provider = environment === 'sandbox' \? 'asaas_sandbox' : 'asaas'/);
-assert.match(billingFunction, /checkoutSession=\$\{encodeURIComponent\(checkoutRequest\.external_checkout_id\)\}/);
-assert.match(billingFunction, /saas_checkout:/);
-assert.match(billingFunction, /apply_billing_state/);
-assert.match(billingFunction, /apply_partner_attribution_state/);
-assert.match(billingFunction, /billing_webhook_events/);
-assert.doesNotMatch(billingFunction, /BILLING_WEBHOOK_SECRET/);
-assert.doesNotMatch(billingFunction, /BILLING_PROVIDER/);
-
-assert.doesNotMatch(worker, /key-fingerprint/);
-assert.doesNotMatch(worker, /sha256Hex/);
-assert.doesNotMatch(worker, /ASAAS_SECRET\s*=\s*['"][^'"]+['"]/);
-assert.doesNotMatch(worker, /ASSAS_SANDBOX_SECRET\s*=\s*['"][^'"]+['"]/);
+// Webhook is only a trigger: payment is re-read from Asaas before D1 is mutated.
+assert.match(runtime, /payload\?\.payment\?\.id/);
+assert.match(runtime, /`\/payments\/\$\{encodeURIComponent\(paymentId\)\}`/);
+assert.match(runtime, /mapPayment\(env,payment,config\.provider,environment\)/);
+assert.match(runtime, /billing_webhook_events/);
+assert.match(runtime, /ON CONFLICT\(provider,external_event_id\) DO NOTHING/);
+assert.match(runtime, /external_subscription_id=\?/);
+assert.match(runtime, /renewal:mapped\.renewal/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
 assert.doesNotMatch(plan, /functions\/v1\/saas-checkout/);
 assert.match(planHtml, /checkout é criado no Asaas pelo backend do Cloudflare/i);
 
-console.log('Cloudflare Asaas production + sandbox contract: OK');
+console.log('Cloudflare D1 + Asaas production/sandbox contract: OK');
