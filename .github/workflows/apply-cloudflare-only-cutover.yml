@@ -1,0 +1,35 @@
+name: Apply Cloudflare-only cutover once
+
+on:
+  push:
+    branches:
+      - refactor/cloudflare-only-runtime
+    paths:
+      - '.github/workflows/apply-cloudflare-only-cutover.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/cloudflare-only-runtime
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply cutover transformations
+        run: node scripts/apply-cloudflare-only-cutover.mjs
+      - name: Commit generated cutover and remove one-shot workflow
+        run: |
+          rm .github/workflows/apply-cloudflare-only-cutover.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "refactor: remove legacy Supabase runtime paths"
+          git push origin HEAD:refactor/cloudflare-only-runtime
