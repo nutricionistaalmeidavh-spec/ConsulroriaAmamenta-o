@@ -1,4 +1,4 @@
-const SB_URL=window.location.origin;
+const SB_URL=(globalThis.location?.origin || '');
 const SB_KEY='cloudflare-runtime';
 const PORTAL_HASH='#mae';
 const MKEY='debora-mother-portal-session-v1';

@@ -1,7 +1,7 @@
 import {createSingleFlight} from './runtime-guards.js';
 
 const PA_CONFIG=globalThis.DEBORA_APP_CONFIG||{};
-const PA_URL=PA_CONFIG.API_BASE_URL||window.location.origin;
+const PA_URL=PA_CONFIG.API_BASE_URL||(globalThis.location?.origin || '');
 const PA_KEY=PA_CONFIG.CLIENT_RUNTIME_KEY||'';
 const paFlight=createSingleFlight();
 let paTimer=null;

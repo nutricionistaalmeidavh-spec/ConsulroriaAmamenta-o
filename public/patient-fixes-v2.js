@@ -1,4 +1,4 @@
-const PF_SB=window.location.origin;
+const PF_SB=(globalThis.location?.origin || '');
 const PF_KEY='cloudflare-runtime';
 const PF_BUCKET='clinical-media';
 const PF_DRAFT='debora-billing-draft-v4';

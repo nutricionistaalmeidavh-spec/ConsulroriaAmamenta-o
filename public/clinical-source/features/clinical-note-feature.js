@@ -1,4 +1,4 @@
-const CN_SB_URL=window.location.origin;
+const CN_SB_URL=(globalThis.location?.origin || '');
 const CN_SB_KEY='cloudflare-runtime';
 const cnState={encounter:null,mother:null,babies:[],addenda:[],revisions:[],saveTimer:null,saving:false,pendingButton:null,direction:'forward',opening:false};
 

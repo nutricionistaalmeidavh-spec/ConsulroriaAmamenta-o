@@ -1,5 +1,5 @@
 const BV_CONFIG=globalThis.DEBORA_APP_CONFIG||{};
-const BV_URL=BV_CONFIG.API_BASE_URL||window.location.origin;
+const BV_URL=BV_CONFIG.API_BASE_URL||(globalThis.location?.origin || '');
 const BV_KEY=BV_CONFIG.CLIENT_RUNTIME_KEY||'';
 const BV_DRAFT='debora-billing-v2-draft';
 let bvBusy=false,bvTimer=null,bvLoadedAppointment=null,bvLoadedMother=null,bvPatientPlanRevision=0;

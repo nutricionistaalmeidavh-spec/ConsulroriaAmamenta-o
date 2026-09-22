@@ -1,5 +1,5 @@
 const CONFIG=globalThis.DEBORA_APP_CONFIG||{};
-const API_BASE_URL=String(CONFIG.API_BASE_URL||window.location.origin).replace(/\/$/,'');
+const API_BASE_URL=String(CONFIG.API_BASE_URL||(globalThis.location?.origin || '')).replace(/\/$/,'');
 const CLIENT_RUNTIME_KEY=String(CONFIG.CLIENT_RUNTIME_KEY||'cloudflare-runtime');
 
 function tokenWalk(v){
