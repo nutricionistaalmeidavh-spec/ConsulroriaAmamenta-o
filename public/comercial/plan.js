@@ -2,11 +2,63 @@ const runtime = window.SAAS_RUNTIME_CONFIG || {};
 const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
 const publishableKey = String(runtime.supabasePublishableKey || '');
 const SESSION_KEY = 'commercial.saas.session.v1';
+const REFERRAL_KEY = 'commercial.saas.partner-code.v1';
+const REFERRAL_SOURCE_KEY = 'commercial.saas.partner-source.v1';
 
 const authRequired = document.querySelector('#auth-required');
 const content = document.querySelector('#plan-content');
 const message = document.querySelector('#plan-message');
 const logoutButton = document.querySelector('#logout-button');
+const pageUrl = new URL(window.location.href);
+
+function normalizePartnerCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '').slice(0, 64);
+}
+
+function rememberPartnerCode(code, source = 'manual_code') {
+  const normalized = normalizePartnerCode(code);
+  if (!normalized) {
+    sessionStorage.removeItem(REFERRAL_KEY);
+    sessionStorage.removeItem(REFERRAL_SOURCE_KEY);
+    return '';
+  }
+  sessionStorage.setItem(REFERRAL_KEY, normalized);
+  sessionStorage.setItem(REFERRAL_SOURCE_KEY, source === 'ref_link' ? 'ref_link' : 'manual_code');
+  return normalized;
+}
+
+const requestedReferral = normalizePartnerCode(pageUrl.searchParams.get('ref'));
+if (requestedReferral) rememberPartnerCode(requestedReferral, 'ref_link');
+
+function currentPartnerCode() {
+  return normalizePartnerCode(sessionStorage.getItem(REFERRAL_KEY) || '');
+}
+
+function currentAttributionSource() {
+  return sessionStorage.getItem(REFERRAL_SOURCE_KEY) === 'ref_link' ? 'ref_link' : 'manual_code';
+}
+
+function ensurePartnerCodeField() {
+  const section = document.querySelector('#upgrade-section');
+  if (!section || section.querySelector('input[name="partnerCode"]')) return;
+  const box = document.createElement('div');
+  box.className = 'partner-code-box';
+  const label = document.createElement('label');
+  label.textContent = 'Cupom ou código do parceiro';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.name = 'partnerCode';
+  input.maxLength = 64;
+  input.autocomplete = 'off';
+  input.placeholder = 'Opcional';
+  input.value = currentPartnerCode();
+  input.addEventListener('change', () => rememberPartnerCode(input.value, 'manual_code'));
+  label.appendChild(input);
+  const help = document.createElement('small');
+  help.textContent = 'Use o código de quem indicou você. Se houver desconto configurado, ele será calculado no servidor antes do Asaas.';
+  box.append(label, help);
+  section.querySelector('.section-heading')?.after(box);
+}
 
 function readSession() {
   try {
@@ -88,13 +140,24 @@ function checkoutReturnMessage() {
 
 async function requestCheckout(planCode, token) {
   setMessage('Preparando checkout seguro no Asaas…');
+  const input = document.querySelector('#upgrade-section input[name="partnerCode"]');
+  const typedCode = normalizePartnerCode(input?.value || '');
+  const existingCode = currentPartnerCode();
+  const attributionSource = typedCode && typedCode === existingCode ? currentAttributionSource() : 'manual_code';
+  const partnerCode = typedCode ? rememberPartnerCode(typedCode, attributionSource) : rememberPartnerCode('', 'manual_code');
   const response = await fetch('/api/asaas/checkout', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ planCode }),
+    body: JSON.stringify({ planCode, partnerCode, attributionSource }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.details?.[0]?.description || payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
+  if (!response.ok) {
+    const errors = {
+      invalid_partner_code: 'Cupom ou código do parceiro inválido ou inativo.',
+      partner_lookup_failed: 'Não foi possível validar o código do parceiro agora.',
+    };
+    throw new Error(errors[payload?.error] || payload?.details?.[0]?.description || payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
+  }
   if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
   window.location.assign(payload.checkoutUrl);
 }
@@ -148,6 +211,7 @@ async function init() {
 
     showSignedIn();
     paintAccess(access, patientCount);
+    ensurePartnerCodeField();
     document.querySelector('#account-email').textContent = user.email || 'Conta autenticada';
     document.querySelector('#account-name').textContent = profile.professional_name || profile.business_name || 'Perfil profissional';
 
