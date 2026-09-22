@@ -1,3 +1,4 @@
+import './cloudflare-fetch-bridge.js';
 import { unzipSync, strFromU8 } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 

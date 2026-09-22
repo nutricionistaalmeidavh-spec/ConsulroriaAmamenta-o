@@ -1,17 +1,17 @@
 {
-  "version": 2,
-  "strategy": "canonical-first-with-legacy-fallback",
+  "version": 3,
+  "strategy": "cloudflare-d1-r2-runtime-with-legacy-auth-bridge",
   "generatedFromLegacyArtifacts": true,
   "modules": {
     "config.js": {
       "promoted": true,
-      "source": "base:config.js",
-      "sha256": "6bfd43752edaaae72790d51a697fbb0936eb9e1fca1c43580c0089cdf77f078b"
+      "source": "cloudflare-license-authority:config.js",
+      "sha256": "aa3c147de5855c6e1221b2caa464ff0eb300042650c66032684a4956c6bb61de"
     },
     "core/app-shell.js": {
       "promoted": true,
-      "source": "agenda:core/app-shell.js",
-      "sha256": "08bd79c8f1ab5a79fa8913280f6e6c0a0bae9ec60db737eccf497d75602f2393"
+      "source": "agenda:core/app-shell.js+cloudflare-runtime-config",
+      "sha256": "2045a92e31de27eae018b720c26c702645ef5bee1c375291edd98128f7e6de8a"
     },
     "core/lib/app-data.js": {
       "promoted": true,
@@ -51,7 +51,7 @@
     "core/lib/supabase-client.js": {
       "promoted": true,
       "source": "cloudflare-license-authority:core/lib/supabase-client.js",
-      "sha256": "ea8fa860fe75022c915d56cdb7bbae803d1e673e76bb4ec5c88eaac90e4a5d0d"
+      "sha256": "4b6012c9f1efc4fed12c3e9b5712ad04e0ce023010951a4aa3ad9e25dbe148ed"
     },
     "features/clinical-note-feature.css": {
       "promoted": true,

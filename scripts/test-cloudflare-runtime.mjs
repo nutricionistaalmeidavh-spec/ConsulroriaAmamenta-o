@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 const root = resolve(import.meta.dirname, '..');
 const runtimePath = resolve(root, 'worker', 'cloudflare-clinical-runtime.js');
@@ -49,9 +50,14 @@ assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_refresh_sessions/);
 assert.match(clientOverlay, /sessionStorage = globalThis\.localStorage/);
 assert.match(canonicalIdentity, /\[localStorage, sessionStorage\]/);
 
-// Commercial checkout remains on its proven transition path while clinical data
-// and clinical auth move to Cloudflare. Cloudflare accepts those legacy tokens.
-assert.match(commercialConfig, /zxowxdfhtksevhnjmeyu\.supabase\.co/);
+// Billing has moved to D1. Evaluate the published configuration instead of
+// requiring the retired Supabase URL, which prevented production cutover.
+const configWindow = { location: { origin: 'https://app.example.test' } };
+runInNewContext(commercialConfig, { window: configWindow });
+assert.equal(configWindow.SAAS_RUNTIME_CONFIG.apiBaseUrl, configWindow.location.origin);
+assert.equal(configWindow.SAAS_RUNTIME_CONFIG.backend, 'cloudflare-d1');
+assert.equal(configWindow.SAAS_RUNTIME_CONFIG.clientRuntimeKey, 'cloudflare-runtime');
+// Existing sessions can still authenticate during migration.
 assert.match(runtime, /allowLegacy = true/);
 
 // Legacy clinical feature modules still containing the old Supabase origin are redirected
@@ -64,6 +70,9 @@ assert.match(bridge, /localStorage\.setItem\(SESSION_KEY, legacy\)/);
 const bridgePos = index.indexOf('/src/cloudflare-fetch-bridge.js');
 const bootstrapPos = index.indexOf('/src/bootstrap.js');
 assert.ok(bridgePos >= 0 && bootstrapPos >= 0 && bridgePos < bootstrapPos, 'fetch bridge must load before bootstrap');
+const appEntry = readFileSync(resolve(root, 'app', 'index.html'), 'utf8');
+assert.ok(appEntry.indexOf('/src/cloudflare-fetch-bridge.js') >= 0);
+assert.ok(appEntry.indexOf('/src/cloudflare-fetch-bridge.js') < appEntry.indexOf('/src/bootstrap.js'), '/app must install the same bridge before bootstrap');
 
 // Same-origin clinical APIs carry sensitive health data and must never enter the PWA cache.
 for (const prefix of ['/api/','/auth/','/rest/','/storage/']) assert.ok(serviceWorker.includes(`'${prefix}'`), `service worker missing private prefix ${prefix}`);
