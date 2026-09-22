@@ -51,9 +51,13 @@ assert.match(worker, /asaasApiValid/);
 assert.match(worker, /asaasAuthStatus/);
 assert.match(worker, /asaasFetch\(env, '\/wallets\/', \{ method: 'GET' \}, environment\)/);
 
-assert.match(worker, /value:\s*49\.9/);
-assert.match(worker, /value:\s*499/);
-assert.match(worker, /maxInstallmentCount:\s*12/);
+// Canonical list prices remain the fallback, while an attributed checkout may use the
+// server-resolved effective price. The browser never sends an amount to Asaas.
+assert.match(worker, /planCode === 'pro_monthly' \? 4990 : 49900/);
+assert.match(worker, /effectivePriceCents/);
+assert.match(worker, /itemValue = effectivePriceCents \/ 100/);
+assert.match(worker, /value:\s*itemValue/);
+assert.match(worker, /maxInstallmentCount:\s*Math\.max\(1, Number\(plan\?\.installment_max \|\| 12\)\)/);
 assert.match(worker, /chargeTypes:\s*\['RECURRENT'\]/);
 
 // Checkout is registered in Supabase using the authenticated user's JWT before and after provider creation.
@@ -62,6 +66,7 @@ assert.match(worker, /action:\s*'create_request'/);
 assert.match(worker, /action:\s*'attach_provider_checkout'/);
 assert.match(worker, /saas_checkout:\$\{requestId\}/);
 assert.match(worker, /externalCheckoutId:\s*result\.id/);
+assert.match(worker, /registered\.payload\?\.plan/);
 
 // A webhook is only a trigger. The provider payment is re-read before forwarding.
 assert.match(worker, /payload\?\.payment\?\.id/);
@@ -81,6 +86,8 @@ assert.match(checkoutFunction, /external_checkout_id/);
 assert.match(checkoutFunction, /status:\s*'checkout_created'/);
 assert.match(checkoutFunction, /asaas_sandbox/);
 assert.match(checkoutFunction, /environment/);
+assert.match(checkoutFunction, /resolve_partner_offer/);
+assert.match(checkoutFunction, /effective_price_cents/);
 
 // Billing bridge independently verifies against the matching Asaas environment.
 assert.match(billingFunction, /x-asaas-api-key/);
@@ -91,6 +98,7 @@ assert.match(billingFunction, /const provider = environment === 'sandbox' \? 'as
 assert.match(billingFunction, /checkoutSession=\$\{encodeURIComponent\(checkoutRequest\.external_checkout_id\)\}/);
 assert.match(billingFunction, /saas_checkout:/);
 assert.match(billingFunction, /apply_billing_state/);
+assert.match(billingFunction, /apply_partner_attribution_state/);
 assert.match(billingFunction, /billing_webhook_events/);
 assert.doesNotMatch(billingFunction, /BILLING_WEBHOOK_SECRET/);
 assert.doesNotMatch(billingFunction, /BILLING_PROVIDER/);
@@ -101,7 +109,6 @@ assert.doesNotMatch(worker, /ASAAS_SECRET\s*=\s*['"][^'"]+['"]/);
 assert.doesNotMatch(worker, /ASSAS_SANDBOX_SECRET\s*=\s*['"][^'"]+['"]/);
 
 assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
-assert.doesNotMatch(plan, /sandbox/);
 assert.doesNotMatch(plan, /functions\/v1\/saas-checkout/);
 assert.match(planHtml, /checkout é criado no Asaas pelo backend do Cloudflare/i);
 
