@@ -24,11 +24,20 @@ on:
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
       - 'scripts/test-cloudflare-billing-d1.mjs'
+      - 'scripts/test-cloudflare-runtime.mjs'
+      - 'scripts/test-cloudflare-license-authority.mjs'
+      - 'scripts/normalize-growth-runtime.mjs'
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
+      - 'tests/block-1-2-hygiene.test.mjs'
+      - 'tests/cloudflare-client-refresh.test.mjs'
+      - 'tests/cloudflare-functional-regressions.test.mjs'
+      - 'tests/patient-save-runtime.test.mjs'
+      - 'patch-source/legacy/growth-feature.supabase-template.js'
+      - 'public/growth-feature.js'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -55,11 +64,20 @@ on:
       - 'scripts/test-billing-scaffold.mjs'
       - 'scripts/test-cloudflare-asaas.mjs'
       - 'scripts/test-cloudflare-billing-d1.mjs'
+      - 'scripts/test-cloudflare-runtime.mjs'
+      - 'scripts/test-cloudflare-license-authority.mjs'
+      - 'scripts/normalize-growth-runtime.mjs'
       - 'scripts/test-production-deploy-contract.mjs'
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
+      - 'tests/block-1-2-hygiene.test.mjs'
+      - 'tests/cloudflare-client-refresh.test.mjs'
+      - 'tests/cloudflare-functional-regressions.test.mjs'
+      - 'tests/patient-save-runtime.test.mjs'
+      - 'patch-source/legacy/growth-feature.supabase-template.js'
+      - 'public/growth-feature.js'
       - 'cloudflare/**'
       - 'public/comercial/**'
       - 'public/debora/**'
@@ -118,6 +136,8 @@ jobs:
         run: node --test tests/package-lifecycle-cloudflare.test.mjs
       - name: Validate D1-only authentication
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
+      - name: Validate Block 1 and 2 Cloudflare regressions
+        run: npm run test:cloudflare-regressions
       - name: Validate SEO API contract
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
@@ -127,6 +147,8 @@ jobs:
           node --check worker/index.js
           node --check worker/cloudflare-auth-runtime.js
           node --check worker/cloudflare-auth-compat.js
+          node --check worker/cloudflare-clinical-runtime.js
+          node --check worker/cloudflare-clinical-legacy-runtime.js
           node --check worker/cloudflare-billing-runtime.js
           node --check worker/package-lifecycle-runtime.js
           node --check worker/patient-write-runtime.js

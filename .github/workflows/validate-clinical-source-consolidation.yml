@@ -11,6 +11,7 @@ on:
       - 'index.html'
       - 'app/**'
       - 'vite.config.js'
+      - 'package.json'
       - 'src/bootstrap.js'
       - 'src/app-identity.js'
       - 'public/manifest.webmanifest'
@@ -51,7 +52,9 @@ jobs:
       - name: Validate current Cloudflare Asaas contract
         run: node scripts/test-cloudflare-asaas.mjs
       - name: Syntax-check Cloudflare worker
-        run: node --check worker/index.js
+        run: |
+          node --check worker/index.js
+          node --check worker/cloudflare-clinical-runtime.js
       - run: npm run build
       - name: Verify canonical runtime is published
         run: |
