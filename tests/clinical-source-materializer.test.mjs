@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -23,6 +23,14 @@ const expectedCanonicalFiles = [
   'public/clinical-source/features/clinical-note-feature.js',
   'public/clinical-source/features/clinical-note-feature.css'
 ];
+
+test('dev and build materialize the canonical clinical runtime before serving or bundling', () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  for (const scriptName of ['dev', 'build']) {
+    assert.match(pkg.scripts?.[scriptName] || '', /materialize-clinical-source\.mjs --write/,
+      `${scriptName} must materialize clinical-source before use`);
+  }
+});
 
 test('materializer regenerates and then verifies the canonical clinical runtime deterministically', () => {
   assert.equal(existsSync(scriptPath), true, 'clinical source materializer must exist');
