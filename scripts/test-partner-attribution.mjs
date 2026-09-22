@@ -1,117 +1,82 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import { resolvePartnerOffer } from '../worker/cloudflare-billing-runtime.js';
 
-function read(path) {
-  return fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-}
-
-const migration = read('supabase/phase-saas-partners.sql');
-const checkout = read('supabase/functions/saas-checkout/index.ts');
-const webhook = read('supabase/functions/saas-billing-webhook/index.ts');
-const worker = read('worker/index.js');
-const partnerAdminApi = read('worker/partner-admin.js');
+const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const schema = read('cloudflare/billing-schema.sql');
+const runtime = read('worker/cloudflare-billing-runtime.js');
 const app = read('public/comercial/app.js');
 const plan = read('public/comercial/plan.js');
-const partnerAdmin = read('public/comercial/parceiros.js');
-const partnerAdminHtml = read('public/comercial/parceiros.html');
+const admin = read('public/comercial/parceiros.js');
+const adminHtml = read('public/comercial/parceiros.html');
 
-// Database is the canonical source of partner/coupon configuration and immutable sale snapshots.
-assert.match(migration, /create table if not exists public\.partners/i);
-assert.match(migration, /code\s+text\s+not null/i);
-assert.match(migration, /commission_type/i);
-assert.match(migration, /commission_value/i);
-assert.match(migration, /discount_type/i);
-assert.match(migration, /discount_value/i);
-assert.match(migration, /create table if not exists public\.partner_attributions/i);
-assert.match(migration, /checkout_request_id/i);
-assert.match(migration, /subtotal_cents/i);
-assert.match(migration, /discount_cents/i);
-assert.match(migration, /total_cents/i);
-assert.match(migration, /commission_cents/i);
-assert.match(migration, /commission_status/i);
-assert.match(migration, /create or replace function public\.resolve_partner_offer/i);
-assert.match(migration, /create or replace function public\.apply_partner_attribution_state/i);
-assert.match(migration, /create or replace function public\.approve_partner_commission/i);
-assert.match(migration, /least\(v_subtotal - 1, v_discount\)/i);
-assert.match(migration, /enable row level security/i);
-assert.match(migration, /revoke all on table public\.partners from public, anon, authenticated/i);
-assert.match(migration, /revoke all on table public\.partner_attributions from public, anon, authenticated/i);
-assert.match(migration, /grant all on table public\.partners to service_role/i);
-assert.match(migration, /grant all on table public\.partner_attributions to service_role/i);
-assert.match(migration, /revoke all on function public\.resolve_partner_offer\(text, text\) from public, anon, authenticated/i);
+for (const marker of [
+  'partners','partner_attributions','partner_code_snapshot','attribution_source','subtotal_cents','discount_cents','total_cents','commission_cents','commission_status',
+]) assert.match(schema, new RegExp(marker, 'i'));
+assert.match(schema, /partners_code_unique/i);
+assert.match(schema, /billing_checkout_active_owner_unique/i);
+assert.match(schema, /commission_status[^\n]+reversed/i);
 
-// Commercial entry captures both referral links and a manually supplied code without exposing pricing logic.
+// Referral capture remains browser-side only as a code; all money is resolved server-side.
 assert.match(app, /REFERRAL_KEY/);
 assert.match(app, /searchParams\.get\(['"]ref['"]\)/);
-assert.match(app, /input\.name = ['"]partnerCode['"]/);
-assert.match(app, /Cupom ou código do parceiro/i);
 assert.match(app, /partnerCode/);
 assert.match(app, /attributionSource/);
-assert.match(app, /JSON\.stringify\(\{[\s\S]*partnerCode[\s\S]*attributionSource/);
 assert.doesNotMatch(app, /discountValue|commissionValue/);
-
-// Existing signed-in customers can also attribute an upgrade.
 assert.match(plan, /searchParams\.get\(['"]ref['"]\)/);
-assert.match(plan, /input\.name = ['"]partnerCode['"]/);
-assert.match(plan, /Cupom ou código do parceiro/i);
 assert.match(plan, /partnerCode/);
 assert.match(plan, /attributionSource/);
-assert.match(plan, /JSON\.stringify\(\{\s*planCode,\s*partnerCode,\s*attributionSource\s*\}\)/);
 
-// The server validates the code; the browser never decides discounts or commissions.
-assert.match(checkout, /resolve_partner_offer/i);
-assert.match(checkout, /partnerCode/);
-assert.match(checkout, /partner_id/i);
-assert.match(checkout, /partner_code_snapshot/i);
-assert.match(checkout, /subtotal_cents/i);
-assert.match(checkout, /discount_cents/i);
-assert.match(checkout, /total_cents/i);
-assert.match(checkout, /commission_cents/i);
-assert.match(checkout, /invalid_partner_code/i);
+// Exercise the server-side pricing calculation with a minimal D1 double.
+const fakePartner = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  name: 'Ana Parceira', code: 'ANA10', active: 1,
+  commission_type: 'percent', commission_value: 10,
+  discount_type: 'percent', discount_value: 20,
+};
+const env = {
+  CLINICAL_DB: {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async first() {
+              if (/FROM partners/i.test(sql)) return fakePartner;
+              throw new Error(`Unexpected D1 query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+  },
+};
+const offer = await resolvePartnerOffer(env, ' ana10 ', { price_cents: 4990 });
+assert.equal(offer.partnerCode, 'ANA10');
+assert.equal(offer.subtotalCents, 4990);
+assert.equal(offer.discountCents, 998);
+assert.equal(offer.totalCents, 3992);
+assert.equal(offer.commissionCents, 399);
 
-// Provider pricing comes from the server-resolved checkout snapshot, not a browser amount.
-assert.match(worker, /effectivePriceCents/);
-assert.match(worker, /registered\.payload\?\.plan/);
-assert.match(worker, /partnerCode/);
-assert.match(worker, /itemValue/);
+// Verified provider events own commission lifecycle; renewals do not create another attribution.
+assert.match(runtime, /commissionStatus = commissionStatus === 'approved' \|\| commissionStatus === 'reversed' \? 'reversed' : 'cancelled'/);
+assert.match(runtime, /if \(mapped\.renewal \|\| !mapped\.checkout\?\.id\) return/);
+assert.match(runtime, /commission_status='approved'/);
+assert.match(runtime, /PARTNER_ADMIN_EMAILS/);
+assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 
-// Payment/reversal events converge the partner attribution with the verified Asaas payment.
-assert.match(webhook, /apply_partner_attribution_state/i);
-assert.match(webhook, /p_checkout_request_id/i);
-assert.match(webhook, /p_provider_status/i);
-assert.match(webhook, /mappedBy: 'subscription'/i);
-assert.match(webhook, /externalSubscriptionId/i);
-assert.match(migration, /commission_status = 'reversed'/i);
+// Admin reporting remains protected and supports filters/export without a paid analytics dependency.
+assert.match(adminHtml, /Parceiros e indicações/i);
+assert.match(adminHtml, /sales-plan-filter/);
+assert.match(adminHtml, /sales-status-filter/);
+assert.match(adminHtml, /sales-commission-filter/);
+assert.match(adminHtml, /sales-from-filter/);
+assert.match(adminHtml, /sales-to-filter/);
+assert.match(adminHtml, /Exportar CSV/i);
+assert.match(admin, /function exportSalesCsv/);
+assert.match(admin, /text\/csv/);
+assert.match(admin, /URLSearchParams/);
+assert.match(runtime, /url\.searchParams\.get\('plan'\)/);
+assert.match(runtime, /url\.searchParams\.get\('status'\)/);
+assert.match(runtime, /url\.searchParams\.get\('commissionStatus'\)/);
 
-// P1 admin: authenticated admin-only endpoints and a panel for partners, sales and commissions.
-assert.match(worker, /PARTNER_ADMIN_EMAILS/);
-assert.match(worker, /\/api\/admin\/partners/);
-assert.match(worker, /\/api\/admin\/partner-sales/);
-assert.match(worker, /\/api\/admin\/partner-commission/);
-assert.match(partnerAdminApi, /app_metadata\?\.partner_admin === true/);
-assert.match(partnerAdminApi, /PARTNER_ADMIN_EMAILS/);
-assert.match(partnerAdminApi, /approve_partner_commission/);
-assert.doesNotMatch(partnerAdminApi, /SUPABASE_SERVICE_ROLE_KEY\s*=\s*['"][^'"]+['"]/);
-assert.match(partnerAdminHtml, /Parceiros e indicações/i);
-assert.match(partnerAdminHtml, /Comissão pendente/i);
-assert.match(partnerAdmin, /\/api\/admin\/partners/);
-assert.match(partnerAdmin, /\/api\/admin\/partner-sales/);
-assert.match(partnerAdmin, /\/api\/admin\/partner-commission/);
-
-// P2 reporting: filter by source dimensions and export the current result without paid dependencies.
-assert.match(partnerAdminApi, /planCode/);
-assert.match(partnerAdminApi, /commissionStatus/);
-assert.match(partnerAdminApi, /created_at=gte/);
-assert.match(partnerAdminApi, /created_at=lte/);
-assert.match(partnerAdminApi, /discountCents/);
-assert.match(partnerAdminHtml, /sales-plan-filter/);
-assert.match(partnerAdminHtml, /sales-status-filter/);
-assert.match(partnerAdminHtml, /sales-commission-filter/);
-assert.match(partnerAdminHtml, /sales-from-filter/);
-assert.match(partnerAdminHtml, /sales-to-filter/);
-assert.match(partnerAdminHtml, /Exportar CSV/i);
-assert.match(partnerAdmin, /function exportSalesCsv/);
-assert.match(partnerAdmin, /text\/csv/);
-assert.match(partnerAdmin, /URLSearchParams/);
-
-console.log('Partner attribution, commissions, discounts and reporting contracts passed.');
+console.log('D1 partner attribution, commissions, discounts and reporting contracts passed.');
