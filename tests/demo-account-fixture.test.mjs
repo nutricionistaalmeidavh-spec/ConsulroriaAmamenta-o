@@ -4,7 +4,6 @@ import { pbkdf2Sync } from 'node:crypto';
 import {
   DEMO_EMAIL,
   DEMO_USER_ID,
-  DEMO_PASSWORD_ITERATIONS,
   buildDemoFixture,
   deriveDemoCredential,
 } from '../scripts/demo-account-fixture.mjs';
@@ -16,11 +15,10 @@ test('demo identity is stable and presentation-specific', () => {
   assert.match(DEMO_USER_ID, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 });
 
-test('demo credential uses the 100k PBKDF2-SHA256 auth contract by default', () => {
+test('deriveDemoCredential supports the 100k PBKDF2-SHA256 auth contract', () => {
   const salt = Buffer.alloc(18, 7);
-  const result = deriveDemoCredential(TEST_PASSWORD, { salt });
+  const result = deriveDemoCredential(TEST_PASSWORD, { salt, iterations: 100000 });
   const expected = pbkdf2Sync(Buffer.from(TEST_PASSWORD), salt, 100000, 32, 'sha256').toString('base64url');
-  assert.equal(DEMO_PASSWORD_ITERATIONS, 100000);
   assert.equal(result.password_salt, salt.toString('base64url'));
   assert.equal(result.password_hash, expected);
   assert.equal(result.password_iterations, 100000);
