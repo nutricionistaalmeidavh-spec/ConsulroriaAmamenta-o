@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 
-const worker = readFileSync('worker/index.js', 'utf8');
 const domain = readFileSync('worker/domain-entry.js', 'utf8');
+const clinical = readFileSync('worker/cloudflare-clinical-runtime.js', 'utf8');
 const bootstrap = readFileSync('worker/commercial-license-bootstrap.js', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
@@ -17,17 +17,17 @@ const licenseSync = readFileSync('scripts/sync-license-authority-secret.ps1', 'u
 
 assert.match(wrangler, /ARTISYS_LICENSING/);
 assert.match(wrangler, /obra-na-mao-comercial/);
-assert.match(worker, /\/api\/license\/me/);
-assert.match(worker, /\/api\/clinical\/mothers/);
-assert.match(worker, /\/api\/clinical\/media\/upload/);
-assert.match(worker, /ARTISYS_LICENSING/);
+assert.match(clinical, /\/api\/license\/me/);
+assert.match(clinical, /\/api\/clinical\/mothers/);
+assert.match(clinical, /\/api\/clinical\/media\/upload/);
+assert.match(clinical, /ARTISYS_LICENSING/);
 
 assert.match(domain, /ensureExplicitCommercialMarker/);
 assert.match(bootstrap, /saas_accounts/);
 assert.match(bootstrap, /access\?\.commercial===true/);
 assert.match(bootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
-assert.match(bootstrap, /migrated_saas_account/);
-assert.match(bootstrap, /supabase_saas_account/);
+assert.match(bootstrap, /source:'d1_saas_account'/);
+assert.doesNotMatch(bootstrap, /supabase\.co|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|migrated_saas_account|supabase_saas_account/i);
 
 assert.doesNotMatch(plan, /\/rest\/v1\/entitlements/);
 assert.doesNotMatch(plan, /\/rest\/v1\/subscriptions/);
@@ -54,12 +54,10 @@ assert.doesNotMatch(migration, /apply_freemium_entitlements\(p_owner_id\)/);
 assert.doesNotMatch(migration, /create policy[\s\S]{0,80}mothers[\s\S]{0,80}for insert/i);
 assert.match(migration, /PDFs and other non-photo\/video clinical files/i);
 
-// Previous hybrid publisher remains available as rollback tooling and applies only
-// the reviewed central D1 migration before any optional Supabase finalization.
+// Historical migration SQL remains review evidence only. Runtime authority is D1-only.
 assert.match(publisher, /0008_product_license_authority\.sql/);
 assert.match(publisher, /d1 execute obra-na-mao-comercial --remote/);
 assert.match(publisher, /obra-na-mao-comercial\.nutricionistaalmeidavh\.workers\.dev/);
-assert.match(publisher, /legacy_unmanaged/);
 
 // Final clinical cutover must explicitly synchronize the same secret with the
 // central authority so manual CEO grants continue to resolve in Débora.
