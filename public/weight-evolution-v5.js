@@ -15,7 +15,7 @@ const parseWeight=text=>{
 const fmtInt=value=>Number.isFinite(value)?Math.round(value).toLocaleString('pt-BR'):'—';
 const fmtPct=value=>Number.isFinite(value)?Math.abs(value).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}):'—';
 const sign=value=>value>0?'+':value<0?'−':'';
-const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch]));
+const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
 function readRows(host){
   return [...host.querySelectorAll('.gf-weight-change-row')].map((row,index)=>{
