@@ -4,10 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "node scripts/materialize-clinical-source.mjs --write && node scripts/generate-pwa-icons.mjs && vite build",
+    "dev": "node scripts/normalize-growth-runtime.mjs && vite",
+    "build": "node scripts/normalize-growth-runtime.mjs && node scripts/materialize-clinical-source.mjs --write && node scripts/generate-pwa-icons.mjs && vite build",
     "preview": "vite preview",
-    "test:auth-runtime": "node scripts/test-cloudflare-runtime.mjs && node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs worker/cloudflare-auth-runtime.test.mjs tests/cloudflare-auth-guardrail.test.mjs tests/patient-save-runtime.test.mjs tests/patient-ui-integrity.test.mjs tests/package-card-singleton.test.mjs tests/package-lifecycle-cloudflare.test.mjs",
+    "test:auth-runtime": "node scripts/test-cloudflare-runtime.mjs && node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs worker/cloudflare-auth-runtime.test.mjs tests/cloudflare-auth-guardrail.test.mjs tests/cloudflare-functional-regressions.test.mjs tests/patient-save-runtime.test.mjs tests/patient-ui-integrity.test.mjs tests/package-card-singleton.test.mjs tests/package-lifecycle-cloudflare.test.mjs",
     "test:billing": "node scripts/test-cloudflare-billing-d1.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
