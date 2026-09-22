@@ -79,6 +79,8 @@ assert.match(worker, /itemValue/);
 assert.match(webhook, /apply_partner_attribution_state/i);
 assert.match(webhook, /p_checkout_request_id/i);
 assert.match(webhook, /p_provider_status/i);
+assert.match(webhook, /mappedBy: 'subscription'/i);
+assert.match(webhook, /externalSubscriptionId/i);
 assert.match(migration, /commission_status = 'reversed'/i);
 
 // P1 admin: authenticated admin-only endpoints and a panel for partners, sales and commissions.
@@ -96,4 +98,20 @@ assert.match(partnerAdmin, /\/api\/admin\/partners/);
 assert.match(partnerAdmin, /\/api\/admin\/partner-sales/);
 assert.match(partnerAdmin, /\/api\/admin\/partner-commission/);
 
-console.log('Partner attribution, commissions and discount contracts passed.');
+// P2 reporting: filter by source dimensions and export the current result without paid dependencies.
+assert.match(partnerAdminApi, /planCode/);
+assert.match(partnerAdminApi, /commissionStatus/);
+assert.match(partnerAdminApi, /created_at=gte/);
+assert.match(partnerAdminApi, /created_at=lte/);
+assert.match(partnerAdminApi, /discountCents/);
+assert.match(partnerAdminHtml, /sales-plan-filter/);
+assert.match(partnerAdminHtml, /sales-status-filter/);
+assert.match(partnerAdminHtml, /sales-commission-filter/);
+assert.match(partnerAdminHtml, /sales-from-filter/);
+assert.match(partnerAdminHtml, /sales-to-filter/);
+assert.match(partnerAdminHtml, /Exportar CSV/i);
+assert.match(partnerAdmin, /function exportSalesCsv/);
+assert.match(partnerAdmin, /text\/csv/);
+assert.match(partnerAdmin, /URLSearchParams/);
+
+console.log('Partner attribution, commissions, discounts and reporting contracts passed.');
