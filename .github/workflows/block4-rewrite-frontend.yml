@@ -1,0 +1,109 @@
+name: Block 4 frontend rewrite
+
+on:
+  push:
+    branches:
+      - fix/block-4-frontend-cloudflare-only
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/block-4-frontend-cloudflare-only
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rewrite retired Supabase literals to Cloudflare origin
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const legacyUrl = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
+          const legacyKey = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+          const allowed = new Set(['src/cloudflare-fetch-bridge.js']);
+          const extensions = new Set(['.js', '.mjs']);
+          const changed = [];
+
+          function walk(root) {
+            for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+              const full = path.join(root, entry.name);
+              if (entry.isDirectory()) {
+                walk(full);
+                continue;
+              }
+              const repoPath = full.split(path.sep).join('/');
+              if (allowed.has(repoPath) || !extensions.has(path.extname(entry.name))) continue;
+              const source = fs.readFileSync(full, 'utf8');
+              let next = source
+                .replaceAll(`'${legacyUrl}'`, 'window.location.origin')
+                .replaceAll(`"${legacyUrl}"`, 'window.location.origin')
+                .replaceAll(`'${legacyKey}'`, "'cloudflare-runtime'")
+                .replaceAll(`"${legacyKey}"`, '"cloudflare-runtime"');
+              if (next !== source) {
+                fs.writeFileSync(full, next);
+                changed.push(repoPath);
+              }
+            }
+          }
+
+          walk('public');
+          walk('src');
+
+          // The clinical source materializer starts from historical release archives.
+          // Persist clean feature overlays so a later materialization cannot restore the retired host/key.
+          const overlays = [
+            'features/clinical-note-feature.js',
+            'features/patient-fixes.js',
+          ];
+          for (const rel of overlays) {
+            const source = path.join('public', 'clinical-source', rel);
+            const target = path.join('patch-source', 'cloudflare-license-authority', rel);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.copyFileSync(source, target);
+            changed.push(target.split(path.sep).join('/'));
+          }
+
+          const materializerPath = 'scripts/materialize-clinical-source.mjs';
+          let materializer = fs.readFileSync(materializerPath, 'utf8');
+          const marker = "overlay('core/lib/repositories.js');";
+          const replacement = `${marker}\noverlay('features/clinical-note-feature.js');\noverlay('features/patient-fixes.js');`;
+          if (!materializer.includes("overlay('features/clinical-note-feature.js');")) {
+            if (!materializer.includes(marker)) throw new Error('Materializer overlay marker not found.');
+            materializer = materializer.replace(marker, replacement);
+            fs.writeFileSync(materializerPath, materializer);
+            changed.push(materializerPath);
+          }
+
+          console.log(`Rewritten ${changed.length} path(s):`);
+          for (const item of [...new Set(changed)].sort()) console.log(`- ${item}`);
+          NODE
+      - name: Validate rewritten JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --name-only -- '*.js' '*.mjs' | while read -r file; do
+            [ -z "$file" ] && continue
+            node --check "$file"
+          done
+      - name: Commit rewrite
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No rewrite changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public src patch-source/cloudflare-license-authority scripts/materialize-clinical-source.mjs
+          git commit -m "fix: route frontend through Cloudflare origin"
+          git push origin HEAD:fix/block-4-frontend-cloudflare-only
