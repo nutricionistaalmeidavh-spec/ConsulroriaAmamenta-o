@@ -1,0 +1,117 @@
+name: Merge main and verify Cloudflare-only once
+
+on:
+  push:
+    branches:
+      - refactor/cloudflare-only-runtime
+    paths:
+      - '.github/workflows/merge-main-and-verify-cloudflare-only.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  merge-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/cloudflare-only-runtime
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Merge latest main and resolve known migration-test conflicts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+          if [ "$merge_status" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            echo "Conflicts:"
+            echo "$conflicts"
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              case "$file" in
+                package.json)
+                  git checkout --theirs -- package.json
+                  ;;
+                tests/clinical-source-cloudflare-sync.test.mjs)
+                  git checkout --theirs -- tests/clinical-source-cloudflare-sync.test.mjs
+                  ;;
+                *)
+                  echo "Unexpected merge conflict: $file"
+                  exit 1
+                  ;;
+              esac
+            done <<< "$conflicts"
+          fi
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const target = 'tests/cloudflare-only-cutover.test.mjs';
+          if (!pkg.scripts['test:auth-runtime'].includes(target)) {
+            const marker = 'tests/cloudflare-client-refresh.test.mjs';
+            if (pkg.scripts['test:auth-runtime'].includes(marker)) {
+              pkg.scripts['test:auth-runtime'] = pkg.scripts['test:auth-runtime'].replace(marker, `${marker} ${target}`);
+            } else {
+              pkg.scripts['test:auth-runtime'] += ` ${target}`;
+            }
+          }
+          fs.writeFileSync('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+          git add -A
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo 'Unresolved conflicts remain:'
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+          git commit -m "merge: preserve Cloudflare refresh during final cutover"
+      - name: Install dependencies
+        run: npm install
+      - name: Validate Cloudflare-only auth and functional regressions
+        run: npm run test:auth-runtime
+      - name: Validate billing and deployment contracts
+        run: |
+          npm run test:billing
+          npm run test:deploy-safety
+          node scripts/test-cloudflare-asaas.mjs
+          node scripts/test-cloudflare-license-authority.mjs
+      - name: Validate SaaS and commercial contracts
+        run: |
+          node scripts/test-saas-foundation.mjs
+          node scripts/test-commercial-funnel.mjs
+          node scripts/test-commercial-landing.mjs
+          node scripts/test-commercial-checkout-return.mjs
+          node scripts/test-preconfirm-checkout.mjs
+          node scripts/test-partner-attribution.mjs
+          node scripts/test-asaas-recurring-renewal.mjs
+          node scripts/test-duplicate-signup-flow.mjs
+          node scripts/test-commercial-auth-recovery.mjs
+          node scripts/test-saas-plans.mjs
+          node scripts/test-saas-enforcement.mjs
+          node scripts/test-billing-scaffold.mjs
+      - name: Validate clinical source and routing
+        run: |
+          node --test tests/clinical-source-*.test.mjs
+          node scripts/test-canonical-app-routing.mjs
+      - name: Validate demo and SEO
+        run: |
+          npm run test:demo
+          npm run test:seo
+      - name: Build production application
+        run: npm run build
+      - name: Final runtime guardrails
+        run: |
+          node --test tests/cloudflare-only-cutover.test.mjs
+          node --check worker/domain-entry.js
+          node --check worker/cloudflare-clinical-runtime.js
+          node --check worker/cloudflare-auth-runtime.js
+          node --check worker/cloudflare-billing-runtime.js
+      - name: Push verified merge to PR branch
+        run: git push origin HEAD:refactor/cloudflare-only-runtime
