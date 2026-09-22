@@ -10,6 +10,7 @@ const files = {
   app: path.join(root, 'public', 'comercial', 'app.js'),
   config: path.join(root, 'public', 'comercial', 'config.js'),
   runtime: path.join(root, 'worker', 'cloudflare-clinical-runtime.js'),
+  compatibilityRuntime: path.join(root, 'worker', 'cloudflare-clinical-legacy-runtime.js'),
 };
 
 function fail(message) {
@@ -26,6 +27,7 @@ const html = fs.readFileSync(files.html, 'utf8');
 const app = fs.readFileSync(files.app, 'utf8');
 const config = fs.readFileSync(files.config, 'utf8');
 const runtime = fs.readFileSync(files.runtime, 'utf8');
+const compatibilityRuntime = fs.readFileSync(files.compatibilityRuntime, 'utf8');
 const commercial = `${html}\n${app}\n${config}`.toLowerCase();
 
 for (const forbidden of ['débora', 'debora-lactacao', 'src/bootstrap.js', 'phase02-loader']) {
@@ -61,7 +63,14 @@ if (/service[_-]?role/i.test(config)) fail('service role must never be present i
 if (/sb_publishable_/i.test(config)) fail('external publishable key must not be required by the commercial browser config');
 if (/eyJhbGciOi/i.test(config)) fail('legacy JWT anon key must not be committed to the commercial browser config');
 
-// Cloudflare performs owner scoping server-side instead of relying on external database policies.
+// The active facade must require D1 identity before any compatibility implementation runs.
+if (!runtime.includes('cloudflare-auth-runtime.js')) fail('active clinical facade must use Cloudflare D1 auth');
+if (!runtime.includes('cloudflare_auth_required')) fail('active clinical facade must fail closed without Cloudflare identity');
+if (/supabase\.co|LEGACY_SUPABASE|legacyAuth\s*\(|legacyUserForToken|allowLegacy\s*=\s*true/i.test(runtime)) {
+  fail('active clinical facade must not contain Supabase auth fallback');
+}
+
+// Owner scoping remains enforced inside the quarantined REST compatibility implementation.
 for (const required of [
   "'professional_profiles','saas_accounts'",
   'async function recordOwnedByUser',
@@ -69,7 +78,7 @@ for (const required of [
   "if (!await recordOwnedByUser(env, table, entry, user.id)) continue",
   "return runtimeJson(403, { message: 'Registro fora do escopo da conta.' })",
 ]) {
-  if (!runtime.includes(required)) fail(`Cloudflare owner-scoping contract missing: ${required}`);
+  if (!compatibilityRuntime.includes(required)) fail(`Cloudflare owner-scoping contract missing: ${required}`);
 }
 
-if (!process.exitCode) console.log('PASS: commercial funnel is isolated, Cloudflare-backed and owner-scoped');
+if (!process.exitCode) console.log('PASS: commercial funnel is isolated, D1-authenticated and owner-scoped');
