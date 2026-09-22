@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { persistNewPatient } from '../worker/patient-write-runtime.js';
+import { buildNewPatientRecords, persistNewPatient } from '../worker/patient-write-runtime.js';
 import { handleCloudflareClinicalRuntime } from '../worker/cloudflare-clinical-runtime.js';
 
 class FakeStatement {
@@ -106,6 +106,21 @@ function deterministicUuid() {
   let next = 0;
   return () => `00000000-0000-4000-8000-${String(++next).padStart(12, '0')}`;
 }
+
+test('new patient creation always generates fresh mother and baby ids', () => {
+  const records = buildNewPatientRecords(
+    {
+      mother: { id: 'legacy-or-colliding-mother-id', name: 'Paciente Nova' },
+      babies: [{ id: 'legacy-or-colliding-baby-id', name: 'Bebê Novo' }],
+      consents: {},
+    },
+    { id: 'user-new', email: 'new@example.test' },
+    { now: '2026-09-22T15:00:00.000Z', uuid: deterministicUuid() },
+  );
+  assert.equal(records.mother.id, '00000000-0000-4000-8000-000000000001');
+  assert.equal(records.babies[0].id, '00000000-0000-4000-8000-000000000002');
+  assert.equal(records.babies[0].mother_id, records.mother.id);
+});
 
 test('new patient is written in one batch and remains visible after a runtime reload', async () => {
   const db = new FakeD1();
