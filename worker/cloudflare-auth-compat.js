@@ -227,13 +227,6 @@ export async function syncLegacyClinicalRows(env, accessToken, userId) {
   return { synced, failures };
 }
 
-async function repairLegacyClinicalRows(env, email, password, userId, existingLegacy = null) {
-  const legacy = existingLegacy || await legacyPasswordLogin(email, password);
-  if (!legacy?.response?.ok || !legacy?.payload?.access_token || String(legacy?.payload?.user?.id || '') !== String(userId)) return;
-  const result = await syncLegacyClinicalRows(env, legacy.payload.access_token, userId);
-  if (result.failures.length) console.warn('legacy clinical repair completed with partial failures', result.failures);
-}
-
 async function upsertLegacyUser(env, legacyUser) {
   const now = new Date().toISOString();
   await env.CLINICAL_DB.prepare(`INSERT INTO auth_users(
@@ -303,9 +296,6 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     let row = await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?) LIMIT 1').bind(email).first();
     if (row && await verifyStoredCredential(env, row.user_id, password)) {
-      await repairLegacyClinicalRows(env, email, password, row.user_id).catch((error) => {
-        console.warn('legacy clinical repair failed without blocking local login', error);
-      });
       const now = new Date().toISOString();
       await env.CLINICAL_DB.prepare('UPDATE auth_users SET last_sign_in_at = ?, updated_at = ? WHERE user_id = ?').bind(now, now, row.user_id).run();
       row = { ...row, last_sign_in_at: now, updated_at: now };
@@ -321,9 +311,6 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     row = await upsertLegacyUser(env, legacy.payload.user);
     await storeCredential(env, row.user_id, password);
-    await repairLegacyClinicalRows(env, email, password, row.user_id, legacy).catch((error) => {
-      console.warn('legacy clinical repair failed without blocking migrated login', error);
-    });
     const migrated = publicUser(await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE user_id = ? LIMIT 1').bind(row.user_id).first());
     return json(200, await issueSession(env, migrated));
   } catch (error) {
