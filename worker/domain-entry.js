@@ -3,9 +3,9 @@ import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin }
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
+import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
-import { handleCloudflarePasswordCompat } from './cloudflare-auth-compat.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -25,6 +25,10 @@ const D1_BILLING_PATHS = new Set([
   '/api/admin/partner-sales',
   '/api/admin/partner-commission',
 ]);
+const D1_AUTH_REQUIRED_EXACT = new Set([
+  '/api/asaas/checkout',
+  '/api/sandbox/asaas/checkout',
+]);
 
 function rewriteAssetRequest(request, pathname) {
   const target = new URL(request.url);
@@ -36,9 +40,29 @@ function isPrivateRobotsPath(pathname) {
   return PRIVATE_ROBOTS_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+function requiresCloudflareIdentity(request, url) {
+  const path = url.pathname;
+  if (path.startsWith('/rest/v1/')) return true;
+  if (path.startsWith('/api/clinical/')) return true;
+  if (path.startsWith('/api/license/')) return true;
+  if (path.startsWith('/api/admin/')) return true;
+  if (D1_AUTH_REQUIRED_EXACT.has(path)) return true;
+  if (path.startsWith('/storage/v1/')) {
+    return !(request.method === 'GET' && url.searchParams.has('token'));
+  }
+  return false;
+}
+
 function d1BillingRequired() {
   return withNoIndex(new Response(JSON.stringify({ error: 'cloudflare_d1_billing_required' }), {
     status: 503,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  }));
+}
+
+function cloudflareIdentityRequired(status, error) {
+  return withNoIndex(new Response(JSON.stringify({ error }), {
+    status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   }));
 }
@@ -76,8 +100,16 @@ export default {
       return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
     }
 
-    const passwordCompatResponse = await handleCloudflarePasswordCompat(request, env, url);
-    if (passwordCompatResponse) return withNoIndex(passwordCompatResponse);
+    const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
+    if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
+
+    // Once the D1 migration is complete, protected requests fail closed here. A missing
+    // or invalid Cloudflare identity must never fall through to a legacy backend.
+    if (requiresCloudflareIdentity(request, url)) {
+      if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
+      const user = await authenticateClinicalRequest(request, env);
+      if (!user?.id) return cloudflareIdentityRequired(401, 'cloudflare_auth_required');
+    }
 
     // Billing and partner attribution are Cloudflare D1-only. These routes are never
     // allowed to fall through to the legacy commercial worker.
