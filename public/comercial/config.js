@@ -1,5 +1,8 @@
 window.SAAS_RUNTIME_CONFIG = Object.freeze({
-  supabaseUrl: 'https://zxowxdfhtksevhnjmeyu.supabase.co',
-  supabasePublishableKey: 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt',
+  apiBaseUrl: window.location.origin,
+  // Compatibility aliases while the commercial frontend is migrated away from legacy naming.
+  supabaseUrl: window.location.origin,
+  supabasePublishableKey: 'cloudflare-runtime',
   appMode: 'commercial',
+  backend: 'cloudflare-d1',
 });
