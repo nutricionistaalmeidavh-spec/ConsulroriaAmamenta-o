@@ -23,6 +23,8 @@ await db.exec(`
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   );
+  grant all on table public.billing_plan_catalog to service_role;
+  grant all on table public.billing_checkout_requests to service_role;
   insert into public.billing_plan_catalog(plan_code, price_cents, active)
   values ('pro_monthly', 4990, true), ('pro_annual', 49900, true);
 `);
