@@ -80,20 +80,23 @@ export function buildNewPatientRecords(input, user, {
   const babiesInput = normalizedBabies(input);
   if (!babiesInput.length) throw writeError('invalid_patient_payload', 'Cadastre pelo menos um bebê.');
 
+  // This endpoint creates a NEW patient. Caller-provided ids are intentionally ignored
+  // so stale form state, demo data or records from another account cannot collide in D1.
   const mother = {
     ...motherInput,
-    id: motherInput.id || uuid(),
+    id: uuid(),
     owner_id: user.id,
     name: motherName,
-    created_at: motherInput.created_at || now,
+    created_at: now,
     updated_at: now,
   };
 
   const babies = babiesInput.map((baby) => ({
     ...baby,
-    id: baby.id || uuid(),
+    id: uuid(),
     mother_id: mother.id,
-    created_at: baby.created_at || now,
+    owner_id: user.id,
+    created_at: now,
     updated_at: now,
   }));
 
@@ -136,7 +139,7 @@ export async function persistNewPatient(env, user, input, {
   const records = buildNewPatientRecords(input, user, { now, uuid });
   const statements = [
     recordStatement(db, 'mothers', records.mother, records.mother.id, user.id),
-    ...records.babies.map((baby) => recordStatement(db, 'babies', baby, baby.id, null)),
+    ...records.babies.map((baby) => recordStatement(db, 'babies', baby, baby.id, user.id)),
     ...records.consents.map((consent) => recordStatement(db, 'consents', consent, consent.id, user.id)),
   ];
 
