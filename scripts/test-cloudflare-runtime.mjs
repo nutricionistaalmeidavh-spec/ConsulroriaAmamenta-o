@@ -39,7 +39,8 @@ assert.match(domain, /handleCloudflareClinicalRuntime/);
 assert.match(domain, /if\s*\(env\.CLINICAL_DB\s*&&\s*url\.pathname\s*===\s*'\/api\/license\/me'/);
 assert.match(domain, /ensureExplicitCommercialMarker\(request, env\)/);
 assert.match(commercialBootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
-assert.match(commercialBootstrap, /source='migrated_saas_account'/);
+assert.match(commercialBootstrap, /source:'d1_saas_account'/);
+assert.doesNotMatch(commercialBootstrap, /supabase\.co|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY/i);
 assert.match(configOverlay, /window\.location\.origin/);
 assert.match(configOverlay, /BACKEND_MODE:\s*'cloudflare'/);
 assert.match(materializer, /overlay\('config\.js'\)/);
@@ -50,7 +51,7 @@ assert.match(clientOverlay, /sessionStorage = globalThis\.localStorage/);
 assert.match(canonicalIdentity, /\[localStorage, sessionStorage\]/);
 
 // Commercial browser traffic is Cloudflare-native after the billing cutover.
-// Legacy Supabase remains only as the temporary clinical auth/session bridge handled server-side.
+// Active authentication is D1-only; remaining Supabase-shaped clinical compatibility paths are transitional.
 assert.match(commercialConfig, /window\.location\.origin/);
 assert.match(commercialConfig, /backend:\s*'cloudflare-d1'/);
 assert.match(commercialConfig, /clientRuntimeKey:\s*'cloudflare-runtime'/);
