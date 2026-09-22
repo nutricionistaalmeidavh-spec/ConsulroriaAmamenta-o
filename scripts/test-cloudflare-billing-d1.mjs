@@ -29,10 +29,12 @@ assert.match(runtime, /external_subscription_id/);
 assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 
-// The domain entry must intercept billing before legacy coreWorker routes can run, without a dead email-confirmation route.
+// The domain entry intercepts billing and fails closed. There is no legacy Worker to fall through to.
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
-const legacyApi = domainEntry.indexOf('coreWorker.fetch(request, env, ctx)');
-assert.ok(billingGate >= 0 && legacyApi >= 0 && billingGate < legacyApi, 'D1 billing gate must run before legacy worker');
+assert.ok(billingGate >= 0, 'D1 billing gate must be present');
+assert.match(domainEntry, /D1_BILLING_PATHS/);
+assert.match(domainEntry, /d1BillingRequired/);
+assert.doesNotMatch(domainEntry, /coreWorker\.fetch|\.\/index\.js/);
 assert.doesNotMatch(domainEntry, /\/api\/asaas\/confirm-email/);
 
 // Commercial browser traffic stays on the Cloudflare origin and no longer carries Supabase naming.
