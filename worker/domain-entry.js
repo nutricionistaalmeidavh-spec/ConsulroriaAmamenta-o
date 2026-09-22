@@ -8,7 +8,22 @@ import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js'
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
-const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me','/api/clinical/mothers','/api/clinical/media/upload']);
+const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me', '/api/clinical/mothers', '/api/clinical/media/upload']);
+const D1_BILLING_PATHS = new Set([
+  '/api/asaas/signup',
+  '/api/asaas/pending-status',
+  '/api/asaas/confirm-email',
+  '/api/asaas/health',
+  '/api/asaas/preauth-checkout',
+  '/api/asaas/checkout',
+  '/api/webhooks/asaas',
+  '/api/sandbox/asaas/health',
+  '/api/sandbox/asaas/checkout',
+  '/api/sandbox/webhooks/asaas',
+  '/api/admin/partners',
+  '/api/admin/partner-sales',
+  '/api/admin/partner-commission',
+]);
 
 function rewriteAssetRequest(request, pathname) {
   const target = new URL(request.url);
@@ -18,6 +33,13 @@ function rewriteAssetRequest(request, pathname) {
 
 function isPrivateRobotsPath(pathname) {
   return PRIVATE_ROBOTS_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function d1BillingRequired() {
+  return withNoIndex(new Response(JSON.stringify({ error: 'cloudflare_d1_billing_required' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  }));
 }
 
 export function withNoIndex(response) {
@@ -56,11 +78,11 @@ export default {
     const passwordCompatResponse = await handleCloudflarePasswordCompat(request, env, url);
     if (passwordCompatResponse) return withNoIndex(passwordCompatResponse);
 
-    // Billing and partner attribution are D1-native whenever CLINICAL_DB is bound.
-    // This gate deliberately runs before the legacy commercial worker so no Asaas
-    // route can silently fall back to Supabase Edge Functions after Cloudflare cutover.
+    // Billing and partner attribution are Cloudflare D1-only. These routes are never
+    // allowed to fall through to the legacy Supabase-backed commercial worker.
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
+    if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
 
     if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
       await ensureExplicitCommercialMarker(request, env);
