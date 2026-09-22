@@ -3,6 +3,7 @@ import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin }
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
+import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleCloudflarePasswordCompat } from './cloudflare-auth-compat.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
@@ -90,6 +91,9 @@ export default {
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
+
+    const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
+    if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
 
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
