@@ -6,7 +6,6 @@ const ASAAS_SANDBOX_API_URL = 'https://api-sandbox.asaas.com/v3';
 const ASAAS_CHECKOUT_URL = 'https://asaas.com/checkoutSession/show?id=';
 const ASAAS_SANDBOX_CHECKOUT_URL = 'https://sandbox.asaas.com/checkoutSession/show/';
 const CHECKOUT_TTL_MS = 2 * 60 * 60 * 1000;
-const EMAIL_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const enc = new TextEncoder();
 
 function json(status, body, extraHeaders = {}) {
@@ -275,14 +274,14 @@ async function pendingSignupByProof(env, userId, nonce) {
 async function activatePendingSignup(env, userId) {
   const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(userId).first();
   if (!pending) return runtimeUserById(env, userId);
-  if (!['paid', 'email_sent', 'activated'].includes(pending.status)) throw new Error('payment_not_confirmed');
+  if (!['paid', 'activated'].includes(pending.status)) throw new Error('payment_not_confirmed');
   const existing = await db(env).prepare('SELECT user_id FROM auth_users WHERE lower(email)=lower(?) LIMIT 1').bind(pending.email).first();
   if (existing && existing.user_id !== userId) throw new Error('email_already_registered');
   if (pending.status === 'activated') return runtimeUserById(env, userId);
 
   const now = new Date().toISOString();
   const userMetadata = JSON.stringify({ signup_source: 'commercial_saas', plan_intent: pending.plan_code });
-  const appMetadata = JSON.stringify({ payment_activated: true, email_verified_after_payment: true });
+  const appMetadata = JSON.stringify({ payment_activated: true, activation_source: 'asaas_verified_payment' });
   await db(env).batch([
     db(env).prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
@@ -297,81 +296,28 @@ async function activatePendingSignup(env, userId) {
     ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
       password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=CURRENT_TIMESTAMP`)
       .bind(userId, pending.password_salt, pending.password_hash, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS)),
-    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,email_verification_token_hash=NULL,
-      email_verification_expires_at=NULL,updated_at=? WHERE user_id=?`).bind(now, now, userId),
+    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,updated_at=? WHERE user_id=?`).bind(now, now, userId),
   ]);
   return runtimeUserById(env, userId);
-}
-
-async function sendPaidConfirmationEmail(env, pending, origin) {
-  if (!pending || pending.status === 'activated') return { status: 'email_confirmed' };
-  if (pending.status === 'email_sent' && pending.email_verification_token_hash && pending.email_verification_expires_at
-      && Date.parse(pending.email_verification_expires_at) > Date.now()) {
-    return { status: 'email_sent' };
-  }
-  if (!env.EMAIL?.send) return { status: 'email_delivery_unavailable' };
-
-  const token = randomToken(36);
-  const tokenHash = await sha256(token);
-  const expiresAt = new Date(Date.now() + EMAIL_TOKEN_TTL_MS).toISOString();
-  const confirmationUrl = `${origin}/api/asaas/confirm-email?userId=${encodeURIComponent(pending.user_id)}&token=${encodeURIComponent(token)}`;
-  const from = String(env.BILLING_EMAIL_FROM || 'no-reply@deboralactacao.com');
-
-  await env.EMAIL.send({
-    to: pending.email,
-    from,
-    subject: 'Confirme seu e-mail · Débora Lactação',
-    text: `Seu pagamento foi confirmado. Confirme seu e-mail para liberar o acesso: ${confirmationUrl}`,
-    html: `<p>Seu pagamento foi confirmado.</p><p><a href="${confirmationUrl}">Confirmar e-mail e liberar acesso</a></p><p>Este link expira em 24 horas.</p>`,
-  });
-
-  const now = new Date().toISOString();
-  await db(env).prepare(`UPDATE billing_pending_signups SET status='email_sent',email_verification_token_hash=?,
-    email_verification_expires_at=?,email_verification_sent_at=?,updated_at=? WHERE user_id=?`)
-    .bind(tokenHash, expiresAt, now, now, pending.user_id).run();
-  return { status: 'email_sent' };
 }
 
 async function pendingStatus(request, env) {
   const input = await request.json().catch(() => ({}));
   const pending = await pendingSignupByProof(env, String(input.userId || ''), String(input.signupNonce || ''));
   if (!pending) return json(401, { error: 'invalid_signup_proof' });
-  if (pending.status === 'activated') return json(200, { ok: true, status: 'email_confirmed' });
+  if (pending.status === 'activated') return json(200, { ok: true, status: 'account_activated' });
 
   const checkout = await db(env).prepare(`SELECT status FROM billing_checkout_requests
     WHERE owner_id=? AND provider='asaas' ORDER BY created_at DESC LIMIT 1`).bind(pending.user_id).first();
   if (checkout?.status !== 'paid') return json(200, { ok: true, status: 'awaiting_payment' });
 
   if (pending.status === 'pending') {
+    const now = new Date().toISOString();
     await db(env).prepare(`UPDATE billing_pending_signups SET status='paid',payment_confirmed_at=COALESCE(payment_confirmed_at,?),
-      updated_at=? WHERE user_id=?`).bind(new Date().toISOString(), new Date().toISOString(), pending.user_id).run();
+      updated_at=? WHERE user_id=?`).bind(now, now, pending.user_id).run();
   }
-  const fresh = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(pending.user_id).first();
-  try {
-    const email = await sendPaidConfirmationEmail(env, fresh, new URL(request.url).origin);
-    return json(200, { ok: true, status: email.status });
-  } catch (error) {
-    return json(503, { error: 'confirmation_email_failed', status: 'payment_confirmed', details: error?.message || undefined });
-  }
-}
-
-async function confirmEmail(request, env) {
-  const url = new URL(request.url);
-  const userId = String(url.searchParams.get('userId') || '');
-  const token = String(url.searchParams.get('token') || '');
-  if (!/^[0-9a-f-]{36}$/i.test(userId) || !token) return json(400, { error: 'invalid_confirmation_link' });
-  const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(userId).first();
-  if (!pending || !['paid', 'email_sent', 'activated'].includes(pending.status)) return json(400, { error: 'invalid_confirmation_link' });
-  if (pending.status !== 'activated') {
-    if (!pending.email_verification_token_hash || !pending.email_verification_expires_at) return json(400, { error: 'confirmation_not_issued' });
-    if (Date.parse(pending.email_verification_expires_at) <= Date.now()) return json(410, { error: 'confirmation_link_expired' });
-    if (!safeEqual(await sha256(token), pending.email_verification_token_hash)) return json(401, { error: 'invalid_confirmation_token' });
-    await activatePendingSignup(env, userId);
-  }
-  const target = new URL('/comercial/index.html', url.origin);
-  target.searchParams.set('confirmed', '1');
-  target.searchParams.set('plan', pending.plan_code);
-  return new Response(null, { status: 302, headers: { location: target.toString(), 'cache-control': 'no-store' } });
+  await activatePendingSignup(env, pending.user_id);
+  return json(200, { ok: true, status: 'account_activated' });
 }
 
 async function expireStaleCheckout(env, prior) {
@@ -494,7 +440,7 @@ async function createProviderCheckout(request, env, environment, flow, ownerId, 
     status: 'checkout_created', checkoutId: result.id, checkoutUrl: providerUrl, planCode,
     partnerCode: registered.priced.partnerCode, discountCents: registered.priced.discountCents,
     effectivePriceCents: registered.priced.totalCents, environment,
-    ...(flow === 'pre_email_confirmation' ? { emailConfirmationRequiredForAccess: true, confirmationAfterPayment: true } : {}),
+    ...(flow === 'pre_email_confirmation' ? { activationAfterPayment: true } : {}),
   });
 }
 
@@ -676,17 +622,17 @@ async function handleWebhook(request, env, environment) {
     const subscription = await upsertSubscription(env, mapped, payment, transition, providerStatus);
     await updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition);
 
-    let confirmationStatus = null;
+    let activationStatus = null;
     if (!mapped.renewal && transition === 'active') {
       const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
       if (pending && pending.status !== 'activated') {
         const now = new Date().toISOString();
         await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'paid' END,
           payment_confirmed_at=COALESCE(payment_confirmed_at,?),updated_at=? WHERE user_id=?`).bind(now, now, pending.user_id).run();
-        const fresh = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(pending.user_id).first();
-        const email = await sendPaidConfirmationEmail(env, fresh, new URL(request.url).origin);
-        confirmationStatus = email.status;
-        if (email.status === 'email_delivery_unavailable') throw new Error('cloudflare_email_not_configured');
+        await activatePendingSignup(env, mapped.checkout.owner_id);
+        activationStatus = 'account_activated';
+      } else if (pending?.status === 'activated') {
+        activationStatus = 'account_activated';
       }
     }
     if (!mapped.renewal && transition === 'cancelled') {
@@ -709,7 +655,7 @@ async function handleWebhook(request, env, environment) {
     return json(200, {
       status: 'processed', eventId: event.eventId, paymentId, ownerId: mapped.checkout.owner_id,
       planCode: mapped.checkout.plan_code, billingStatus: transition, currentPeriodEnd: subscription.periodEnd,
-      renewal: mapped.renewal, confirmationStatus, environment,
+      renewal: mapped.renewal, activationStatus, environment,
     });
   } catch (error) {
     await finishEvent(env, config.provider, event.eventId, false, String(error?.message || error).slice(0, 1000));
@@ -845,7 +791,6 @@ async function health(env, environment) {
     environment,
     billingBackend: 'cloudflare-d1',
     d1BillingReady,
-    emailConfigured: Boolean(env.EMAIL?.send),
     asaasApiConfigured: Boolean(config.secret),
     asaasApiValid,
     asaasAuthStatus,
@@ -858,7 +803,7 @@ async function health(env, environment) {
 }
 
 const ROUTES = new Set([
-  '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/confirm-email', '/api/asaas/health',
+  '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/health',
   '/api/asaas/preauth-checkout', '/api/asaas/checkout', '/api/webhooks/asaas',
   '/api/sandbox/asaas/health', '/api/sandbox/asaas/checkout', '/api/sandbox/webhooks/asaas',
   '/api/admin/partners', '/api/admin/partner-sales', '/api/admin/partner-commission',
@@ -870,7 +815,6 @@ export async function handleCloudflareBillingRuntime(request, env, url = new URL
     if (url.pathname.startsWith('/api/admin/')) return partnerAdmin(request, env, url);
     if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return preparePendingSignup(request, env);
     if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return pendingStatus(request, env);
-    if (url.pathname === '/api/asaas/confirm-email' && request.method === 'GET') return confirmEmail(request, env);
     if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env, 'production');
     if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return preauthCheckout(request, env);
     if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request, env, 'production');
