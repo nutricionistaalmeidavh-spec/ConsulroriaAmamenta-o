@@ -135,6 +135,52 @@ const newConfigured = `export function configured() {
 }`;
 replaceText('core/app-shell.js', oldConfigured, newConfigured, 'cloudflare-runtime-config');
 
+const oldPatientSubmit = `patientForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const status = document.querySelector('[data-patient-form-status]');
+  try {
+    const payload = patientFormPayload();
+    let saved;
+    if (editingPatientId) {
+      const current = patientByMotherId(editingPatientId) || await appData.getPatient(editingPatientId);
+      saved = await appData.updatePatient({ mother: { ...payload.mother, id: current.mother.id }, babies: payload.babies });
+    } else saved = await appData.createPatient(payload);
+    await appData.saveConsents(saved.mother.id, patientConsentPayload());
+    editingPatientId = null;
+    await refreshData();
+    await openPatient(saved.mother.id);
+  } catch (error) {
+    if (status) { status.textContent = error?.message || 'Não foi possível salvar.'; status.classList.add('error'); }
+    reportError(error);
+  }
+});`;
+const newPatientSubmit = `patientForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const status = document.querySelector('[data-patient-form-status]');
+  try {
+    const payload = patientFormPayload();
+    const consents = patientConsentPayload();
+    let saved;
+    if (editingPatientId) {
+      const current = patientByMotherId(editingPatientId) || await appData.getPatient(editingPatientId);
+      saved = await appData.updatePatient({ mother: { ...payload.mother, id: current.mother.id }, babies: payload.babies });
+      await appData.saveConsents(saved.mother.id, consents);
+    } else {
+      saved = await repositories.client.workerRequest('/api/clinical/patients', {
+        method: 'POST',
+        body: { ...payload, consents }
+      });
+    }
+    editingPatientId = null;
+    await refreshData();
+    await openPatient(saved.mother.id);
+  } catch (error) {
+    if (status) { status.textContent = error?.message || 'Não foi possível salvar.'; status.classList.add('error'); }
+    reportError(error);
+  }
+});`;
+replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');
+
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   modules[outputPath] = {
