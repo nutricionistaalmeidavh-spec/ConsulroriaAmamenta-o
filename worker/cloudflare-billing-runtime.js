@@ -1,16 +1,18 @@
 import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clinical-runtime.js';
+import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
 const ASAAS_SANDBOX_API_URL = 'https://api-sandbox.asaas.com/v3';
 const ASAAS_CHECKOUT_URL = 'https://asaas.com/checkoutSession/show?id=';
 const ASAAS_SANDBOX_CHECKOUT_URL = 'https://sandbox.asaas.com/checkoutSession/show/';
-const PASSWORD_ITERATIONS = 210000;
+const CHECKOUT_TTL_MS = 2 * 60 * 60 * 1000;
+const EMAIL_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const enc = new TextEncoder();
 
-function json(status, body) {
+function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extraHeaders },
   });
 }
 
@@ -26,15 +28,6 @@ function b64urlBytes(bytes) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function bytesFromB64url(value) {
-  let normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
-  while (normalized.length % 4) normalized += '=';
-  const binary = atob(normalized);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
 function randomToken(bytes = 32) {
   const data = new Uint8Array(bytes);
   crypto.getRandomValues(data);
@@ -45,16 +38,9 @@ async function sha256(value) {
   return b64urlBytes(await crypto.subtle.digest('SHA-256', enc.encode(String(value || ''))));
 }
 
-async function passwordHash(password, salt, iterations = PASSWORD_ITERATIONS) {
-  const key = await crypto.subtle.importKey('raw', enc.encode(String(password || '')), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({
-    name: 'PBKDF2', hash: 'SHA-256', salt: bytesFromB64url(salt), iterations,
-  }, key, 256);
-  return b64urlBytes(bits);
-}
-
 function safeEqual(a, b) {
-  const x = String(a || ''), y = String(b || '');
+  const x = String(a || '');
+  const y = String(b || '');
   if (x.length !== y.length) return false;
   let diff = 0;
   for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
@@ -67,10 +53,6 @@ function normalizePartnerCode(value) {
 
 function normalizeAttributionSource(value) {
   return value === 'ref_link' ? 'ref_link' : 'manual_code';
-}
-
-function providerFor(environment) {
-  return environment === 'sandbox' ? 'asaas_sandbox' : 'asaas';
 }
 
 function asaasConfig(env, environment = 'production') {
@@ -118,9 +100,7 @@ async function asaasFetch(env, path, options = {}, environment = 'production') {
 }
 
 async function licensingRequest(env, body) {
-  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET) {
-    throw new Error('licensing_not_configured');
-  }
+  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET) throw new Error('licensing_not_configured');
   const response = await env.ARTISYS_LICENSING.fetch(new Request('https://artisys-licensing.internal/api/internal/product-license', {
     method: 'POST',
     headers: {
@@ -135,7 +115,7 @@ async function licensingRequest(env, body) {
 }
 
 async function syncCommercialLicense(env, { email, planCode, status, expiresAt, externalRef, environment }) {
-  if (environment !== 'production') return;
+  if (environment !== 'production' || !email) return;
   await licensingRequest(env, {
     action: 'sync',
     productCode: 'debora-lactacao',
@@ -156,21 +136,15 @@ async function planByCode(env, planCode) {
 
 async function resolvePartnerOffer(env, code, plan) {
   const partnerCode = normalizePartnerCode(code);
+  const subtotalCents = Number(plan.price_cents || 0);
   if (!partnerCode) {
-    return {
-      partner: null,
-      partnerCode: '',
-      subtotalCents: Number(plan.price_cents),
-      discountCents: 0,
-      totalCents: Number(plan.price_cents),
-      commissionCents: 0,
-    };
+    return { partner: null, partnerCode: '', subtotalCents, discountCents: 0, totalCents: subtotalCents, commissionCents: 0 };
   }
+
   const partner = await db(env).prepare(`SELECT * FROM partners
     WHERE active=1 AND upper(trim(code))=upper(trim(?)) LIMIT 1`).bind(partnerCode).first();
   if (!partner) throw Object.assign(new Error('invalid_partner_code'), { status: 400 });
 
-  const subtotalCents = Number(plan.price_cents);
   let discountCents = 0;
   if (partner.discount_type === 'percent') discountCents = Math.round(subtotalCents * Number(partner.discount_value || 0) / 100);
   if (partner.discount_type === 'fixed') discountCents = Math.round(Number(partner.discount_value || 0) * 100);
@@ -211,6 +185,7 @@ function checkoutPayload(planCode, requestId, origin, environment, flow, priced)
         cancelUrl: `${origin}/comercial/plano.html?asaas=cancel${suffix}`,
         expiredUrl: `${origin}/comercial/plano.html?asaas=expired${suffix}`,
       };
+
   const partnerSuffix = priced.partnerCode
     ? ` · código ${priced.partnerCode}${priced.discountCents ? ` · desconto R$ ${(priced.discountCents / 100).toFixed(2)}` : ''}`
     : '';
@@ -220,18 +195,30 @@ function checkoutPayload(planCode, requestId, origin, environment, flow, priced)
     externalReference: `saas_checkout:${requestId}`,
     callback,
   };
+
   if (planCode === 'pro_monthly') {
     return {
       ...common,
       chargeTypes: ['RECURRENT'],
-      items: [{ name: 'Plano Pro mensal', description: `Uso ilimitado e upload de fotos e vídeos${partnerSuffix}`, quantity: 1, value: priced.totalCents / 100 }],
+      items: [{
+        name: 'Plano Pro mensal',
+        description: `Uso ilimitado e upload de fotos e vídeos${partnerSuffix}`,
+        quantity: 1,
+        value: priced.totalCents / 100,
+      }],
       subscription: { cycle: 'MONTHLY', nextDueDate: tomorrowAsaasDateTime() },
     };
   }
+
   return {
     ...common,
     chargeTypes: ['DETACHED', 'INSTALLMENT'],
-    items: [{ name: 'Plano Pro anual', description: `Plano anual com uso ilimitado e upload de fotos e vídeos${partnerSuffix}`, quantity: 1, value: priced.totalCents / 100 }],
+    items: [{
+      name: 'Plano Pro anual',
+      description: `Plano anual com uso ilimitado e upload de fotos e vídeos${partnerSuffix}`,
+      quantity: 1,
+      value: priced.totalCents / 100,
+    }],
     installment: { maxInstallmentCount: Math.max(1, Number(priced.plan.installment_max || 12)) },
   };
 }
@@ -250,32 +237,32 @@ async function preparePendingSignup(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { error: 'invalid_signup_fields' });
   }
-  if (!['pro_monthly','pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
+  if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
 
   const existingUser = await db(env).prepare('SELECT user_id FROM auth_users WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
   if (existingUser?.user_id) return json(409, { error: 'existing_account_login_required' });
 
-  let pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
   const nonce = randomToken(32);
   const nonceHash = await sha256(nonce);
+  let pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
   if (pending) {
-    const actual = await passwordHash(password, pending.password_salt, Number(pending.password_iterations || PASSWORD_ITERATIONS));
+    const actual = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
     if (!safeEqual(actual, pending.password_hash)) return json(400, { error: 'signup_credentials_invalid' });
     if (pending.status === 'activated') return json(409, { error: 'existing_account_login_required' });
     await db(env).prepare(`UPDATE billing_pending_signups
-      SET plan_code=?,signup_nonce_hash=?,status='pending',updated_at=CURRENT_TIMESTAMP WHERE user_id=?`)
+      SET plan_code=?,signup_nonce_hash=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`)
       .bind(planCode, nonceHash, pending.user_id).run();
-    return json(200, { userId: pending.user_id, signupNonce: nonce });
+    return json(200, { userId: pending.user_id, signupNonce: nonce, status: pending.status });
   }
 
   const userId = crypto.randomUUID();
   const salt = randomToken(18);
-  const hash = await passwordHash(password, salt, PASSWORD_ITERATIONS);
+  const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   await db(env).prepare(`INSERT INTO billing_pending_signups(
       user_id,email,password_salt,password_hash,password_iterations,plan_code,signup_nonce_hash,status,created_at,updated_at
     ) VALUES(?,?,?,?,?,?,?,'pending',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
-    .bind(userId, email, salt, hash, PASSWORD_ITERATIONS, planCode, nonceHash).run();
-  return json(200, { userId, signupNonce: nonce });
+    .bind(userId, email, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS, planCode, nonceHash).run();
+  return json(200, { userId, signupNonce: nonce, status: 'pending' });
 }
 
 async function pendingSignupByProof(env, userId, nonce) {
@@ -288,11 +275,14 @@ async function pendingSignupByProof(env, userId, nonce) {
 async function activatePendingSignup(env, userId) {
   const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(userId).first();
   if (!pending) return runtimeUserById(env, userId);
+  if (!['paid', 'email_sent', 'activated'].includes(pending.status)) throw new Error('payment_not_confirmed');
   const existing = await db(env).prepare('SELECT user_id FROM auth_users WHERE lower(email)=lower(?) LIMIT 1').bind(pending.email).first();
   if (existing && existing.user_id !== userId) throw new Error('email_already_registered');
+  if (pending.status === 'activated') return runtimeUserById(env, userId);
+
   const now = new Date().toISOString();
   const userMetadata = JSON.stringify({ signup_source: 'commercial_saas', plan_intent: pending.plan_code });
-  const appMetadata = JSON.stringify({ payment_activated: true, checkout_email_after_payment: false });
+  const appMetadata = JSON.stringify({ payment_activated: true, email_verified_after_payment: true });
   await db(env).batch([
     db(env).prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
@@ -300,31 +290,100 @@ async function activatePendingSignup(env, userId) {
     ) VALUES(?,?,NULL,?,NULL,?,?,NULL,?,?,0,?)
     ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,email_confirmed_at=excluded.email_confirmed_at,
       updated_at=excluded.updated_at,user_metadata_json=excluded.user_metadata_json,app_metadata_json=excluded.app_metadata_json,
-      password_reset_required=0`).bind(userId,pending.email,now,pending.created_at || now,now,userMetadata,appMetadata,now),
+      password_reset_required=0`).bind(userId, pending.email, now, pending.created_at || now, now, userMetadata, appMetadata, now),
     db(env).prepare(`INSERT INTO auth_credentials(
       user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
     ) VALUES(?,?,?,?, 'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
       password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=CURRENT_TIMESTAMP`)
-      .bind(userId,pending.password_salt,pending.password_hash,Number(pending.password_iterations || PASSWORD_ITERATIONS)),
-    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,updated_at=? WHERE user_id=?`)
-      .bind(now,now,userId),
+      .bind(userId, pending.password_salt, pending.password_hash, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS)),
+    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,email_verification_token_hash=NULL,
+      email_verification_expires_at=NULL,updated_at=? WHERE user_id=?`).bind(now, now, userId),
   ]);
   return runtimeUserById(env, userId);
+}
+
+async function sendPaidConfirmationEmail(env, pending, origin) {
+  if (!pending || pending.status === 'activated') return { status: 'email_confirmed' };
+  if (pending.status === 'email_sent' && pending.email_verification_token_hash && pending.email_verification_expires_at
+      && Date.parse(pending.email_verification_expires_at) > Date.now()) {
+    return { status: 'email_sent' };
+  }
+  if (!env.EMAIL?.send) return { status: 'email_delivery_unavailable' };
+
+  const token = randomToken(36);
+  const tokenHash = await sha256(token);
+  const expiresAt = new Date(Date.now() + EMAIL_TOKEN_TTL_MS).toISOString();
+  const confirmationUrl = `${origin}/api/asaas/confirm-email?userId=${encodeURIComponent(pending.user_id)}&token=${encodeURIComponent(token)}`;
+  const from = String(env.BILLING_EMAIL_FROM || 'no-reply@deboralactacao.com');
+
+  await env.EMAIL.send({
+    to: pending.email,
+    from,
+    subject: 'Confirme seu e-mail · Débora Lactação',
+    text: `Seu pagamento foi confirmado. Confirme seu e-mail para liberar o acesso: ${confirmationUrl}`,
+    html: `<p>Seu pagamento foi confirmado.</p><p><a href="${confirmationUrl}">Confirmar e-mail e liberar acesso</a></p><p>Este link expira em 24 horas.</p>`,
+  });
+
+  const now = new Date().toISOString();
+  await db(env).prepare(`UPDATE billing_pending_signups SET status='email_sent',email_verification_token_hash=?,
+    email_verification_expires_at=?,email_verification_sent_at=?,updated_at=? WHERE user_id=?`)
+    .bind(tokenHash, expiresAt, now, now, pending.user_id).run();
+  return { status: 'email_sent' };
 }
 
 async function pendingStatus(request, env) {
   const input = await request.json().catch(() => ({}));
   const pending = await pendingSignupByProof(env, String(input.userId || ''), String(input.signupNonce || ''));
   if (!pending) return json(401, { error: 'invalid_signup_proof' });
-  if (pending.status === 'activated') return json(200, { ok: true, status: 'account_activated' });
+  if (pending.status === 'activated') return json(200, { ok: true, status: 'email_confirmed' });
+
   const checkout = await db(env).prepare(`SELECT status FROM billing_checkout_requests
     WHERE owner_id=? AND provider='asaas' ORDER BY created_at DESC LIMIT 1`).bind(pending.user_id).first();
-  if (checkout?.status === 'paid') {
-    await activatePendingSignup(env, pending.user_id);
-    return json(200, { ok: true, status: 'account_activated' });
+  if (checkout?.status !== 'paid') return json(200, { ok: true, status: 'awaiting_payment' });
+
+  if (pending.status === 'pending') {
+    await db(env).prepare(`UPDATE billing_pending_signups SET status='paid',payment_confirmed_at=COALESCE(payment_confirmed_at,?),
+      updated_at=? WHERE user_id=?`).bind(new Date().toISOString(), new Date().toISOString(), pending.user_id).run();
   }
-  return json(200, { ok: true, status: 'awaiting_payment' });
+  const fresh = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(pending.user_id).first();
+  try {
+    const email = await sendPaidConfirmationEmail(env, fresh, new URL(request.url).origin);
+    return json(200, { ok: true, status: email.status });
+  } catch (error) {
+    return json(503, { error: 'confirmation_email_failed', status: 'payment_confirmed', details: error?.message || undefined });
+  }
+}
+
+async function confirmEmail(request, env) {
+  const url = new URL(request.url);
+  const userId = String(url.searchParams.get('userId') || '');
+  const token = String(url.searchParams.get('token') || '');
+  if (!/^[0-9a-f-]{36}$/i.test(userId) || !token) return json(400, { error: 'invalid_confirmation_link' });
+  const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(userId).first();
+  if (!pending || !['paid', 'email_sent', 'activated'].includes(pending.status)) return json(400, { error: 'invalid_confirmation_link' });
+  if (pending.status !== 'activated') {
+    if (!pending.email_verification_token_hash || !pending.email_verification_expires_at) return json(400, { error: 'confirmation_not_issued' });
+    if (Date.parse(pending.email_verification_expires_at) <= Date.now()) return json(410, { error: 'confirmation_link_expired' });
+    if (!safeEqual(await sha256(token), pending.email_verification_token_hash)) return json(401, { error: 'invalid_confirmation_token' });
+    await activatePendingSignup(env, userId);
+  }
+  const target = new URL('/comercial/index.html', url.origin);
+  target.searchParams.set('confirmed', '1');
+  target.searchParams.set('plan', pending.plan_code);
+  return new Response(null, { status: 302, headers: { location: target.toString(), 'cache-control': 'no-store' } });
+}
+
+async function expireStaleCheckout(env, prior) {
+  if (!prior?.id || !['pending_provider', 'checkout_created'].includes(prior.status)) return false;
+  const createdAt = Date.parse(String(prior.created_at || ''));
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt <= CHECKOUT_TTL_MS) return false;
+  await db(env).batch([
+    db(env).prepare(`UPDATE billing_checkout_requests SET status='expired',updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(prior.id),
+    db(env).prepare(`UPDATE partner_attributions SET status='cancelled',commission_status=CASE WHEN commission_status='approved' THEN commission_status ELSE 'cancelled' END,
+      updated_at=CURRENT_TIMESTAMP WHERE checkout_request_id=?`).bind(prior.id),
+  ]);
+  return true;
 }
 
 async function createCheckoutRequest(env, { ownerId, planCode, provider, partnerCode, attributionSource }) {
@@ -333,22 +392,20 @@ async function createCheckoutRequest(env, { ownerId, planCode, provider, partner
   const priced = await resolvePartnerOffer(env, partnerCode, plan);
   priced.plan = plan;
 
-  const prior = await db(env).prepare(`SELECT * FROM billing_checkout_requests
+  let prior = await db(env).prepare(`SELECT * FROM billing_checkout_requests
     WHERE owner_id=? AND provider=? AND status IN ('pending_provider','checkout_created')
-    ORDER BY created_at DESC LIMIT 1`).bind(ownerId,provider).first();
+    ORDER BY created_at DESC LIMIT 1`).bind(ownerId, provider).first();
+  if (prior && await expireStaleCheckout(env, prior)) prior = null;
   if (prior) {
     if (prior.plan_code !== planCode) throw Object.assign(new Error('pending_checkout_other_plan'), { status: 409 });
     if (normalizePartnerCode(partnerCode) && normalizePartnerCode(prior.partner_code_snapshot) !== normalizePartnerCode(partnerCode)) {
       throw Object.assign(new Error('pending_checkout_partner_mismatch'), { status: 409 });
     }
-    if (prior.status === 'checkout_created' && prior.checkout_url) {
-      return { reused: true, request: prior, priced };
-    }
+    if (prior.status === 'checkout_created' && prior.checkout_url) return { reused: true, request: prior, priced };
     throw Object.assign(new Error('checkout_in_progress'), { status: 409 });
   }
 
   const id = crypto.randomUUID();
-  const metadata = JSON.stringify({ backend: 'cloudflare-d1' });
   await db(env).prepare(`INSERT INTO billing_checkout_requests(
     id,owner_id,plan_code,provider,status,partner_id,partner_code_snapshot,attribution_source,
     subtotal_cents,discount_cents,total_cents,commission_cents,metadata_json,created_at,updated_at
@@ -356,7 +413,8 @@ async function createCheckoutRequest(env, { ownerId, planCode, provider, partner
     .bind(
       id, ownerId, planCode, provider,
       priced.partner?.id || null, priced.partnerCode || null, priced.partner ? normalizeAttributionSource(attributionSource) : null,
-      priced.subtotalCents, priced.discountCents, priced.totalCents, priced.commissionCents, metadata,
+      priced.subtotalCents, priced.discountCents, priced.totalCents, priced.commissionCents,
+      JSON.stringify({ backend: 'cloudflare-d1' }),
     ).run();
 
   if (priced.partner) {
@@ -378,7 +436,7 @@ async function createCheckoutRequest(env, { ownerId, planCode, provider, partner
 async function attachCheckout(env, requestId, externalCheckoutId, url) {
   await db(env).batch([
     db(env).prepare(`UPDATE billing_checkout_requests SET status='checkout_created',external_checkout_id=?,checkout_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .bind(externalCheckoutId,url,requestId),
+      .bind(externalCheckoutId, url, requestId),
     db(env).prepare(`UPDATE partner_attributions SET status='checkout_created',updated_at=CURRENT_TIMESTAMP WHERE checkout_request_id=?`)
       .bind(requestId),
   ]);
@@ -387,56 +445,56 @@ async function attachCheckout(env, requestId, externalCheckoutId, url) {
 async function failCheckout(env, requestId) {
   await db(env).batch([
     db(env).prepare(`UPDATE billing_checkout_requests SET status='failed',updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(requestId),
-    db(env).prepare(`UPDATE partner_attributions SET status='cancelled',commission_status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE checkout_request_id=?`).bind(requestId),
+    db(env).prepare(`UPDATE partner_attributions SET status='cancelled',commission_status=CASE WHEN commission_status='approved' THEN commission_status ELSE 'cancelled' END,
+      updated_at=CURRENT_TIMESTAMP WHERE checkout_request_id=?`).bind(requestId),
   ]);
 }
 
 async function createProviderCheckout(request, env, environment, flow, ownerId, planCode, partnerCode, attributionSource) {
   const config = asaasConfig(env, environment);
   if (!config.secret) return json(503, { error: environment === 'sandbox' ? 'asaas_sandbox_not_configured' : 'asaas_not_configured' });
+
+  if (flow === 'pre_email_confirmation') {
+    const paid = await db(env).prepare(`SELECT id,status FROM billing_checkout_requests WHERE owner_id=? AND provider='asaas'
+      AND plan_code=? AND status='paid' ORDER BY created_at DESC LIMIT 1`).bind(ownerId, planCode).first();
+    if (paid) return json(200, { status: 'paid', planCode, environment: 'production' });
+  }
+
   let registered;
   try {
-    registered = await createCheckoutRequest(env, {
-      ownerId, planCode, provider: config.provider, partnerCode, attributionSource,
-    });
+    registered = await createCheckoutRequest(env, { ownerId, planCode, provider: config.provider, partnerCode, attributionSource });
   } catch (error) {
     return json(error.status || 500, { error: error.message || 'checkout_request_failed' });
   }
+
   if (registered.reused) {
     return json(200, {
-      status: 'checkout_created',
-      checkoutId: registered.request.external_checkout_id,
-      checkoutUrl: registered.request.checkout_url,
-      planCode,
+      status: 'checkout_created', checkoutId: registered.request.external_checkout_id,
+      checkoutUrl: registered.request.checkout_url, planCode,
       partnerCode: registered.request.partner_code_snapshot || '',
       discountCents: Number(registered.request.discount_cents || 0),
-      effectivePriceCents: Number(registered.request.total_cents || registered.priced.totalCents),
-      environment,
+      effectivePriceCents: Number(registered.request.total_cents || registered.priced.totalCents), environment,
     });
   }
 
-  const url = new URL(request.url);
-  const payload = checkoutPayload(planCode, registered.request.id, url.origin, environment, flow, registered.priced);
+  const origin = new URL(request.url).origin;
+  const payload = checkoutPayload(planCode, registered.request.id, origin, environment, flow, registered.priced);
   const { response, payload: result } = await asaasFetch(env, '/checkouts', { method: 'POST', body: JSON.stringify(payload) }, environment);
   if (!response || !response.ok || !result?.id) {
     if (response && response.status < 500) await failCheckout(env, registered.request.id);
     return json(response?.status || 503, {
-      error: response ? 'asaas_checkout_failed' : 'asaas_not_configured',
+      error: response ? 'asaas_checkout_failed' : (environment === 'sandbox' ? 'asaas_sandbox_not_configured' : 'asaas_not_configured'),
       details: Array.isArray(result?.errors) ? result.errors.map((item) => ({ code: item.code, description: item.description })) : undefined,
     });
   }
+
   const providerUrl = checkoutUrl(result, environment);
   await attachCheckout(env, registered.request.id, String(result.id), providerUrl);
   return json(200, {
-    status: 'checkout_created',
-    checkoutId: result.id,
-    checkoutUrl: providerUrl,
-    planCode,
-    partnerCode: registered.priced.partnerCode,
-    discountCents: registered.priced.discountCents,
-    effectivePriceCents: registered.priced.totalCents,
-    environment,
-    ...(flow === 'pre_email_confirmation' ? { emailConfirmationRequiredForAccess: false, activationAfterPayment: true } : {}),
+    status: 'checkout_created', checkoutId: result.id, checkoutUrl: providerUrl, planCode,
+    partnerCode: registered.priced.partnerCode, discountCents: registered.priced.discountCents,
+    effectivePriceCents: registered.priced.totalCents, environment,
+    ...(flow === 'pre_email_confirmation' ? { emailConfirmationRequiredForAccess: true, confirmationAfterPayment: true } : {}),
   });
 }
 
@@ -445,11 +503,9 @@ async function authenticatedCheckout(request, env, environment) {
   if (!user?.id) return json(401, { error: 'unauthorized' });
   const input = await request.json().catch(() => ({}));
   const planCode = String(input.planCode || '');
-  if (!['pro_monthly','pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
-  return createProviderCheckout(
-    request, env, environment, 'authenticated', user.id, planCode,
-    normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource),
-  );
+  if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
+  return createProviderCheckout(request, env, environment, 'authenticated', user.id, planCode,
+    normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource));
 }
 
 async function preauthCheckout(request, env) {
@@ -460,10 +516,8 @@ async function preauthCheckout(request, env) {
   const pending = await pendingSignupByProof(env, userId, nonce);
   if (!pending) return json(401, { error: 'invalid_signup_proof' });
   if (pending.plan_code !== planCode) return json(409, { error: 'pending_checkout_other_plan' });
-  return createProviderCheckout(
-    request, env, 'production', 'pre_email_confirmation', userId, planCode,
-    normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource),
-  );
+  return createProviderCheckout(request, env, 'production', 'pre_email_confirmation', userId, planCode,
+    normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource));
 }
 
 function parseCheckoutReference(value) {
@@ -473,16 +527,16 @@ function parseCheckoutReference(value) {
 
 function billingTransition(status) {
   const normalized = String(status || '').toUpperCase();
-  if (['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'].includes(normalized)) return 'active';
+  if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(normalized)) return 'active';
   if (normalized === 'OVERDUE') return 'past_due';
-  if (['REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE','AWAITING_CHARGEBACK_REVERSAL','DELETED'].includes(normalized)) return 'cancelled';
+  if (['REFUNDED', 'REFUND_REQUESTED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE', 'AWAITING_CHARGEBACK_REVERSAL', 'DELETED'].includes(normalized)) return 'cancelled';
   return null;
 }
 
 function attributionStatus(providerStatus) {
-  if (['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'].includes(providerStatus)) return 'paid';
-  if (['REFUNDED','REFUND_REQUESTED'].includes(providerStatus)) return 'refunded';
-  if (['CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE','AWAITING_CHARGEBACK_REVERSAL'].includes(providerStatus)) return 'chargeback';
+  if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(providerStatus)) return 'paid';
+  if (['REFUNDED', 'REFUND_REQUESTED'].includes(providerStatus)) return 'refunded';
+  if (['CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE', 'AWAITING_CHARGEBACK_REVERSAL'].includes(providerStatus)) return 'chargeback';
   if (providerStatus === 'DELETED') return 'cancelled';
   return null;
 }
@@ -499,7 +553,7 @@ function currentPeriodEnd(payment, planCode) {
 async function mapPayment(env, payment, provider, environment) {
   const requestId = parseCheckoutReference(payment?.externalReference);
   if (requestId) {
-    const checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? AND provider=? LIMIT 1').bind(requestId,provider).first();
+    const checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? AND provider=? LIMIT 1').bind(requestId, provider).first();
     if (!checkout?.external_checkout_id) return null;
     const { response, payload } = await asaasFetch(env, `/payments?checkoutSession=${encodeURIComponent(checkout.external_checkout_id)}&limit=100`, { method: 'GET' }, environment);
     const rows = Array.isArray(payload?.data) ? payload.data : [];
@@ -510,12 +564,16 @@ async function mapPayment(env, payment, provider, environment) {
   const subscriptionId = String(payment?.subscription || '');
   if (!subscriptionId) return null;
   const subscription = await db(env).prepare(`SELECT * FROM subscriptions
-    WHERE provider=? AND external_subscription_id=? LIMIT 1`).bind(provider,subscriptionId).first();
+    WHERE provider=? AND external_subscription_id=? LIMIT 1`).bind(provider, subscriptionId).first();
   if (!subscription) return null;
   const checkout = subscription.origin_checkout_request_id
     ? await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? LIMIT 1').bind(subscription.origin_checkout_request_id).first()
     : null;
-  return { checkout: checkout || { id: null, owner_id: subscription.owner_id, plan_code: subscription.plan_code, provider }, subscription, renewal: true };
+  return {
+    checkout: checkout || { id: null, owner_id: subscription.owner_id, plan_code: subscription.plan_code, provider },
+    subscription,
+    renewal: true,
+  };
 }
 
 async function beginEvent(env, provider, paymentId, providerStatus, checkoutId, payload) {
@@ -524,20 +582,20 @@ async function beginEvent(env, provider, paymentId, providerStatus, checkoutId, 
     id,provider,external_event_id,event_type,status,payment_id,checkout_request_id,payload_json,received_at
   ) VALUES(?,?,?,?, 'received',?,?,?,CURRENT_TIMESTAMP)
   ON CONFLICT(provider,external_event_id) DO NOTHING`)
-    .bind(crypto.randomUUID(),provider,eventId,`PAYMENT_${providerStatus}`,paymentId,checkoutId || null,JSON.stringify(payload || {})).run();
+    .bind(crypto.randomUUID(), provider, eventId, `PAYMENT_${providerStatus}`, paymentId, checkoutId || null, JSON.stringify(payload || {})).run();
   if (Number(result?.meta?.changes || 0) > 0) return { eventId, process: true };
-  const existing = await db(env).prepare('SELECT status FROM billing_webhook_events WHERE provider=? AND external_event_id=? LIMIT 1').bind(provider,eventId).first();
+  const existing = await db(env).prepare('SELECT status FROM billing_webhook_events WHERE provider=? AND external_event_id=? LIMIT 1').bind(provider, eventId).first();
   if (existing?.status === 'processed') return { eventId, process: false, duplicate: true };
   if (existing?.status === 'received') return { eventId, process: false, inProgress: true };
   await db(env).prepare(`UPDATE billing_webhook_events SET status='received',error_message=NULL,processed_at=NULL WHERE provider=? AND external_event_id=?`)
-    .bind(provider,eventId).run();
+    .bind(provider, eventId).run();
   return { eventId, process: true };
 }
 
 async function finishEvent(env, provider, eventId, ok, error = null) {
   await db(env).prepare(`UPDATE billing_webhook_events SET status=?,processed_at=?,error_message=?
     WHERE provider=? AND external_event_id=?`)
-    .bind(ok ? 'processed' : 'failed',new Date().toISOString(),error,provider,eventId).run();
+    .bind(ok ? 'processed' : 'failed', new Date().toISOString(), error, provider, eventId).run();
 }
 
 async function upsertSubscription(env, mapped, payment, transition, providerStatus) {
@@ -546,7 +604,6 @@ async function upsertSubscription(env, mapped, payment, transition, providerStat
   const subscriptionId = String(payment?.subscription || mapped.subscription?.external_subscription_id || '');
   const customerId = String(payment?.customer || mapped.subscription?.external_customer_id || '');
   const periodEnd = transition === 'active' ? currentPeriodEnd(payment, checkout.plan_code) : mapped.subscription?.current_period_end || null;
-  const metadata = JSON.stringify({ payment_id: payment.id, provider_status: providerStatus, backend: 'cloudflare-d1' });
   const id = mapped.subscription?.id || crypto.randomUUID();
   await db(env).prepare(`INSERT INTO subscriptions(
       id,owner_id,provider,external_customer_id,external_subscription_id,origin_checkout_request_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
@@ -557,7 +614,11 @@ async function upsertSubscription(env, mapped, payment, transition, providerStat
       origin_checkout_request_id=COALESCE(subscriptions.origin_checkout_request_id,excluded.origin_checkout_request_id),
       plan_code=excluded.plan_code,status=excluded.status,current_period_end=excluded.current_period_end,
       metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP`)
-    .bind(id,checkout.owner_id,provider,customerId,subscriptionId,checkout.id || mapped.subscription?.origin_checkout_request_id || null,checkout.plan_code,transition,periodEnd,metadata).run();
+    .bind(
+      id, checkout.owner_id, provider, customerId, subscriptionId,
+      checkout.id || mapped.subscription?.origin_checkout_request_id || null, checkout.plan_code, transition, periodEnd,
+      JSON.stringify({ payment_id: payment.id, provider_status: providerStatus, backend: 'cloudflare-d1' }),
+    ).run();
   return { periodEnd, subscriptionId };
 }
 
@@ -565,21 +626,26 @@ async function updateInitialCheckoutAndAttribution(env, mapped, providerStatus, 
   if (mapped.renewal || !mapped.checkout?.id) return;
   const checkoutStatus = transition === 'active' ? 'paid' : transition === 'past_due' ? 'past_due' : 'cancelled';
   await db(env).prepare('UPDATE billing_checkout_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
-    .bind(checkoutStatus,mapped.checkout.id).run();
+    .bind(checkoutStatus, mapped.checkout.id).run();
 
   const aStatus = attributionStatus(providerStatus);
   if (!aStatus) return;
   const attribution = await db(env).prepare('SELECT * FROM partner_attributions WHERE checkout_request_id=? LIMIT 1').bind(mapped.checkout.id).first();
   if (!attribution) return;
   let commissionStatus = attribution.commission_status;
-  if (aStatus === 'paid') commissionStatus = Number(attribution.commission_cents || 0) > 0 && commissionStatus !== 'approved' ? 'pending' : commissionStatus;
-  if (['refunded','chargeback','cancelled'].includes(aStatus)) {
+  if (aStatus === 'paid' && commissionStatus !== 'approved') commissionStatus = Number(attribution.commission_cents || 0) > 0 ? 'pending' : 'none';
+  if (['refunded', 'chargeback', 'cancelled'].includes(aStatus)) {
     commissionStatus = commissionStatus === 'approved' || commissionStatus === 'reversed' ? 'reversed' : 'cancelled';
   }
   await db(env).prepare(`UPDATE partner_attributions SET status=?,provider_status=?,commission_status=?,
     paid_at=CASE WHEN ?='paid' THEN COALESCE(paid_at,?) ELSE paid_at END,updated_at=CURRENT_TIMESTAMP
     WHERE checkout_request_id=?`)
-    .bind(aStatus,providerStatus,commissionStatus,aStatus,new Date().toISOString(),mapped.checkout.id).run();
+    .bind(aStatus, providerStatus, commissionStatus, aStatus, new Date().toISOString(), mapped.checkout.id).run();
+}
+
+async function pendingEmailForOwner(env, ownerId) {
+  const row = await db(env).prepare('SELECT email FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(ownerId).first();
+  return row?.email || null;
 }
 
 async function handleWebhook(request, env, environment) {
@@ -597,39 +663,56 @@ async function handleWebhook(request, env, environment) {
   const providerStatus = String(payment?.status || '').toUpperCase();
   const transition = billingTransition(providerStatus);
   if (!transition) return json(200, { status: 'ignored_no_billing_transition', paymentId, providerStatus, environment });
-  const mapped = await mapPayment(env,payment,config.provider,environment);
+  const mapped = await mapPayment(env, payment, config.provider, environment);
   if (!mapped) return json(200, { status: 'ignored_unmapped_payment', paymentId, environment });
 
-  const event = await beginEvent(env,config.provider,paymentId,providerStatus,mapped.checkout?.id,{
-    environment,payment_id:paymentId,provider_status:providerStatus,renewal:mapped.renewal,
+  const event = await beginEvent(env, config.provider, paymentId, providerStatus, mapped.checkout?.id, {
+    environment, payment_id: paymentId, provider_status: providerStatus, renewal: mapped.renewal,
   });
   if (event.duplicate) return json(200, { status: 'duplicate_ignored', eventId: event.eventId, paymentId, environment });
   if (event.inProgress) return json(503, { error: 'event_in_progress', eventId: event.eventId });
 
   try {
-    const subscription = await upsertSubscription(env,mapped,payment,transition,providerStatus);
-    await updateInitialCheckoutAndAttribution(env,mapped,providerStatus,transition);
-    if (!mapped.renewal && transition === 'active') await activatePendingSignup(env,mapped.checkout.owner_id);
+    const subscription = await upsertSubscription(env, mapped, payment, transition, providerStatus);
+    await updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition);
 
-    const user = await runtimeUserById(env,mapped.checkout.owner_id);
-    if (user?.email) {
-      await syncCommercialLicense(env, {
-        email: user.email,
-        planCode: mapped.checkout.plan_code,
-        status: transition,
-        expiresAt: subscription.periodEnd,
-        externalRef: subscription.subscriptionId || paymentId,
-        environment,
-      });
+    let confirmationStatus = null;
+    if (!mapped.renewal && transition === 'active') {
+      const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
+      if (pending && pending.status !== 'activated') {
+        const now = new Date().toISOString();
+        await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'paid' END,
+          payment_confirmed_at=COALESCE(payment_confirmed_at,?),updated_at=? WHERE user_id=?`).bind(now, now, pending.user_id).run();
+        const fresh = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(pending.user_id).first();
+        const email = await sendPaidConfirmationEmail(env, fresh, new URL(request.url).origin);
+        confirmationStatus = email.status;
+        if (email.status === 'email_delivery_unavailable') throw new Error('cloudflare_email_not_configured');
+      }
     }
-    await finishEvent(env,config.provider,event.eventId,true);
+    if (!mapped.renewal && transition === 'cancelled') {
+      await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'cancelled' END,
+        updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(mapped.checkout.owner_id).run();
+    }
+
+    const user = await runtimeUserById(env, mapped.checkout.owner_id);
+    const email = user?.email || await pendingEmailForOwner(env, mapped.checkout.owner_id);
+    await syncCommercialLicense(env, {
+      email,
+      planCode: mapped.checkout.plan_code,
+      status: transition,
+      expiresAt: subscription.periodEnd,
+      externalRef: subscription.subscriptionId || paymentId,
+      environment,
+    });
+
+    await finishEvent(env, config.provider, event.eventId, true);
     return json(200, {
-      status: 'processed',eventId:event.eventId,paymentId,ownerId:mapped.checkout.owner_id,
-      planCode:mapped.checkout.plan_code,billingStatus:transition,currentPeriodEnd:subscription.periodEnd,
-      renewal:mapped.renewal,environment,
+      status: 'processed', eventId: event.eventId, paymentId, ownerId: mapped.checkout.owner_id,
+      planCode: mapped.checkout.plan_code, billingStatus: transition, currentPeriodEnd: subscription.periodEnd,
+      renewal: mapped.renewal, confirmationStatus, environment,
     });
   } catch (error) {
-    await finishEvent(env,config.provider,event.eventId,false,String(error?.message || error).slice(0,1000));
+    await finishEvent(env, config.provider, event.eventId, false, String(error?.message || error).slice(0, 1000));
     return json(500, { error: 'billing_state_apply_failed', eventId: event.eventId, details: error?.message || undefined });
   }
 }
@@ -639,7 +722,7 @@ function adminEmails(env) {
 }
 
 async function requireAdmin(request, env) {
-  const user = await authenticateClinicalRequest(request,env);
+  const user = await authenticateClinicalRequest(request, env);
   if (!user?.email) return null;
   if (user?.app_metadata?.partner_admin === true) return user;
   return adminEmails(env).has(String(user.email).trim().toLowerCase()) ? user : null;
@@ -657,19 +740,19 @@ function validPartnerInput(input) {
     discountValue: Number(input?.discountValue || 0),
     active: input?.active !== false ? 1 : 0,
   };
-  if (value.name.length < 2 || value.name.length > 160) return { error:'invalid_partner_name' };
-  if (!/^[A-Z0-9_-]{2,64}$/.test(value.code)) return { error:'invalid_partner_code' };
-  if (!['partner','influencer','campaign'].includes(value.partnerType)) return { error:'invalid_partner_type' };
-  if (!['none','percent','fixed'].includes(value.commissionType)) return { error:'invalid_commission_type' };
-  if (!['none','percent','fixed'].includes(value.discountType)) return { error:'invalid_discount_type' };
-  if (!Number.isFinite(value.commissionValue) || value.commissionValue < 0 || (value.commissionType === 'percent' && value.commissionValue > 100)) return { error:'invalid_commission_value' };
-  if (!Number.isFinite(value.discountValue) || value.discountValue < 0 || (value.discountType === 'percent' && value.discountValue > 100)) return { error:'invalid_discount_value' };
+  if (value.name.length < 2 || value.name.length > 160) return { error: 'invalid_partner_name' };
+  if (!/^[A-Z0-9_-]{2,64}$/.test(value.code)) return { error: 'invalid_partner_code' };
+  if (!['partner', 'influencer', 'campaign'].includes(value.partnerType)) return { error: 'invalid_partner_type' };
+  if (!['none', 'percent', 'fixed'].includes(value.commissionType)) return { error: 'invalid_commission_type' };
+  if (!['none', 'percent', 'fixed'].includes(value.discountType)) return { error: 'invalid_discount_type' };
+  if (!Number.isFinite(value.commissionValue) || value.commissionValue < 0 || (value.commissionType === 'percent' && value.commissionValue > 100)) return { error: 'invalid_commission_value' };
+  if (!Number.isFinite(value.discountValue) || value.discountValue < 0 || (value.discountType === 'percent' && value.discountValue > 100)) return { error: 'invalid_discount_value' };
   return { value };
 }
 
 async function partnerAdmin(request, env, url) {
-  const admin = await requireAdmin(request,env);
-  if (!admin) return json(403, { error:'partner_admin_forbidden' });
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json(403, { error: 'partner_admin_forbidden' });
 
   if (url.pathname === '/api/admin/partners' && request.method === 'GET') {
     const result = await db(env).prepare(`SELECT id,name,code,partner_type,active,commission_type,commission_value,
@@ -679,35 +762,36 @@ async function partnerAdmin(request, env, url) {
 
   if (url.pathname === '/api/admin/partners' && request.method === 'POST') {
     const parsed = validPartnerInput(await request.json().catch(() => null));
-    if (parsed.error) return json(400, { error:parsed.error });
+    if (parsed.error) return json(400, { error: parsed.error });
     const p = parsed.value;
     try {
       if (p.id) {
-        if (!/^[0-9a-f-]{36}$/i.test(p.id)) return json(400,{error:'invalid_partner_id'});
+        if (!/^[0-9a-f-]{36}$/i.test(p.id)) return json(400, { error: 'invalid_partner_id' });
         await db(env).prepare(`UPDATE partners SET name=?,code=?,partner_type=?,active=?,commission_type=?,commission_value=?,
           discount_type=?,discount_value=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-          .bind(p.name,p.code,p.partnerType,p.active,p.commissionType,p.commissionValue,p.discountType,p.discountValue,p.id).run();
+          .bind(p.name, p.code, p.partnerType, p.active, p.commissionType, p.commissionValue, p.discountType, p.discountValue, p.id).run();
       } else {
         p.id = crypto.randomUUID();
         await db(env).prepare(`INSERT INTO partners(id,name,code,partner_type,active,commission_type,commission_value,discount_type,discount_value,created_at,updated_at)
           VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
-          .bind(p.id,p.name,p.code,p.partnerType,p.active,p.commissionType,p.commissionValue,p.discountType,p.discountValue).run();
+          .bind(p.id, p.name, p.code, p.partnerType, p.active, p.commissionType, p.commissionValue, p.discountType, p.discountValue).run();
       }
     } catch (error) {
-      return json(String(error?.message || '').includes('UNIQUE') ? 409 : 500, { error:String(error?.message || '').includes('UNIQUE') ? 'partner_code_conflict' : 'partner_save_failed' });
+      const conflict = String(error?.message || '').includes('UNIQUE');
+      return json(conflict ? 409 : 500, { error: conflict ? 'partner_code_conflict' : 'partner_save_failed' });
     }
     const partner = await db(env).prepare('SELECT * FROM partners WHERE id=?').bind(p.id).first();
-    return json(200,{partner});
+    return json(200, { partner });
   }
 
   if (url.pathname === '/api/admin/partner-sales' && request.method === 'GET') {
-    const conditions = [], bindings = [];
-    const add = (sql,value) => { if (value) { conditions.push(sql); bindings.push(value); } };
-    add('a.partner_id=?',url.searchParams.get('partnerId'));
-    add('a.plan_code=?',url.searchParams.get('plan'));
-    add('a.status=?',url.searchParams.get('status'));
-    const commissionStatus = url.searchParams.get('commissionStatus');
-    add('a.commission_status=?',commissionStatus);
+    const conditions = [];
+    const bindings = [];
+    const add = (sql, value) => { if (value) { conditions.push(sql); bindings.push(value); } };
+    add('a.partner_id=?', url.searchParams.get('partnerId'));
+    add('a.plan_code=?', url.searchParams.get('plan'));
+    add('a.status=?', url.searchParams.get('status'));
+    add('a.commission_status=?', url.searchParams.get('commissionStatus'));
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (from) { conditions.push('a.created_at>=?'); bindings.push(from); }
@@ -716,77 +800,95 @@ async function partnerAdmin(request, env, url) {
     const result = await db(env).prepare(`SELECT a.*,p.name AS partner_name,p.code AS partner_code
       FROM partner_attributions a JOIN partners p ON p.id=a.partner_id ${where}
       ORDER BY a.created_at DESC LIMIT 500`).bind(...bindings).all();
-    const sales = (result.results || []).map((row) => ({ ...row, partners:{name:row.partner_name,code:row.partner_code} }));
-    const summary = sales.reduce((acc,sale) => {
+    const sales = (result.results || []).map((row) => ({ ...row, partners: { name: row.partner_name, code: row.partner_code } }));
+    const summary = sales.reduce((acc, sale) => {
       acc.attributions += 1;
       if (sale.status === 'paid') { acc.paidSales += 1; acc.revenueCents += Number(sale.total_cents || 0); }
       if (sale.commission_status === 'pending') acc.pendingCommissionCents += Number(sale.commission_cents || 0);
       if (sale.commission_status === 'approved') acc.approvedCommissionCents += Number(sale.commission_cents || 0);
       if (sale.commission_status === 'reversed') acc.reversedCommissionCents += Number(sale.commission_cents || 0);
       return acc;
-    },{attributions:0,paidSales:0,revenueCents:0,pendingCommissionCents:0,approvedCommissionCents:0,reversedCommissionCents:0});
-    return json(200,{summary,sales});
+    }, { attributions: 0, paidSales: 0, revenueCents: 0, pendingCommissionCents: 0, approvedCommissionCents: 0, reversedCommissionCents: 0 });
+    return json(200, { summary, sales });
   }
 
   if (url.pathname === '/api/admin/partner-commission' && request.method === 'POST') {
     const input = await request.json().catch(() => ({}));
     const id = String(input.attributionId || '');
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return json(400,{error:'invalid_attribution_id'});
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return json(400, { error: 'invalid_attribution_id' });
     const result = await db(env).prepare(`UPDATE partner_attributions SET commission_status='approved',commission_approved_at=?,
       commission_approved_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='paid' AND commission_status='pending'`)
-      .bind(new Date().toISOString(),admin.email,id).run();
-    if (Number(result?.meta?.changes || 0) !== 1) return json(409,{error:'commission_approval_failed'});
-    return json(200,{status:'approved',attributionId:id});
+      .bind(new Date().toISOString(), admin.email, id).run();
+    if (Number(result?.meta?.changes || 0) !== 1) return json(409, { error: 'commission_approval_failed' });
+    return json(200, { status: 'approved', attributionId: id });
   }
-  return json(404,{error:'not_found'});
+  return json(404, { error: 'not_found' });
 }
 
 async function health(env, environment) {
-  const config = asaasConfig(env,environment);
-  let asaasAuthStatus = null, asaasApiValid = false, d1BillingReady = false;
+  const config = asaasConfig(env, environment);
+  let asaasAuthStatus = null;
+  let asaasApiValid = false;
+  let d1BillingReady = false;
   try {
     const row = await db(env).prepare("SELECT state_value FROM runtime_state WHERE state_key='billing_backend' LIMIT 1").first();
     d1BillingReady = row?.state_value === 'cloudflare-d1';
   } catch {}
   if (config.secret) {
-    const { response } = await asaasFetch(env,'/wallets/',{method:'GET'},environment);
+    const { response } = await asaasFetch(env, '/wallets/', { method: 'GET' }, environment);
     asaasAuthStatus = response?.status ?? null;
     asaasApiValid = Boolean(response?.ok);
   }
-  return json(200,{
-    ok:true,service:'commercial-asaas-api',environment,billingBackend:'cloudflare-d1',d1BillingReady,
-    asaasApiConfigured:Boolean(config.secret),asaasApiValid,asaasAuthStatus,
-    credentialEnvironment:credentialEnvironment(config.secret),
-    credentialMatchesEnvironment:credentialEnvironment(config.secret)===environment,
-    webhookVerification:'asaas_api_lookup_and_cloudflare_d1_reconciliation',
-    recurringReconciliation:'subscription_id',
-    cloudflareSecretsRequired:[environment==='sandbox'?'ASSAS_SANDBOX_SECRET':'ASAAS_SECRET','LICENSE_SERVICE_SECRET','CLINICAL_AUTH_SECRET'],
+  return json(200, {
+    ok: true,
+    service: 'commercial-asaas-api',
+    environment,
+    billingBackend: 'cloudflare-d1',
+    d1BillingReady,
+    emailConfigured: Boolean(env.EMAIL?.send),
+    asaasApiConfigured: Boolean(config.secret),
+    asaasApiValid,
+    asaasAuthStatus,
+    credentialEnvironment: credentialEnvironment(config.secret),
+    credentialMatchesEnvironment: credentialEnvironment(config.secret) === environment,
+    webhookVerification: 'asaas_api_lookup_and_cloudflare_d1_reconciliation',
+    recurringReconciliation: 'subscription_id',
+    cloudflareSecretsRequired: [environment === 'sandbox' ? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET', 'LICENSE_SERVICE_SECRET', 'CLINICAL_AUTH_SECRET'],
   });
 }
 
 const ROUTES = new Set([
-  '/api/asaas/signup','/api/asaas/pending-status','/api/asaas/health','/api/asaas/preauth-checkout','/api/asaas/checkout','/api/webhooks/asaas',
-  '/api/sandbox/asaas/health','/api/sandbox/asaas/checkout','/api/sandbox/webhooks/asaas',
-  '/api/admin/partners','/api/admin/partner-sales','/api/admin/partner-commission',
+  '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/confirm-email', '/api/asaas/health',
+  '/api/asaas/preauth-checkout', '/api/asaas/checkout', '/api/webhooks/asaas',
+  '/api/sandbox/asaas/health', '/api/sandbox/asaas/checkout', '/api/sandbox/webhooks/asaas',
+  '/api/admin/partners', '/api/admin/partner-sales', '/api/admin/partner-commission',
 ]);
 
 export async function handleCloudflareBillingRuntime(request, env, url = new URL(request.url)) {
   if (!env.CLINICAL_DB || !ROUTES.has(url.pathname)) return null;
   try {
-    if (url.pathname.startsWith('/api/admin/')) return partnerAdmin(request,env,url);
-    if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return preparePendingSignup(request,env);
-    if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return pendingStatus(request,env);
-    if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env,'production');
-    if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return preauthCheckout(request,env);
-    if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request,env,'production');
-    if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return handleWebhook(request,env,'production');
-    if (url.pathname === '/api/sandbox/asaas/health' && request.method === 'GET') return health(env,'sandbox');
-    if (url.pathname === '/api/sandbox/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request,env,'sandbox');
-    if (url.pathname === '/api/sandbox/webhooks/asaas' && request.method === 'POST') return handleWebhook(request,env,'sandbox');
-    return json(405,{error:'method_not_allowed'});
+    if (url.pathname.startsWith('/api/admin/')) return partnerAdmin(request, env, url);
+    if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return preparePendingSignup(request, env);
+    if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return pendingStatus(request, env);
+    if (url.pathname === '/api/asaas/confirm-email' && request.method === 'GET') return confirmEmail(request, env);
+    if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env, 'production');
+    if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return preauthCheckout(request, env);
+    if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request, env, 'production');
+    if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env, 'production');
+    if (url.pathname === '/api/sandbox/asaas/health' && request.method === 'GET') return health(env, 'sandbox');
+    if (url.pathname === '/api/sandbox/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request, env, 'sandbox');
+    if (url.pathname === '/api/sandbox/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env, 'sandbox');
+    return json(405, { error: 'method_not_allowed' });
   } catch (error) {
-    return json(500,{error:'cloudflare_billing_runtime_failed',details:error?.message || String(error)});
+    return json(500, { error: 'cloudflare_billing_runtime_failed', details: error?.message || String(error) });
   }
 }
 
-export { billingTransition, resolvePartnerOffer, currentPeriodEnd };
+export {
+  billingTransition,
+  resolvePartnerOffer,
+  currentPeriodEnd,
+  normalizePartnerCode,
+  checkoutPayload,
+  CLOUDFLARE_PBKDF2_ITERATIONS,
+};
