@@ -61,7 +61,7 @@ test('seed validates license secret before any D1 operation', async () => {
   assert.deepEqual(calls, []);
 });
 
-test('seed preflights identity, syncs Pro, then writes only hashed credential and fixture SQL', async () => {
+test('seed preflights identity, syncs Pro, and writes a 100k PBKDF2 credential', async () => {
   const calls = [];
   let writtenSql = '';
   const result = await seedDemoAccount({
@@ -74,6 +74,9 @@ test('seed preflights identity, syncs Pro, then writes only hashed credential an
   assert.equal(result.email, DEMO_EMAIL);
   assert.equal(result.plan, 'pro_6m');
   assert.match(writtenSql, /INSERT INTO auth_credentials/);
+  assert.match(writtenSql, /PBKDF2-SHA256/);
+  assert.match(writtenSql, /100000/);
+  assert.doesNotMatch(writtenSql, /210000/);
   assert.doesNotMatch(writtenSql, /fixture-only-not-user-credential-2026!/);
 });
 
@@ -90,7 +93,7 @@ test('reset refuses missing or unsafe identity before license/write side effects
   }
 });
 
-test('reset validates identity, refreshes Pro and performs scoped reset+seed in one atomic D1 import file', async () => {
+test('reset validates identity and reseeds a 100k PBKDF2 credential with scoped data reset', async () => {
   const calls = [];
   let writtenSql = '';
   const result = await resetDemoAccount({
@@ -105,5 +108,7 @@ test('reset validates identity, refreshes Pro and performs scoped reset+seed in 
   assert.doesNotMatch(writtenSql, /COMMIT/i);
   assert.match(writtenSql, new RegExp(`DELETE FROM supabase_records WHERE owner_id = '${DEMO_USER_ID}'`));
   assert.match(writtenSql, /INSERT INTO auth_users/);
+  assert.match(writtenSql, /100000/);
+  assert.doesNotMatch(writtenSql, /210000/);
   assert.doesNotMatch(writtenSql, /DELETE FROM auth_users/);
 });

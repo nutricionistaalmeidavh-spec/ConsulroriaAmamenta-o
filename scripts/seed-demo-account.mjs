@@ -12,7 +12,7 @@ export async function seedDemoAccount({
   syncLicense = syncDemoProLicense,
   writeSql = executeD1Sql,
 } = {}) {
-  const credential = deriveDemoCredential(password);
+  const credential = deriveDemoCredential(password, { iterations: 100000 });
   const secret = String(licenseSecret || '').trim();
   if (!secret) throw new Error('demo_license_secret_missing');
   const fixture = buildDemoFixture(now);
