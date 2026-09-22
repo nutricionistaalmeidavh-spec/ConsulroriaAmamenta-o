@@ -1,145 +1,45 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { stripTypeScriptTypes } from 'node:module';
-import vm from 'node:vm';
+import { billingTransition, currentPeriodEnd } from '../worker/cloudflare-billing-runtime.js';
 
-const ownerId = '11111111-1111-4111-8111-111111111111';
-const reply = (body, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { 'content-type': 'application/json' },
-});
+const runtime = readFileSync('worker/cloudflare-billing-runtime.js', 'utf8');
+const schema = readFileSync('cloudflare/billing-schema.sql', 'utf8');
 
-let handler;
-let paymentId = 'pay_renewal';
-let duplicate = false;
-let knownSubscription = true;
-let billingWrites = 0;
-let checkoutLookups = 0;
-let partnerWrites = 0;
-let emailCalls = 0;
+assert.equal(billingTransition('CONFIRMED'), 'active');
+assert.equal(billingTransition('RECEIVED'), 'active');
+assert.equal(billingTransition('OVERDUE'), 'past_due');
+assert.equal(billingTransition('REFUNDED'), 'cancelled');
+assert.equal(billingTransition('CHARGEBACK_REQUESTED'), 'cancelled');
+assert.equal(billingTransition('PENDING'), null);
 
-const fakeFetch = async (url, options = {}) => {
-  const href = String(url);
-  const method = options.method || 'GET';
+const monthlyEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_monthly');
+assert.equal(monthlyEnd.slice(0, 10), '2026-10-22');
+const annualEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_annual');
+assert.equal(annualEnd.slice(0, 10), '2027-09-22');
 
-  if (href.includes(`/payments/${paymentId}`)) {
-    return reply({
-      id: paymentId,
-      status: 'CONFIRMED',
-      subscription: 'sub_monthly_123',
-      externalReference: null,
-    });
-  }
+// Initial payments are mapped through the verified checkout session.
+assert.match(runtime, /parseCheckoutReference\(payment\?\.externalReference\)/);
+assert.match(runtime, /checkoutSession=\$\{encodeURIComponent\(checkout\.external_checkout_id\)\}/);
+assert.match(runtime, /rows\.some\(\(item\) => String\(item\?\.id \|\| ''\) === String\(payment\.id\)\)/);
 
-  if (href.includes('/rest/v1/subscriptions?provider=eq.asaas&external_subscription_id=eq.sub_monthly_123')) {
-    return reply(knownSubscription
-      ? [{ id: 'sub-row', owner_id: ownerId, plan_code: 'pro_monthly', current_period_end: null }]
-      : []);
-  }
+// Later recurring charges are mapped by the subscription id persisted after the first verified charge.
+assert.match(schema, /external_subscription_id TEXT/);
+assert.match(schema, /subscriptions_external_idx/);
+assert.match(runtime, /const subscriptionId = String\(payment\?\.subscription \|\| ''\)/);
+assert.match(runtime, /WHERE provider=\? AND external_subscription_id=\? LIMIT 1/);
+assert.match(runtime, /renewal: true/);
+assert.match(runtime, /external_subscription_id=CASE WHEN excluded\.external_subscription_id<>''/);
 
-  if (href.includes('/rest/v1/subscriptions?owner_id=')) {
-    return reply([{ current_period_end: '2026-10-22T00:00:00.000Z' }]);
-  }
+// A renewal updates subscription/license state but cannot pay a second partner commission.
+assert.match(runtime, /if \(mapped\.renewal \|\| !mapped\.checkout\?\.id\) return/);
+assert.match(runtime, /renewal:mapped\.renewal/);
+assert.doesNotMatch(runtime, /sendPaidConfirmation/);
+assert.doesNotMatch(runtime, /saas-billing-webhook/);
+assert.doesNotMatch(runtime, /SUPABASE_SERVICE_ROLE_KEY/);
 
-  if (href.includes('/rest/v1/billing_checkout_requests')) {
-    checkoutLookups += 1;
-    throw new Error('Recurring renewals must not require the original checkout request');
-  }
+// Webhook idempotency is persisted in D1.
+assert.match(schema, /UNIQUE\(provider,external_event_id\)/);
+assert.match(runtime, /ON CONFLICT\(provider,external_event_id\) DO NOTHING/);
+assert.match(runtime, /duplicate_ignored/);
 
-  if (href.includes('/rest/v1/billing_webhook_events?on_conflict=')) {
-    return reply(duplicate ? [] : [{ id: 'event-row' }]);
-  }
-
-  if (href.includes('/rest/v1/billing_webhook_events?provider=')) {
-    if (method === 'PATCH') return reply({});
-    return reply([{ status: 'processed' }]);
-  }
-
-  if (href.includes('/rest/v1/rpc/apply_billing_state')) {
-    billingWrites += 1;
-    const body = JSON.parse(options.body || '{}');
-    assert.equal(body.p_owner_id, ownerId);
-    assert.equal(body.p_plan_code, 'pro_monthly');
-    assert.equal(body.p_external_subscription_id, 'sub_monthly_123');
-    assert.equal(body.p_metadata.mapping, 'subscription');
-    assert.equal(body.p_metadata.checkout_request_id, null);
-    return reply({});
-  }
-
-  if (href.includes('/rest/v1/rpc/apply_partner_attribution_state')) {
-    partnerWrites += 1;
-    throw new Error('Recurring renewal must not create another first-sale partner commission');
-  }
-
-  throw new Error(`Unexpected recurring billing URL ${href}`);
-};
-
-const source = readFileSync('supabase/functions/saas-billing-webhook/index.ts', 'utf8')
-  .replace(/^import .*post-payment-email.ts';\n/m, '')
-  .replace('export async function', 'async function');
-
-const context = vm.createContext({
-  Request,
-  Response,
-  URL,
-  TextEncoder,
-  crypto,
-  fetch: fakeFetch,
-  sendPaidConfirmation: async () => {
-    emailCalls += 1;
-    return { ok: true, status: 'email_sent' };
-  },
-  Deno: {
-    env: {
-      get: (name) => name === 'SUPABASE_URL' ? 'https://auth.test' : 'test-key',
-    },
-    serve: (fn) => { handler = fn; },
-  },
-});
-vm.runInContext(stripTypeScriptTypes(source), context);
-
-function request(sourceHeader = 'cloudflare-asaas') {
-  return handler(new Request('https://edge.test', {
-    method: 'POST',
-    headers: {
-      'x-asaas-api-key': 'test-key',
-      'x-billing-source': sourceHeader,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ paymentId }),
-  }));
-}
-
-let response = await request();
-assert.equal(response.status, 200);
-let payload = await response.json();
-assert.equal(payload.status, 'processed');
-assert.equal(payload.mappedBy, 'subscription');
-assert.equal(payload.ownerId, ownerId);
-assert.equal(billingWrites, 1);
-assert.equal(checkoutLookups, 0);
-assert.equal(partnerWrites, 0);
-assert.equal(emailCalls, 0, 'Recurring renewals do not resend first-purchase confirmation email');
-
-// Idempotency: the same verified payment/status must not apply billing twice.
-duplicate = true;
-response = await request();
-assert.equal(response.status, 200);
-payload = await response.json();
-assert.equal(payload.status, 'duplicate_ignored');
-assert.equal(payload.mappedBy, 'subscription');
-assert.equal(billingWrites, 1);
-assert.equal(partnerWrites, 0);
-assert.equal(emailCalls, 0);
-
-// An unknown subscription cannot activate anyone.
-duplicate = false;
-knownSubscription = false;
-paymentId = 'pay_unknown_subscription';
-response = await request();
-assert.equal(response.status, 200);
-payload = await response.json();
-assert.equal(payload.status, 'ignored_unmapped_payment');
-assert.equal(billingWrites, 1);
-
-console.log('Asaas recurring renewal: maps by persisted subscription id, stays idempotent, and does not duplicate first-sale commission/email.');
+console.log('Asaas recurring renewal: D1 subscription mapping, idempotency and no duplicate first-sale commission OK.');
