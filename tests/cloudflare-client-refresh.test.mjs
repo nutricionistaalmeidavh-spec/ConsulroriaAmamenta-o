@@ -6,8 +6,8 @@ import {
 } from '../patch-source/cloudflare-license-authority/core/lib/supabase-client.js';
 
 const config = {
-  SUPABASE_URL: 'https://app.test',
-  SUPABASE_PUBLISHABLE_KEY: 'cloudflare-runtime',
+  API_BASE_URL: 'https://app.test',
+  CLIENT_RUNTIME_KEY: 'cloudflare-runtime',
   BACKEND_MODE: 'cloudflare',
 };
 
