@@ -3,6 +3,7 @@ import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin }
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
+import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleCloudflarePasswordCompat } from './cloudflare-auth-compat.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -86,6 +87,9 @@ export default {
     if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
       await ensureExplicitCommercialMarker(request, env);
     }
+
+    const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
+    if (patientWriteResponse) return withNoIndex(patientWriteResponse);
 
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
