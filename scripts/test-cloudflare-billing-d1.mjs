@@ -28,10 +28,11 @@ assert.match(runtime, /external_subscription_id/);
 assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 
-// The domain entry must intercept billing before legacy coreWorker routes can run.
+// The domain entry must intercept billing before legacy coreWorker routes can run, without a dead email-confirmation route.
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
 const legacyApi = domainEntry.indexOf('coreWorker.fetch(request, env, ctx)');
 assert.ok(billingGate >= 0 && legacyApi >= 0 && billingGate < legacyApi, 'D1 billing gate must run before legacy worker');
+assert.doesNotMatch(domainEntry, /\/api\/asaas\/confirm-email/);
 
 // Commercial browser traffic stays on the Cloudflare origin and no longer carries Supabase naming.
 assert.match(config, /window\.location\.origin/);
