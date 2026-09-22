@@ -1,4 +1,4 @@
-const CCF_SB_URL=window.location.origin;
+const CCF_SB_URL=(globalThis.location?.origin || '');
 const CCF_SB_KEY='cloudflare-runtime';
 const CCF_MOTHER_SESSION='debora-mother-portal-session-v1';
 
