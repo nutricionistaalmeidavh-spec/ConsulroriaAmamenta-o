@@ -112,14 +112,24 @@ async function licenseCall(env, body) {
   return response.json().catch(() => null);
 }
 
-async function patientLimitReached(env, db, user) {
+async function patientAllowance(env, db, user) {
   const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
   if (!access?.commercial || !Number.isInteger(access.patientLimit)) return null;
   let count = 0;
   for (const entry of await tableRows(db, 'mothers')) {
     if (await recordOwnedByUser(db, 'mothers', entry, user.id)) count++;
   }
-  return count >= Number(access.patientLimit) ? access.patientLimit : null;
+  return { limit: Number(access.patientLimit), count };
+}
+
+export function mergeUpsertRecord(existingRecord, incoming, existingKey, now) {
+  return {
+    ...(existingRecord || {}),
+    ...(incoming || {}),
+    id: incoming?.id || existingRecord?.id || existingKey,
+    created_at: incoming?.created_at || existingRecord?.created_at || now,
+    updated_at: now,
+  };
 }
 
 export async function handleCloudflareUpsertRuntime(request, env, url = new URL(request.url), deps = {}) {
@@ -149,6 +159,8 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
   const ignoreDuplicates = /resolution=ignore-duplicates/i.test(request.headers.get('prefer') || '');
   const saved = [];
   const statements = [];
+  const patientAllowanceState = table === 'mothers' ? await patientAllowance(env, db, user) : null;
+  let pendingNewMothers = 0;
 
   for (const source of list) {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return json(400, { error: 'invalid_payload' });
@@ -170,22 +182,15 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
         saved.push(existing.record);
         continue;
       }
-      const row = {
-        ...existing.record,
-        ...incoming,
-        id: incoming.id || existing.record?.id || existing.key,
-        created_at: incoming.created_at || existing.record?.created_at || now,
-        updated_at: now,
-      };
+      const row = mergeUpsertRecord(existing.record, incoming, existing.key, now);
       if (!await ensureWriteOwnership(db, table, row, user)) return json(403, { error: 'record_outside_account' });
       statements.push(recordStatement(db, table, existing.key, row, now));
       saved.push(row);
       continue;
     }
 
-    if (table === 'mothers') {
-      const limit = await patientLimitReached(env, db, user);
-      if (limit !== null) return json(403, { error: 'SAAS_PATIENT_LIMIT_REACHED', limit });
+    if (patientAllowanceState && patientAllowanceState.count + pendingNewMothers >= patientAllowanceState.limit) {
+      return json(403, { error: 'SAAS_PATIENT_LIMIT_REACHED', limit: patientAllowanceState.limit });
     }
 
     const row = {
@@ -198,6 +203,7 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
     const key = recordKey(table, row);
     statements.push(recordStatement(db, table, key, row, now));
     saved.push(row);
+    if (table === 'mothers') pendingNewMothers++;
   }
 
   if (statements.length) await db.batch(statements);
