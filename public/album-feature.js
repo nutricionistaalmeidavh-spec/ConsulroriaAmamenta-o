@@ -7,7 +7,7 @@ const VIDEO_EXTENSIONS=new Set(['mp4','mov','webm']);
 const MIME_BY_EXTENSION=Object.freeze({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime',webm:'video/webm'});
 const IMAGE_MAX_BYTES=12*1024*1024;
 const VIDEO_MAX_BYTES=50*1024*1024;
-let currentMother='',layer=null,lastTrigger=null;
+let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
 
 const fmtDate=value=>{
   if(!value)return 'Sem data';
@@ -135,20 +135,28 @@ async function openUploader(motherId,trigger){
   });
 }
 async function mount(motherId){
-  if(!motherId||motherId===currentMother&&document.querySelector('[data-af-card]'))return;
+  const revision=++mountRevision;
+  if(!motherId)return;
+  if(motherId===currentMother&&document.querySelector('[data-af-card]'))return;
   currentMother=motherId;document.querySelectorAll('[data-af-card]').forEach(x=>x.remove());
   const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;
   try{
-    const [rows,context]=await Promise.all([mediaRows(motherId),DOC.patientContext(motherId)]);if(!context)return;
-    const wrap=document.createElement('div');wrap.innerHTML=await cardMarkup(motherId,rows);const card=wrap.firstElementChild;
+    const [rows,context]=await Promise.all([mediaRows(motherId),DOC.patientContext(motherId)]);
+    if(revision!==mountRevision)return;
+    if(!context)return;
+    const markup=await cardMarkup(motherId,rows);
+    if(revision!==mountRevision)return;
+    document.querySelectorAll('[data-af-card]').forEach(x=>x.remove());
+    const wrap=document.createElement('div');wrap.innerHTML=markup;const card=wrap.firstElementChild;
     const terms=screen.querySelector('[data-df-terms-card]'),target=terms||screen.querySelector('[data-pf-prontuario]')||screen.querySelector('.patient-detail-grid')||screen.lastElementChild;
     target?.after?target.after(card):screen.appendChild(card);
     card.querySelector('[data-af-add]')?.addEventListener('click',event=>openUploader(motherId,event.currentTarget).catch(e=>DOC.toast(e.message||'Não foi possível abrir a biblioteca.','error')));
     card.querySelectorAll('[data-af-open]').forEach(btn=>btn.addEventListener('click',()=>openDetail(motherId,btn.dataset.afOpen,btn).catch(e=>DOC.toast(e.message||'Não foi possível abrir a mídia.','error'))));
   }catch(error){
+    if(revision!==mountRevision)return;
     if(/clinical_media|schema cache|relation .* does not exist/i.test(error.message||''))return;
     if(!/Sessão não encontrada/.test(error.message||''))DOC.toast(error.message||'Não foi possível carregar a biblioteca clínica.','error');
   }
 }
-window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{currentMother='';document.querySelectorAll('[data-af-card]').forEach(x=>x.remove())}});
+window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else{mountRevision++;currentMother='';document.querySelectorAll('[data-af-card]').forEach(x=>x.remove())}});
 window.DeboraAlbum={refresh:()=>{currentMother='';const id=DOC.currentMotherId();if(id)mount(id)},openUploader};
