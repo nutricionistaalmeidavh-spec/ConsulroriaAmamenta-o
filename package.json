@@ -10,7 +10,7 @@
     "test:auth-runtime": "node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
-    "deploy:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cutover-cloudflare-runtime.ps1"
+    "deploy:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-cloudflare-billing.ps1"
   },
   "dependencies": {
     "lucide": "^0.469.0",
