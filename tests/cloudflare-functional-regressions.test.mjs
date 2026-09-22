@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { normalizeGrowthRuntimeSource } from '../scripts/normalize-growth-runtime.mjs';
 import { mergeUpsertRecord } from '../worker/cloudflare-upsert-runtime.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -41,9 +42,13 @@ test('growth measurement RPC is handled by a dedicated Cloudflare runtime before
     'growth RPC must be intercepted before the compatibility REST runtime');
 });
 
-test('growth frontend never targets the retired Supabase host and resolves WHO data from the site root', () => {
-  const growth = read('public/growth-feature.js');
-  assert.doesNotMatch(growth, /zxowxdfhtksevhnjmeyu|supabase\.co/i);
-  assert.match(growth, /const SB_URL=window\.location\.origin/);
-  assert.match(growth, /const WHO_BASE='\/who\/v2026-08-30\/'/);
+test('growth runtime served by dev/build never targets the retired Supabase host and resolves WHO data from the site root', () => {
+  const normalized = normalizeGrowthRuntimeSource(read('public/growth-feature.js'));
+  assert.doesNotMatch(normalized, /zxowxdfhtksevhnjmeyu|supabase\.co/i);
+  assert.match(normalized, /const SB_URL=window\.location\.origin/);
+  assert.match(normalized, /const WHO_BASE='\/who\/v2026-08-30\/'/);
+
+  const pkg = JSON.parse(read('package.json'));
+  assert.match(pkg.scripts.dev, /normalize-growth-runtime\.mjs/);
+  assert.match(pkg.scripts.build, /normalize-growth-runtime\.mjs/);
 });
