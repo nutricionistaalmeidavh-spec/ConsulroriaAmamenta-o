@@ -16,6 +16,7 @@ on:
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
+      - 'scripts/test-asaas-recurring-renewal.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
       - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
@@ -50,6 +51,7 @@ on:
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
       - 'scripts/test-partner-attribution.mjs'
+      - 'scripts/test-asaas-recurring-renewal.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
       - 'scripts/validate-partner-attribution-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
@@ -103,6 +105,8 @@ jobs:
         run: node scripts/test-deferred-email-flow.mjs
       - name: Validate partner attribution, commissions and discounts
         run: node scripts/test-partner-attribution.mjs
+      - name: Validate recurring Asaas renewal reconciliation
+        run: node scripts/test-asaas-recurring-renewal.mjs
       - name: Validate migrations on isolated PostgreSQL
         run: |
           npm install --prefix "$RUNNER_TEMP/pro-checkout-test" @electric-sql/pglite@0.5.8 --ignore-scripts
