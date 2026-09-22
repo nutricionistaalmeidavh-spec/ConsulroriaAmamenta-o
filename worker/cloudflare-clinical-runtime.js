@@ -494,7 +494,8 @@ async function handleRest(request, env, url) {
     const total = visible.length;
     sortRows(visible, url.searchParams.get('order'));
     const offset = Math.max(0, Number(url.searchParams.get('offset') || 0));
-    const limitRaw = Number(url.searchParams.get('limit'));
+    const limitParam = url.searchParams.get('limit');
+    const limitRaw = limitParam === null ? Number.NaN : Number(limitParam);
     const limit = Number.isFinite(limitRaw) && limitRaw >= 0 ? limitRaw : visible.length;
     const sliced = visible.slice(offset, offset + limit).map((row) => projectRow(row, url.searchParams.get('select')));
     const end = sliced.length ? offset + sliced.length - 1 : offset;
