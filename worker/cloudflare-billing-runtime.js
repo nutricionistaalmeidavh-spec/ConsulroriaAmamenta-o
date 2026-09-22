@@ -1,4 +1,4 @@
-import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clinical-runtime.js';
+import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-auth-runtime.js';
 import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
@@ -514,136 +514,110 @@ async function mapPayment(env, payment, provider, environment) {
   if (!subscription) return null;
   const checkout = subscription.origin_checkout_request_id
     ? await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? LIMIT 1').bind(subscription.origin_checkout_request_id).first()
-    : null;
-  return {
-    checkout: checkout || { id: null, owner_id: subscription.owner_id, plan_code: subscription.plan_code, provider },
-    subscription,
-    renewal: true,
-  };
+    : await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider=? AND plan_code=? AND status='paid'
+      ORDER BY created_at DESC LIMIT 1`).bind(subscription.owner_id, provider, subscription.plan_code).first();
+  return checkout ? { checkout, renewal: true } : null;
 }
 
-async function beginEvent(env, provider, paymentId, providerStatus, checkoutId, payload) {
-  const eventId = `payment:${paymentId}:${providerStatus}`;
-  const result = await db(env).prepare(`INSERT INTO billing_webhook_events(
-    id,provider,external_event_id,event_type,status,payment_id,checkout_request_id,payload_json,received_at
-  ) VALUES(?,?,?,?, 'received',?,?,?,CURRENT_TIMESTAMP)
-  ON CONFLICT(provider,external_event_id) DO NOTHING`)
-    .bind(crypto.randomUUID(), provider, eventId, `PAYMENT_${providerStatus}`, paymentId, checkoutId || null, JSON.stringify(payload || {})).run();
-  if (Number(result?.meta?.changes || 0) > 0) return { eventId, process: true };
-  const existing = await db(env).prepare('SELECT status FROM billing_webhook_events WHERE provider=? AND external_event_id=? LIMIT 1').bind(provider, eventId).first();
-  if (existing?.status === 'processed') return { eventId, process: false, duplicate: true };
-  if (existing?.status === 'received') return { eventId, process: false, inProgress: true };
-  await db(env).prepare(`UPDATE billing_webhook_events SET status='received',error_message=NULL,processed_at=NULL WHERE provider=? AND external_event_id=?`)
-    .bind(provider, eventId).run();
-  return { eventId, process: true };
+async function updateAttribution(env, checkout, providerStatus, paymentId) {
+  if (!checkout?.partner_id) return;
+  const nextStatus = attributionStatus(providerStatus);
+  if (!nextStatus) return;
+  const now = new Date().toISOString();
+  if (nextStatus === 'paid') {
+    await db(env).prepare(`UPDATE partner_attributions SET status='paid',provider_status=?,paid_at=COALESCE(paid_at,?),
+      commission_status=CASE WHEN commission_cents>0 AND commission_status='none' THEN 'pending' ELSE commission_status END,
+      updated_at=? WHERE checkout_request_id=?`).bind(providerStatus, now, now, checkout.id).run();
+  } else {
+    await db(env).prepare(`UPDATE partner_attributions SET status=?,provider_status=?,commission_status=CASE WHEN commission_status='approved' THEN 'reversed' ELSE 'cancelled' END,
+      updated_at=? WHERE checkout_request_id=?`).bind(nextStatus, providerStatus, now, checkout.id).run();
+  }
+  await db(env).prepare(`UPDATE billing_checkout_requests SET metadata_json=json_set(COALESCE(metadata_json,'{}'),'$.last_payment_id',?),updated_at=? WHERE id=?`)
+    .bind(paymentId, now, checkout.id).run();
+}
+
+async function updateSubscription(env, checkout, payment, status, environment) {
+  const provider = environment === 'sandbox' ? 'asaas_sandbox' : 'asaas';
+  const externalSubscriptionId = payment?.subscription ? String(payment.subscription) : null;
+  const externalCustomerId = payment?.customer ? String(payment.customer) : null;
+  const periodEnd = currentPeriodEnd(payment, checkout.plan_code);
+  const id = crypto.randomUUID();
+  await db(env).prepare(`INSERT INTO subscriptions(
+    id,owner_id,provider,external_customer_id,external_subscription_id,origin_checkout_request_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
+  ) VALUES(?,?,?,?,?,?,?,?,?,'{}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+  ON CONFLICT(owner_id,provider) DO UPDATE SET
+    external_customer_id=excluded.external_customer_id,external_subscription_id=COALESCE(excluded.external_subscription_id,subscriptions.external_subscription_id),
+    origin_checkout_request_id=COALESCE(subscriptions.origin_checkout_request_id,excluded.origin_checkout_request_id),plan_code=excluded.plan_code,
+    status=excluded.status,current_period_end=excluded.current_period_end,updated_at=CURRENT_TIMESTAMP`)
+    .bind(id, checkout.owner_id, provider, externalCustomerId, externalSubscriptionId, checkout.id, checkout.plan_code, status, periodEnd).run();
+  return { subscriptionId: externalSubscriptionId, periodEnd };
+}
+
+async function eventForPayment(env, provider, eventId, paymentId, payload) {
+  const existing = await db(env).prepare('SELECT * FROM billing_webhook_events WHERE provider=? AND external_event_id=? LIMIT 1').bind(provider, eventId).first();
+  if (existing) return { existing, inserted: false };
+  await db(env).prepare(`INSERT INTO billing_webhook_events(
+    id,provider,external_event_id,event_type,status,payment_id,payload_json,received_at
+  ) VALUES(?,?,?,?, 'received',?,?,CURRENT_TIMESTAMP)`)
+    .bind(crypto.randomUUID(), provider, eventId, String(payload?.event || ''), paymentId || null, JSON.stringify(payload || {})).run();
+  return { existing: null, inserted: true };
 }
 
 async function finishEvent(env, provider, eventId, ok, error = null) {
-  await db(env).prepare(`UPDATE billing_webhook_events SET status=?,processed_at=?,error_message=?
-    WHERE provider=? AND external_event_id=?`)
-    .bind(ok ? 'processed' : 'failed', new Date().toISOString(), error, provider, eventId).run();
-}
-
-async function upsertSubscription(env, mapped, payment, transition, providerStatus) {
-  const checkout = mapped.checkout;
-  const provider = checkout.provider;
-  const subscriptionId = String(payment?.subscription || mapped.subscription?.external_subscription_id || '');
-  const customerId = String(payment?.customer || mapped.subscription?.external_customer_id || '');
-  const periodEnd = transition === 'active' ? currentPeriodEnd(payment, checkout.plan_code) : mapped.subscription?.current_period_end || null;
-  const id = mapped.subscription?.id || crypto.randomUUID();
-  await db(env).prepare(`INSERT INTO subscriptions(
-      id,owner_id,provider,external_customer_id,external_subscription_id,origin_checkout_request_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-    ON CONFLICT(owner_id,provider) DO UPDATE SET
-      external_customer_id=excluded.external_customer_id,
-      external_subscription_id=CASE WHEN excluded.external_subscription_id<>'' THEN excluded.external_subscription_id ELSE subscriptions.external_subscription_id END,
-      origin_checkout_request_id=COALESCE(subscriptions.origin_checkout_request_id,excluded.origin_checkout_request_id),
-      plan_code=excluded.plan_code,status=excluded.status,current_period_end=excluded.current_period_end,
-      metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP`)
-    .bind(
-      id, checkout.owner_id, provider, customerId, subscriptionId,
-      checkout.id || mapped.subscription?.origin_checkout_request_id || null, checkout.plan_code, transition, periodEnd,
-      JSON.stringify({ payment_id: payment.id, provider_status: providerStatus, backend: 'cloudflare-d1' }),
-    ).run();
-  return { periodEnd, subscriptionId };
-}
-
-async function updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition) {
-  if (mapped.renewal || !mapped.checkout?.id) return;
-  const checkoutStatus = transition === 'active' ? 'paid' : transition === 'past_due' ? 'past_due' : 'cancelled';
-  await db(env).prepare('UPDATE billing_checkout_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
-    .bind(checkoutStatus, mapped.checkout.id).run();
-
-  const aStatus = attributionStatus(providerStatus);
-  if (!aStatus) return;
-  const attribution = await db(env).prepare('SELECT * FROM partner_attributions WHERE checkout_request_id=? LIMIT 1').bind(mapped.checkout.id).first();
-  if (!attribution) return;
-  let commissionStatus = attribution.commission_status;
-  if (aStatus === 'paid' && commissionStatus !== 'approved') commissionStatus = Number(attribution.commission_cents || 0) > 0 ? 'pending' : 'none';
-  if (['refunded', 'chargeback', 'cancelled'].includes(aStatus)) {
-    commissionStatus = commissionStatus === 'approved' || commissionStatus === 'reversed' ? 'reversed' : 'cancelled';
-  }
-  await db(env).prepare(`UPDATE partner_attributions SET status=?,provider_status=?,commission_status=?,
-    paid_at=CASE WHEN ?='paid' THEN COALESCE(paid_at,?) ELSE paid_at END,updated_at=CURRENT_TIMESTAMP
-    WHERE checkout_request_id=?`)
-    .bind(aStatus, providerStatus, commissionStatus, aStatus, new Date().toISOString(), mapped.checkout.id).run();
-}
-
-async function pendingEmailForOwner(env, ownerId) {
-  const row = await db(env).prepare('SELECT email FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(ownerId).first();
-  return row?.email || null;
+  await db(env).prepare(`UPDATE billing_webhook_events SET status=?,error_message=?,processed_at=CURRENT_TIMESTAMP
+    WHERE provider=? AND external_event_id=?`).bind(ok ? 'processed' : 'failed', error, provider, eventId).run();
 }
 
 async function handleWebhook(request, env, environment) {
   const config = asaasConfig(env, environment);
   if (!config.secret) return json(503, { error: environment === 'sandbox' ? 'asaas_sandbox_not_configured' : 'asaas_not_configured' });
-  const incoming = await request.json().catch(() => null);
-  const paymentId = String(incoming?.payment?.id || '');
-  if (!paymentId) return json(200, { status: 'ignored_without_payment', environment });
-  if (!/^[A-Za-z0-9_-]{3,128}$/.test(paymentId)) return json(400, { error: 'invalid_payment_id' });
+  const payload = await request.json().catch(() => null);
+  const payment = payload?.payment;
+  const paymentId = String(payment?.id || '');
+  const eventId = String(payload?.id || payload?.event || '') + ':' + paymentId;
+  if (!paymentId || !eventId) return json(400, { error: 'invalid_webhook_payload' });
 
-  const { response, payload: payment } = await asaasFetch(env, `/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' }, environment);
-  if (response?.status === 404) return json(200, { status: 'ignored_payment_not_found', environment });
-  if (!response?.ok || String(payment?.id || '') !== paymentId) return json(502, { error: 'asaas_payment_verification_failed' });
+  const event = await eventForPayment(env, config.provider, eventId, paymentId, payload);
+  if (event.existing?.status === 'processed') return json(200, { status: 'already_processed', eventId });
 
-  const providerStatus = String(payment?.status || '').toUpperCase();
-  const transition = billingTransition(providerStatus);
-  if (!transition) return json(200, { status: 'ignored_no_billing_transition', paymentId, providerStatus, environment });
-  const mapped = await mapPayment(env, payment, config.provider, environment);
-  if (!mapped) return json(200, { status: 'ignored_unmapped_payment', paymentId, environment });
+  const { response, payload: verified } = await asaasFetch(env, `/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' }, environment);
+  if (!response?.ok || !verified?.id || String(verified.id) !== paymentId) {
+    await finishEvent(env, config.provider, eventId, false, 'payment_verification_failed');
+    return json(401, { error: 'payment_verification_failed' });
+  }
 
-  const event = await beginEvent(env, config.provider, paymentId, providerStatus, mapped.checkout?.id, {
-    environment, payment_id: paymentId, provider_status: providerStatus, renewal: mapped.renewal,
-  });
-  if (event.duplicate) return json(200, { status: 'duplicate_ignored', eventId: event.eventId, paymentId, environment });
-  if (event.inProgress) return json(503, { error: 'event_in_progress', eventId: event.eventId });
+  const mapped = await mapPayment(env, verified, config.provider, environment);
+  if (!mapped?.checkout) {
+    await finishEvent(env, config.provider, eventId, false, 'payment_not_mapped');
+    return json(202, { status: 'ignored_unmapped_payment', paymentId });
+  }
+
+  const transition = billingTransition(verified.status);
+  if (!transition) {
+    await finishEvent(env, config.provider, eventId, true);
+    return json(200, { status: 'ignored_non_terminal_status', paymentId, providerStatus: verified.status });
+  }
 
   try {
-    const subscription = await upsertSubscription(env, mapped, payment, transition, providerStatus);
-    await updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition);
-
+    await db(env).prepare(`UPDATE billing_checkout_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .bind(transition === 'active' ? 'paid' : transition, mapped.checkout.id).run();
+    await updateAttribution(env, mapped.checkout, String(verified.status || '').toUpperCase(), paymentId);
+    const subscription = await updateSubscription(env, mapped.checkout, verified, transition, environment);
     let activationStatus = null;
-    if (!mapped.renewal && transition === 'active') {
-      const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
+    if (transition === 'active' && environment === 'production') {
+      const pending = await db(env).prepare('SELECT status FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
       if (pending && pending.status !== 'activated') {
         const now = new Date().toISOString();
-        await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'paid' END,
-          payment_confirmed_at=COALESCE(payment_confirmed_at,?),updated_at=? WHERE user_id=?`).bind(now, now, pending.user_id).run();
+        await db(env).prepare(`UPDATE billing_pending_signups SET status='paid',payment_confirmed_at=COALESCE(payment_confirmed_at,?),updated_at=? WHERE user_id=?`)
+          .bind(now, now, mapped.checkout.owner_id).run();
         await activatePendingSignup(env, mapped.checkout.owner_id);
-        activationStatus = 'account_activated';
-      } else if (pending?.status === 'activated') {
         activationStatus = 'account_activated';
       }
     }
-    if (!mapped.renewal && transition === 'cancelled') {
-      await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'cancelled' END,
-        updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(mapped.checkout.owner_id).run();
-    }
 
     const user = await runtimeUserById(env, mapped.checkout.owner_id);
-    const email = user?.email || await pendingEmailForOwner(env, mapped.checkout.owner_id);
     await syncCommercialLicense(env, {
-      email,
+      email: user?.email,
       planCode: mapped.checkout.plan_code,
       status: transition,
       expiresAt: subscription.periodEnd,
@@ -651,14 +625,14 @@ async function handleWebhook(request, env, environment) {
       environment,
     });
 
-    await finishEvent(env, config.provider, event.eventId, true);
+    await finishEvent(env, config.provider, eventId, true);
     return json(200, {
       status: 'processed', eventId: event.eventId, paymentId, ownerId: mapped.checkout.owner_id,
       planCode: mapped.checkout.plan_code, billingStatus: transition, currentPeriodEnd: subscription.periodEnd,
       renewal: mapped.renewal, activationStatus, environment,
     });
   } catch (error) {
-    await finishEvent(env, config.provider, event.eventId, false, String(error?.message || error).slice(0, 1000));
+    await finishEvent(env, config.provider, eventId, false, String(error?.message || error).slice(0, 1000));
     return json(500, { error: 'billing_state_apply_failed', eventId: event.eventId, details: error?.message || undefined });
   }
 }
