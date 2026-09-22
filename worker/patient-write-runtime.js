@@ -1,4 +1,4 @@
-import { authenticateClinicalRequest } from './cloudflare-clinical-runtime.js';
+import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 
 const PRODUCT_CODE = 'debora-lactacao';
 const INSERT_RECORD_SQL = `INSERT INTO supabase_records(
