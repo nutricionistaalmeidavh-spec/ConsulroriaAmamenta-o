@@ -32,7 +32,7 @@ const fakeFetch = async (url, options = {}) => {
   if (url.includes('/auth/v1/admin/users/')) return reply({ id, email: 'test@example.com',
     app_metadata: { checkout_email_after_payment: true, checkout_nonce: nonce } });
   if (url.includes('billing_checkout_requests?owner_id')) return reply(prior);
-  if (url.includes('billing_plan_catalog')) return reply([{ plan_code: 'pro_monthly' }]);
+  if (url.includes('billing_plan_catalog')) return reply([{ plan_code: 'pro_monthly', price_cents: 4990 }]);
   if (url.includes('saas_accounts')) return reply([{ id, owner_id: id }]);
   if (url.includes('billing_checkout_requests?select')) return reply([{ id }]);
   throw new Error(`Unexpected call ${url}`);
@@ -99,8 +99,9 @@ const end = app.indexOf("\ndocument.querySelector('#login-form')", start);
 let submit; let wentToCheckout = false;
 const formContext = vm.createContext({
   document: { querySelector: () => ({ addEventListener: (_, cb) => { submit = cb; } }) },
-  FormData: class { get(key) { return ({ email: 'test@example.com', password: 'long-password', confirmPassword: 'long-password', planIntent: 'pro_monthly' })[key]; } },
+  FormData: class { get(key) { return ({ email: 'test@example.com', password: 'long-password', confirmPassword: 'long-password', planIntent: 'pro_monthly', partnerCode: '' })[key]; } },
   sessionStorage: { setItem() {} }, PLAN_KEY: 'plan', PENDING_SIGNUP_KEY: 'proof', selectedPlan: '',
+  normalizePartnerCode: () => '', currentPartnerCode: () => '', currentAttributionSource: () => 'manual_code', rememberPartnerCode: () => '',
   generateSignupNonce: () => nonce, setBusy() {}, setMessage(text, tone) { if (tone === 'error') throw new Error(text); },
   friendlyError: e => e.message, fetch: async url => { assert.equal(url, '/api/asaas/signup'); return reply({ userId: id, signupNonce: nonce }); },
   startPreconfirmCheckout: async () => { wentToCheckout = true; },
@@ -113,7 +114,7 @@ console.log('Deferred email flow: new/recovered signup, rate limits, proof, resu
 
 // Exercise the webhook entrypoint: pending payments and sandbox never request mail;
 // a duplicate approved event retries mail without applying billing a second time.
-let paymentStatus = 'PENDING'; let duplicate = false; let billingWrites = 0; let emails = 0;
+let paymentStatus = 'PENDING'; let duplicate = false; let billingWrites = 0; let attributionWrites = 0; let emails = 0;
 let emailFailure = false; let checkoutPaid = false;
 const billing = edge('supabase/functions/saas-billing-webhook/index.ts', async (url, options = {}) => {
   if (url.includes('/payments?')) return reply({ data: [{ id: 'pay_test' }] });
@@ -129,16 +130,17 @@ const billing = edge('supabase/functions/saas-billing-webhook/index.ts', async (
   }
   if (url.includes('/subscriptions?')) return reply([]);
   if (url.includes('apply_billing_state')) { billingWrites++; return reply({}); }
+  if (url.includes('apply_partner_attribution_state')) { attributionWrites++; return reply({}); }
   throw new Error(`Unexpected billing URL ${url}`);
 }, { sendPaidConfirmation: async () => {
   assert.equal(checkoutPaid, true, 'Payment persisted before email');
   emails++; return { ok: !emailFailure, status: 'email_delivery_pending' };
 } });
 const billingRequest = (source = 'cloudflare-asaas') => billing.request({ paymentId: 'pay_test' }, { 'x-asaas-api-key': 'test', 'x-billing-source': source });
-r = await billingRequest(); assert.equal(r.status, 200); assert.equal(emails, 0);
+r = await billingRequest(); assert.equal(r.status, 200); assert.equal(emails, 0); assert.equal(attributionWrites, 0);
 paymentStatus = 'CONFIRMED'; emailFailure = true;
-r = await billingRequest(); assert.equal(r.status, 503); assert.equal(billingWrites, 1); assert.equal(emails, 1);
+r = await billingRequest(); assert.equal(r.status, 503); assert.equal(billingWrites, 1); assert.equal(attributionWrites, 1); assert.equal(emails, 1);
 duplicate = true; emailFailure = false;
-r = await billingRequest(); assert.equal(r.status, 200); assert.equal(billingWrites, 1); assert.equal(emails, 2);
-duplicate = false; r = await billingRequest('cloudflare-asaas-sandbox'); assert.equal(r.status, 200); assert.equal(emails, 2);
-console.log('Webhook: approval gate, persisted payment, email retry without rebilling, sandbox isolation OK');
+r = await billingRequest(); assert.equal(r.status, 200); assert.equal(billingWrites, 1); assert.equal(attributionWrites, 1); assert.equal(emails, 2);
+duplicate = false; r = await billingRequest('cloudflare-asaas-sandbox'); assert.equal(r.status, 200); assert.equal(emails, 2); assert.equal(attributionWrites, 2);
+console.log('Webhook: approval gate, partner attribution, persisted payment, email retry without rebilling, sandbox isolation OK');
