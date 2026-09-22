@@ -1,3 +1,5 @@
+import { handlePartnerAdminRequest, PARTNER_ADMIN_EMAILS_CONFIG } from './partner-admin.js';
+
 const SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
@@ -235,7 +237,7 @@ function tomorrowAsaasDateTime() {
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
 }
 
-function checkoutPayload(planCode, requestId, origin, environment = 'production', flow = 'authenticated') {
+function checkoutPayload(planCode, requestId, origin, environment = 'production', flow = 'authenticated', plan = null) {
   const suffix = environment === 'sandbox' ? '&environment=sandbox' : '';
   const isPreconfirm = flow === 'pre_email_confirmation' && environment === 'production';
   const callback = isPreconfirm
@@ -250,6 +252,15 @@ function checkoutPayload(planCode, requestId, origin, environment = 'production'
         expiredUrl: `${origin}/comercial/plano.html?asaas=expired${suffix}`,
       };
 
+  const defaultPriceCents = planCode === 'pro_monthly' ? 4990 : 49900;
+  const effectivePriceCents = Math.max(1, Number(plan?.effective_price_cents ?? plan?.price_cents ?? defaultPriceCents));
+  const itemValue = effectivePriceCents / 100;
+  const discountCents = Math.max(0, Number(plan?.discount_cents || 0));
+  const partnerCode = String(plan?.partner_code || '');
+  const descriptionSuffix = partnerCode
+    ? ` · código ${partnerCode}${discountCents ? ` · desconto R$ ${(discountCents / 100).toFixed(2)}` : ''}`
+    : '';
+
   const common = {
     billingTypes: ['CREDIT_CARD'],
     minutesToExpire: 60,
@@ -263,9 +274,9 @@ function checkoutPayload(planCode, requestId, origin, environment = 'production'
       chargeTypes: ['RECURRENT'],
       items: [{
         name: 'Plano Pro mensal',
-        description: 'Uso ilimitado e upload de fotos e vídeos',
+        description: `Uso ilimitado e upload de fotos e vídeos${descriptionSuffix}`,
         quantity: 1,
-        value: 49.9,
+        value: itemValue,
       }],
       subscription: {
         cycle: 'MONTHLY',
@@ -279,11 +290,11 @@ function checkoutPayload(planCode, requestId, origin, environment = 'production'
     chargeTypes: ['DETACHED', 'INSTALLMENT'],
     items: [{
       name: 'Plano Pro anual',
-      description: 'Plano anual com uso ilimitado e upload de fotos e vídeos',
+      description: `Plano anual com uso ilimitado e upload de fotos e vídeos${descriptionSuffix}`,
       quantity: 1,
-      value: 499,
+      value: itemValue,
     }],
-    installment: { maxInstallmentCount: 12 },
+    installment: { maxInstallmentCount: Math.max(1, Number(plan?.installment_max || 12)) },
   };
 }
 
@@ -327,6 +338,8 @@ async function createCheckout(request, env, environment = 'production') {
 
   const input = await request.json().catch(() => null);
   const planCode = String(input?.planCode || '');
+  const partnerCode = String(input?.partnerCode || '').trim().toUpperCase().slice(0, 64);
+  const attributionSource = input?.attributionSource === 'ref_link' ? 'ref_link' : 'manual_code';
   if (!['pro_monthly', 'pro_annual'].includes(planCode)) {
     return json(400, { error: 'invalid_plan' });
   }
@@ -334,6 +347,8 @@ async function createCheckout(request, env, environment = 'production') {
   const registered = await callCheckoutRegistry(request, {
     action: 'create_request',
     planCode,
+    partnerCode,
+    attributionSource,
     environment,
   });
   if (!registered.response?.ok || !registered.payload?.requestId) {
@@ -344,7 +359,7 @@ async function createCheckout(request, env, environment = 'production') {
   const requestId = String(registered.payload.requestId);
 
   const url = new URL(request.url);
-  const providerPayload = checkoutPayload(planCode, requestId, url.origin, environment);
+  const providerPayload = checkoutPayload(planCode, requestId, url.origin, environment, 'authenticated', registered.payload?.plan || null);
   const { response, payload: result } = await asaasFetch(env, '/checkouts', {
     method: 'POST',
     body: JSON.stringify(providerPayload),
@@ -381,6 +396,9 @@ async function createCheckout(request, env, environment = 'production') {
     checkoutId: result.id,
     checkoutUrl,
     planCode,
+    partnerCode: registered.payload?.plan?.partner_code || '',
+    discountCents: Number(registered.payload?.plan?.discount_cents || 0),
+    effectivePriceCents: Number(registered.payload?.plan?.effective_price_cents || registered.payload?.plan?.price_cents || 0),
     environment,
   });
 }
@@ -399,6 +417,8 @@ async function createPreconfirmCheckout(request, env) {
   const userId = String(input?.userId || '');
   const signupNonce = String(input?.signupNonce || '');
   const planCode = String(input?.planCode || '');
+  const partnerCode = String(input?.partnerCode || '').trim().toUpperCase().slice(0, 64);
+  const attributionSource = input?.attributionSource === 'ref_link' ? 'ref_link' : 'manual_code';
   if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
 
   const registered = await callPendingCheckoutRegistry({
@@ -406,6 +426,8 @@ async function createPreconfirmCheckout(request, env) {
     userId,
     signupNonce,
     planCode,
+    partnerCode,
+    attributionSource,
     environment: 'production',
   });
   if (registered.response?.ok && registered.payload?.status === 'paid') return json(200, { status: 'paid' });
@@ -425,6 +447,7 @@ async function createPreconfirmCheckout(request, env) {
     url.origin,
     'production',
     'pre_email_confirmation',
+    registered.payload?.plan || null,
   );
   const { response, payload: result } = await asaasFetch(env, '/checkouts', {
     method: 'POST',
@@ -467,6 +490,9 @@ async function createPreconfirmCheckout(request, env) {
     checkoutId: result.id,
     checkoutUrl,
     planCode,
+    partnerCode: registered.payload?.plan?.partner_code || '',
+    discountCents: Number(registered.payload?.plan?.discount_cents || 0),
+    effectivePriceCents: Number(registered.payload?.plan?.effective_price_cents || registered.payload?.plan?.price_cents || 0),
     environment: 'production',
     emailConfirmationRequiredForAccess: true,
   });
@@ -563,6 +589,7 @@ async function health(env, environment = 'production') {
     credentialMatchesEnvironment: credentialEnvironmentValue === environment,
     webhookVerification: 'asaas_api_lookup_and_checkout_reconciliation',
     billingBridge: 'supabase_records_cloudflare_d1_access',
+    partnerAdminConfig: PARTNER_ADMIN_EMAILS_CONFIG,
     cloudflareSecretsRequired: [environment === 'sandbox' ? 'ASSAS_SANDBOX_SECRET' : 'ASAAS_SECRET', 'LICENSE_SERVICE_SECRET', 'SUPABASE_SERVICE_ROLE_KEY'],
   });
 }
@@ -570,6 +597,14 @@ async function health(env, environment = 'production') {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (
+      url.pathname === '/api/admin/partners'
+      || url.pathname === '/api/admin/partner-sales'
+      || url.pathname === '/api/admin/partner-commission'
+    ) {
+      return handlePartnerAdminRequest(request, env, url, { authenticateUser, serviceFetch, json });
+    }
 
     if (url.pathname === '/api/license/me' && request.method === 'GET') return handleLicenseMe(request, env);
     if (url.pathname === '/api/license/register-commercial' && request.method === 'POST') return handleCommercialRegistration(request, env);
