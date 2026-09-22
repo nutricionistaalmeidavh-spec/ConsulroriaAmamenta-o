@@ -49,11 +49,11 @@ function applyProfessionalIdentity(name) {
 }
 
 async function fetchAuthenticatedUser(accessToken) {
-  if (!accessToken || !config.SUPABASE_URL || !config.SUPABASE_PUBLISHABLE_KEY) return null;
+  if (!accessToken || !config.API_BASE_URL || !config.CLIENT_RUNTIME_KEY) return null;
   try {
-    const response = await fetch(`${String(config.SUPABASE_URL).replace(/\/$/, '')}/auth/v1/user`, {
+    const response = await fetch(`${String(config.API_BASE_URL).replace(/\/$/, '')}/auth/v1/user`, {
       headers: {
-        apikey: config.SUPABASE_PUBLISHABLE_KEY,
+        apikey: config.CLIENT_RUNTIME_KEY,
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
@@ -74,16 +74,16 @@ async function resolveProfessionalIdentity(session) {
   const ownerId = user?.id || '';
   const fallback = professionalFallback(user);
 
-  if (!ownerId || !accessToken || !config.SUPABASE_URL || !config.SUPABASE_PUBLISHABLE_KEY) {
+  if (!ownerId || !accessToken || !config.API_BASE_URL || !config.CLIENT_RUNTIME_KEY) {
     applyProfessionalIdentity(fallback);
     return;
   }
 
   try {
-    const url = `${String(config.SUPABASE_URL).replace(/\/$/, '')}/rest/v1/professional_profiles?select=professional_name,business_name&owner_id=eq.${encodeURIComponent(ownerId)}&limit=1`;
+    const url = `${String(config.API_BASE_URL).replace(/\/$/, '')}/rest/v1/professional_profiles?select=professional_name,business_name&owner_id=eq.${encodeURIComponent(ownerId)}&limit=1`;
     const response = await fetch(url, {
       headers: {
-        apikey: config.SUPABASE_PUBLISHABLE_KEY,
+        apikey: config.CLIENT_RUNTIME_KEY,
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },

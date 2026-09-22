@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
+import { normalizeCloudflareFrontendSource } from './materialize-cloudflare-frontend.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -180,6 +181,16 @@ const newPatientSubmit = `patientForm?.addEventListener('submit', async (event) 
   }
 });`;
 replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');
+
+for (const [outputPath, bytes] of resolved) {
+  const runtimePath = `public/clinical-source/${outputPath}`;
+  const text = Buffer.from(bytes).toString('utf8');
+  const normalized = normalizeCloudflareFrontendSource(text, runtimePath);
+  if (normalized !== text) {
+    resolved.set(outputPath, new Uint8Array(Buffer.from(normalized, 'utf8')));
+    sourceByPath.set(outputPath, `${sourceByPath.get(outputPath)}+frontend-cloudflare-cutover`);
+  }
+}
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {

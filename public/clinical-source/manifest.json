@@ -1,17 +1,17 @@
 {
-  "version": 2,
-  "strategy": "canonical-first-with-legacy-fallback",
+  "version": 3,
+  "strategy": "cloudflare-d1-r2-runtime-with-legacy-auth-bridge",
   "generatedFromLegacyArtifacts": true,
   "modules": {
     "config.js": {
       "promoted": true,
-      "source": "base:config.js",
-      "sha256": "6bfd43752edaaae72790d51a697fbb0936eb9e1fca1c43580c0089cdf77f078b"
+      "source": "cloudflare-license-authority:config.js+frontend-cloudflare-cutover",
+      "sha256": "071cf8334eac0268949838d392aca3a168042ba5700b4b2ec2e424f2a9a97319"
     },
     "core/app-shell.js": {
       "promoted": true,
-      "source": "agenda:core/app-shell.js",
-      "sha256": "08bd79c8f1ab5a79fa8913280f6e6c0a0bae9ec60db737eccf497d75602f2393"
+      "source": "agenda:core/app-shell.js+cloudflare-runtime-config+atomic-patient-create+frontend-cloudflare-cutover",
+      "sha256": "82d380e9a81d5695fd06867985809329ab7b1d97a2e177fd319ed2fe0207ef13"
     },
     "core/lib/app-data.js": {
       "promoted": true,
@@ -50,8 +50,8 @@
     },
     "core/lib/supabase-client.js": {
       "promoted": true,
-      "source": "cloudflare-license-authority:core/lib/supabase-client.js",
-      "sha256": "ea8fa860fe75022c915d56cdb7bbae803d1e673e76bb4ec5c88eaac90e4a5d0d"
+      "source": "cloudflare-license-authority:core/lib/supabase-client.js+frontend-cloudflare-cutover",
+      "sha256": "2bea75380c03cd496d192da07affc55b8c4052cf944bffe315dd8065a7424076"
     },
     "features/clinical-note-feature.css": {
       "promoted": true,
@@ -60,8 +60,8 @@
     },
     "features/clinical-note-feature.js": {
       "promoted": true,
-      "source": "release:features/clinical-note-feature.js",
-      "sha256": "4a040e9e12334dda39cf2dc26cb23aab3e6d6d1452a05eef1f2fff1f6a8cd1d9"
+      "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover",
+      "sha256": "2c96596c55f7aeb9309bd7a351311097850da37fe7ba61d5b134927953c6d986"
     },
     "features/patient-fixes.css": {
       "promoted": true,
@@ -70,8 +70,8 @@
     },
     "features/patient-fixes.js": {
       "promoted": true,
-      "source": "release:features/patient-fixes.js",
-      "sha256": "a0c2d9dc407cb538f81a10b506abf4c475ae77f905b1ce09acd93561af220bec"
+      "source": "release:features/patient-fixes.js+frontend-cloudflare-cutover",
+      "sha256": "0f92f86c73e176a848ed6bbd03d6343e1c5c7448d31a2f13702f0a420adf7517"
     },
     "index.html": {
       "promoted": true,

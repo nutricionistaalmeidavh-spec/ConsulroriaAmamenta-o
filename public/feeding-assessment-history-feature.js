@@ -1,5 +1,5 @@
-const FAH_SB_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
-const FAH_SB_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const FAH_SB_URL = window.location.origin;
+const FAH_SB_KEY = 'cloudflare-runtime';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const COMPARISON_FIELDS = [
