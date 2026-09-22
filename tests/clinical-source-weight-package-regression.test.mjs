@@ -65,6 +65,7 @@ test('three concurrent patient-plan remounts leave exactly one plan card',async(
     MutationObserver:class{observe(){}},
     setTimeout(){return 1},
     clearTimeout(){},
+    addEventListener(){},
     confirm(){return true},
     crypto:{randomUUID(){return '00000000-0000-4000-8000-000000000001'}},
     fetch:async url=>{
