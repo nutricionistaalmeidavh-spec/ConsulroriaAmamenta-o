@@ -17,19 +17,19 @@
       <div class="purchase-icon" aria-hidden="true">✓</div>
       <span class="eyebrow">Próximo passo</span>
       <h1 id="purchase-title">Acompanhando seu pagamento</h1>
-      <p>Sua compra foi enviada ao Asaas. Assim que o pagamento for confirmado, o plano Pro fica registrado na sua conta.</p>
+      <p>Sua compra foi enviada ao Asaas. O cadastro Pro fica pendente no Cloudflare D1 e só é ativado depois que o pagamento é confirmado.</p>
 
-      <div class="purchase-note" id="purchase-status" role="status" aria-live="polite">Aguardando a confirmação do pagamento. O e-mail será enviado após a aprovação.</div>
+      <div class="purchase-note" id="purchase-status" role="status" aria-live="polite">Aguardando a confirmação do pagamento. Sua conta será ativada automaticamente após a aprovação.</div>
 
       <ol class="purchase-steps" id="email-steps" hidden>
-        <li><span>1</span><div><strong>Abra sua caixa de entrada.</strong><br>Procure o e-mail de confirmação da sua conta.</div></li>
-        <li><span>2</span><div><strong>Confirme seu e-mail.</strong><br>O link retorna para o ambiente comercial desta plataforma.</div></li>
-        <li><span>3</span><div><strong>Finalize seu perfil.</strong><br>Depois disso, o acesso é liberado conforme o status confirmado do pagamento.</div></li>
+        <li><span>1</span><div><strong>Pagamento confirmado.</strong><br>O webhook verifica a cobrança diretamente no Asaas.</div></li>
+        <li><span>2</span><div><strong>Conta ativada.</strong><br>Seu acesso é materializado no D1 sem depender de uma Edge Function externa.</div></li>
+        <li><span>3</span><div><strong>Finalize seu perfil.</strong><br>Entre com o e-mail e a senha informados antes do checkout.</div></li>
       </ol>
 
       <div class="purchase-actions">
         <button class="button" type="button" id="check-payment">Verificar pagamento</button>
-        <a class="button secondary" href="./index.html?confirmed=1">Entrar na minha conta</a>
+        <a class="button secondary" href="./index.html">Entrar na minha conta</a>
         <a class="button secondary" href="./index.html">Voltar para a página</a>
       </div>
       <p class="purchase-muted">Se o pagamento ainda estiver em processamento, o plano será atualizado automaticamente quando o Asaas enviar a confirmação.</p>
