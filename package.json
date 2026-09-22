@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "node scripts/materialize-clinical-source.mjs --write && node scripts/generate-pwa-icons.mjs && vite build",
     "preview": "vite preview",
-    "test:auth-runtime": "node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs",
+    "test:auth-runtime": "node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs tests/patient-save-runtime.test.mjs",
     "test:billing": "node scripts/test-cloudflare-billing-d1.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
