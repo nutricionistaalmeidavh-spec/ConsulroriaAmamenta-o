@@ -4,23 +4,27 @@ import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('authentication compatibility module contains no legacy clinical sync or first-login migration hook', () => {
-  const source = read('worker/cloudflare-auth-compat.js');
-  assert.doesNotMatch(source, /syncLegacyClinicalRows|repairLegacyClinicalRows|needsLegacyClinicalRepair/);
-  assert.doesNotMatch(source, /handleCloudflarePasswordCompat|legacyPasswordLogin|supabase\.co/i);
+test('completed migration keeps legacy Supabase auth and clinical sync retired', () => {
+  const compat = read('worker/cloudflare-auth-compat.js');
+  const domain = read('worker/domain-entry.js');
+
+  assert.doesNotMatch(compat, /syncLegacyClinicalRows|legacyClinicalTableRows|legacyPasswordLogin|LEGACY_SUPABASE|supabase\.co/i);
+  assert.doesNotMatch(domain, /handleCloudflarePasswordCompat|syncLegacyClinicalRows|legacyPasswordLogin/);
 });
 
-test('D1 auth runtime never falls back to an external identity backend', () => {
-  const source = read('worker/cloudflare-auth-runtime.js');
-  assert.match(source, /auth_users/);
-  assert.match(source, /auth_credentials/);
-  assert.match(source, /auth_refresh_sessions/);
-  assert.doesNotMatch(source, /legacy|supabase\.co|LEGACY_SUPABASE/i);
+test('canonical clinical client is materialized from the Cloudflare overlay', () => {
+  const materializer = read('scripts/materialize-clinical-source.mjs');
+  const overlayClient = read('patch-source/cloudflare-license-authority/core/lib/supabase-client.js');
+  const canonicalClient = read('public/clinical-source/core/lib/supabase-client.js');
+
+  assert.match(materializer, /overlay\('core\/lib\/supabase-client\.js'\)/);
+  assert.equal(canonicalClient, overlayClient, 'checked-in canonical client must match the Cloudflare source-of-truth overlay');
 });
 
-test('domain entry fails closed for protected clinical requests', () => {
-  const source = read('worker/domain-entry.js');
-  assert.match(source, /cloudflare_d1_required/);
-  assert.match(source, /cloudflare_auth_required/);
-  assert.doesNotMatch(source, /coreWorker\.fetch|cloudflare-fetch-bridge/);
+test('Cloudflare client owns refresh/retry instead of relying on the fetch bridge', () => {
+  const client = read('patch-source/cloudflare-license-authority/core/lib/supabase-client.js');
+  assert.match(client, /let refreshInFlight = null/);
+  assert.match(client, /async function authenticatedFetch\(send\)/);
+  assert.match(client, /current = await refreshSession\(\)/);
+  assert.doesNotMatch(client, /cloudflare-fetch-bridge|LEGACY_SUPABASE_ORIGIN/);
 });

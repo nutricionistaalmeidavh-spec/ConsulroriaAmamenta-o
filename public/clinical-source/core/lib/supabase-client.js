@@ -2,7 +2,7 @@ const SESSION_KEY = 'debora-lactacao-session';
 
 function assertConfig(config) {
   if (!config?.SUPABASE_URL || !config?.SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error('Configuração do Supabase incompleta.');
+    throw new Error('Configuração do backend incompleta.');
   }
 }
 
@@ -24,6 +24,10 @@ async function parseResponse(res) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+function expiredSessionError() {
+  return new Error('Sessão expirada. Entre novamente.');
+}
+
 export function createMemorySessionStorage(initial = {}) {
   const map = new Map(Object.entries(initial));
   return {
@@ -36,12 +40,13 @@ export function createMemorySessionStorage(initial = {}) {
 
 export function createSupabaseClient(config, {
   fetchImpl = globalThis.fetch?.bind(globalThis),
-  sessionStorage = globalThis.sessionStorage
+  sessionStorage = globalThis.localStorage
 } = {}) {
   assertConfig(config);
   if (typeof fetchImpl !== 'function') throw new Error('Fetch indisponível.');
   const storage = sessionStorage || createMemorySessionStorage();
   const base = String(config.SUPABASE_URL).replace(/\/$/, '');
+  let refreshInFlight = null;
 
   function getSession() {
     const raw = storage.getItem(SESSION_KEY);
@@ -55,23 +60,6 @@ export function createSupabaseClient(config, {
     return session;
   }
 
-  async function workerRequest(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
-    const session = getSession();
-    if (!session?.access_token) throw new Error('Sessão expirada. Entre novamente.');
-    const finalHeaders = { Authorization: `Bearer ${session.access_token}`, ...headers };
-    if (!raw && body !== undefined && !finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
-    const res = await fetchImpl(path, { method, headers: finalHeaders, body: body === undefined ? undefined : raw ? body : JSON.stringify(body) });
-    const data = await parseResponse(res);
-    if (res.status === 401) { setSession(null); throw new Error('Sessão expirada. Entre novamente.'); }
-    if (!res.ok) {
-      const code = data?.error || data?.message || `Falha no serviço (${res.status}).`;
-      if (code === 'SAAS_PATIENT_LIMIT_REACHED') throw new Error('Seu plano Freemium permite até 3 mães/pacientes.');
-      if (code === 'SAAS_MEDIA_UPLOAD_NOT_ALLOWED') throw new Error('Upload de fotos e vídeos está disponível no plano Pro.');
-      throw new Error(code);
-    }
-    return data;
-  }
-
   async function authRequest(path, { method = 'POST', body, token = null } = {}) {
     const headers = jsonHeaders(config, token ? { access_token: token } : null);
     const res = await fetchImpl(`${base}/auth/v1/${path}`, {
@@ -80,7 +68,79 @@ export function createSupabaseClient(config, {
       body: body === undefined ? undefined : JSON.stringify(body)
     });
     const data = await parseResponse(res);
-    if (!res.ok) throw new Error(data?.msg || data?.message || `Falha de autenticação (${res.status}).`);
+    if (!res.ok) throw new Error(data?.msg || data?.message || data?.error || `Falha de autenticação (${res.status}).`);
+    return data;
+  }
+
+  async function performRefresh() {
+    const current = getSession();
+    if (!current?.refresh_token) throw new Error('Sessão indisponível para atualização.');
+    const session = await authRequest('token?grant_type=refresh_token', {
+      body: { refresh_token: current.refresh_token }
+    });
+    if (!session?.access_token || !session?.refresh_token) {
+      throw new Error('Sessão atualizada inválida.');
+    }
+    return setSession(session);
+  }
+
+  async function refreshSession() {
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = performRefresh()
+      .catch((error) => {
+        setSession(null);
+        throw error;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+    return refreshInFlight;
+  }
+
+  async function authenticatedFetch(send) {
+    const initial = getSession();
+    if (!initial?.access_token) throw expiredSessionError();
+
+    const attemptedAccessToken = initial.access_token;
+    let res = await send(initial);
+    if (res.status !== 401) return res;
+
+    let current = getSession();
+    try {
+      // Another request may already have refreshed the session while this request was in flight.
+      if (!current?.access_token || current.access_token === attemptedAccessToken) {
+        current = await refreshSession();
+      }
+    } catch {
+      setSession(null);
+      throw expiredSessionError();
+    }
+
+    res = await send(current);
+    if (res.status === 401) {
+      setSession(null);
+      throw expiredSessionError();
+    }
+    return res;
+  }
+
+  async function workerRequest(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
+    const res = await authenticatedFetch((session) => {
+      const finalHeaders = { Authorization: `Bearer ${session.access_token}`, ...headers };
+      if (!raw && body !== undefined && !finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
+      return fetchImpl(path, {
+        method,
+        headers: finalHeaders,
+        body: body === undefined ? undefined : raw ? body : JSON.stringify(body)
+      });
+    });
+    const data = await parseResponse(res);
+    if (!res.ok) {
+      const code = data?.error || data?.message || `Falha no serviço (${res.status}).`;
+      if (code === 'SAAS_PATIENT_LIMIT_REACHED') throw new Error('Seu plano Freemium permite até 3 mães/pacientes.');
+      if (code === 'SAAS_MEDIA_UPLOAD_NOT_ALLOWED') throw new Error('Upload de fotos e vídeos está disponível no plano Pro.');
+      throw new Error(code);
+    }
     return data;
   }
 
@@ -95,13 +155,6 @@ export function createSupabaseClient(config, {
     return result;
   }
 
-  async function refreshSession() {
-    const current = getSession();
-    if (!current?.refresh_token) throw new Error('Sessão indisponível para atualização.');
-    const session = await authRequest('token?grant_type=refresh_token', { body: { refresh_token: current.refresh_token } });
-    return setSession(session);
-  }
-
   async function signOut() {
     const current = getSession();
     try {
@@ -114,35 +167,25 @@ export function createSupabaseClient(config, {
   }
 
   async function rest(table, { method = 'GET', query = '', body, headers = {} } = {}) {
-    const session = getSession();
     const suffix = query ? `?${query}` : '';
-    const res = await fetchImpl(`${base}/rest/v1/${encodeURIComponent(table)}${suffix}`, {
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/rest/v1/${encodeURIComponent(table)}${suffix}`, {
       method,
       headers: jsonHeaders(config, session, headers),
       body: body === undefined ? undefined : JSON.stringify(body)
-    });
+    }));
     const data = await parseResponse(res);
-    if (res.status === 401) {
-      setSession(null);
-      throw new Error('Sessão expirada. Entre novamente.');
-    }
-    if (!res.ok) throw new Error(data?.message || data?.hint || `Falha no banco (${res.status}).`);
+    if (!res.ok) throw new Error(data?.message || data?.hint || data?.error || `Falha no banco (${res.status}).`);
     return data;
   }
 
   async function rpc(name, body = {}) {
-    const session = getSession();
-    const res = await fetchImpl(`${base}/rest/v1/rpc/${encodeURIComponent(name)}`, {
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/rest/v1/rpc/${encodeURIComponent(name)}`, {
       method: 'POST',
       headers: jsonHeaders(config, session),
       body: JSON.stringify(body || {})
-    });
+    }));
     const data = await parseResponse(res);
-    if (res.status === 401) {
-      setSession(null);
-      throw new Error('Sessão expirada. Entre novamente.');
-    }
-    if (!res.ok) throw new Error(data?.message || data?.hint || `Falha no banco (${res.status}).`);
+    if (!res.ok) throw new Error(data?.message || data?.hint || data?.error || `Falha no banco (${res.status}).`);
     return data;
   }
 
@@ -156,19 +199,17 @@ export function createSupabaseClient(config, {
         method: 'POST', body, headers, raw: true
       });
     }
-    const session = getSession();
-    const finalHeaders = {
-      apikey: config.SUPABASE_PUBLISHABLE_KEY,
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      ...headers
-    };
-    const res = await fetchImpl(`${base}/storage/v1/${normalized}`, { method, headers: finalHeaders, body });
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/storage/v1/${normalized}`, {
+      method,
+      headers: {
+        apikey: config.SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+        ...headers
+      },
+      body
+    }));
     const data = await parseResponse(res);
-    if (res.status === 401) {
-      setSession(null);
-      throw new Error('Sessão expirada. Entre novamente.');
-    }
-    if (!res.ok) throw new Error(data?.message || `Falha no armazenamento (${res.status}).`);
+    if (!res.ok) throw new Error(data?.message || data?.error || `Falha no armazenamento (${res.status}).`);
     return data;
   }
 
