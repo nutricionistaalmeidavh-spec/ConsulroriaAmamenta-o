@@ -4,6 +4,30 @@ const LEGACY_SUPABASE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 export const CLOUDFLARE_PBKDF2_ITERATIONS = 100000;
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
+const LEGACY_CLINICAL_TABLES = [
+  'mothers',
+  'babies',
+  'appointments',
+  'appointment_babies',
+  'clinical_encounters',
+  'clinical_encounter_babies',
+  'weights',
+  'growth_measurements',
+  'followups',
+  'financial_entries',
+  'consents',
+  'library_items',
+  'media',
+  'clinical_media',
+  'clinical_documents',
+  'clinical_encounter_addenda',
+  'clinical_note_revisions',
+  'care_packages',
+  'care_package_items',
+  'care_package_sessions',
+  'care_package_item_usages',
+  'referrals',
+];
 
 const enc = new TextEncoder();
 
@@ -143,6 +167,82 @@ async function legacyPasswordLogin(email, password) {
   return { response, payload };
 }
 
+async function legacyRecordKey(table, row) {
+  if (row?.id) return String(row.id);
+  if (table === 'appointment_babies') return `${row?.appointment_id || ''}|${row?.baby_id || ''}`;
+  if (table === 'clinical_encounter_babies') return `${row?.encounter_id || ''}|${row?.baby_id || ''}`;
+  if (table === 'consents') return `${row?.owner_id || ''}|${row?.mother_id || ''}|${row?.consent_type || ''}`;
+  return sha256(`${table}|${JSON.stringify(row || {})}`);
+}
+
+async function legacyClinicalTableRows(table, accessToken) {
+  const response = await fetch(`${LEGACY_SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}?select=*`, {
+    headers: {
+      apikey: LEGACY_SUPABASE_KEY,
+      authorization: `Bearer ${accessToken}`,
+      accept: 'application/json',
+    },
+  });
+  if (response.status === 404) return [];
+  if (!response.ok) throw new Error(`legacy_table_sync_failed:${table}:${response.status}`);
+  const payload = await response.json().catch(() => []);
+  return Array.isArray(payload) ? payload : [];
+}
+
+async function needsLegacyClinicalRepair(env, userId) {
+  if (!env.CLINICAL_DB || !userId) return false;
+  const row = await env.CLINICAL_DB.prepare(
+    "SELECT COUNT(*) AS n FROM supabase_records WHERE table_name = 'mothers' AND owner_id = ?",
+  ).bind(userId).first();
+  return Number(row?.n || 0) === 0;
+}
+
+export async function syncLegacyClinicalRows(env, accessToken, userId) {
+  if (!env.CLINICAL_DB || !accessToken || !userId) return { synced: 0, failures: [] };
+  let synced = 0;
+  const failures = [];
+
+  for (const table of LEGACY_CLINICAL_TABLES) {
+    let rows = [];
+    try {
+      rows = await legacyClinicalTableRows(table, accessToken);
+    } catch (error) {
+      failures.push({ table, error: error?.message || String(error) });
+      continue;
+    }
+
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      if (row.owner_id && String(row.owner_id) !== String(userId)) continue;
+      const now = new Date().toISOString();
+      const key = await legacyRecordKey(table, row);
+      await env.CLINICAL_DB.prepare(`INSERT INTO supabase_records(
+        table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
+      ) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET
+        owner_id=CASE WHEN supabase_records.owner_id IS NULL THEN excluded.owner_id ELSE supabase_records.owner_id END`).bind(
+        table,
+        key,
+        row.owner_id || null,
+        JSON.stringify(row),
+        row.created_at || now,
+        row.updated_at || now,
+        now,
+      ).run();
+      synced++;
+    }
+  }
+
+  return { synced, failures };
+}
+
+async function repairLegacyClinicalRowsIfNeeded(env, email, password, userId, existingLegacy = null) {
+  if (!await needsLegacyClinicalRepair(env, userId)) return;
+  const legacy = existingLegacy || await legacyPasswordLogin(email, password);
+  if (!legacy?.response?.ok || !legacy?.payload?.access_token || String(legacy?.payload?.user?.id || '') !== String(userId)) return;
+  const result = await syncLegacyClinicalRows(env, legacy.payload.access_token, userId);
+  if (result.failures.length) console.warn('legacy clinical repair completed with partial failures', result.failures);
+}
+
 async function upsertLegacyUser(env, legacyUser) {
   const now = new Date().toISOString();
   await env.CLINICAL_DB.prepare(`INSERT INTO auth_users(
@@ -212,6 +312,9 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     let row = await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?) LIMIT 1').bind(email).first();
     if (row && await verifyStoredCredential(env, row.user_id, password)) {
+      await repairLegacyClinicalRowsIfNeeded(env, email, password, row.user_id).catch((error) => {
+        console.warn('legacy clinical repair failed without blocking local login', error);
+      });
       const now = new Date().toISOString();
       await env.CLINICAL_DB.prepare('UPDATE auth_users SET last_sign_in_at = ?, updated_at = ? WHERE user_id = ?').bind(now, now, row.user_id).run();
       row = { ...row, last_sign_in_at: now, updated_at: now };
@@ -227,6 +330,9 @@ export async function handleCloudflarePasswordCompat(request, env, url = new URL
 
     row = await upsertLegacyUser(env, legacy.payload.user);
     await storeCredential(env, row.user_id, password);
+    await repairLegacyClinicalRowsIfNeeded(env, email, password, row.user_id, legacy).catch((error) => {
+      console.warn('legacy clinical repair failed without blocking migrated login', error);
+    });
     const migrated = publicUser(await env.CLINICAL_DB.prepare('SELECT * FROM auth_users WHERE user_id = ? LIMIT 1').bind(row.user_id).first());
     return json(200, await issueSession(env, migrated));
   } catch (error) {
