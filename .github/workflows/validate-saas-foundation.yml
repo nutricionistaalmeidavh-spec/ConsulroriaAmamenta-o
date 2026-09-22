@@ -7,6 +7,7 @@ on:
       - feature/saas-foundation-phase-0-2
       - feature/pro-checkout-before-email-confirmation
       - fix/commercial-duplicate-signup-flow
+      - feat/partner-attribution-asaas
     paths:
       - 'scripts/test-saas-foundation.mjs'
       - 'scripts/test-commercial-funnel.mjs'
@@ -14,6 +15,7 @@ on:
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
+      - 'scripts/test-partner-attribution.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
@@ -23,6 +25,7 @@ on:
       - 'scripts/test-cloudflare-asaas.mjs'
       - 'scripts/test-public-seo.mjs'
       - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/phase-saas-partners.sql'
       - 'supabase/functions/_shared/**'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
@@ -45,6 +48,7 @@ on:
       - 'scripts/test-commercial-checkout-return.mjs'
       - 'scripts/test-preconfirm-checkout.mjs'
       - 'scripts/test-deferred-email-flow.mjs'
+      - 'scripts/test-partner-attribution.mjs'
       - 'scripts/validate-deferred-email-migration.mjs'
       - 'scripts/test-duplicate-signup-flow.mjs'
       - 'scripts/test-commercial-auth-recovery.mjs'
@@ -54,6 +58,7 @@ on:
       - 'scripts/test-cloudflare-asaas.mjs'
       - 'scripts/test-public-seo.mjs'
       - 'supabase/phase-pro-checkout-deferred-email.sql'
+      - 'supabase/phase-saas-partners.sql'
       - 'supabase/functions/_shared/**'
       - 'supabase/phase-saas-foundation.sql'
       - 'supabase/phase-saas-enforcement.sql'
@@ -94,6 +99,8 @@ jobs:
         run: node scripts/test-preconfirm-checkout.mjs
       - name: Validate deferred email behavior
         run: node scripts/test-deferred-email-flow.mjs
+      - name: Validate partner attribution, commissions and discounts
+        run: node scripts/test-partner-attribution.mjs
       - name: Validate migration on isolated PostgreSQL
         run: |
           npm install --prefix "$RUNNER_TEMP/pro-checkout-test" @electric-sql/pglite@0.5.8 --ignore-scripts
