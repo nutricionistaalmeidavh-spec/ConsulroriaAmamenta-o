@@ -18,16 +18,18 @@
     .admin-card h2 { margin-top:0; }
     .admin-form { display:grid; gap:12px; }
     .admin-form label { display:grid; gap:6px; font-weight:600; }
-    .admin-form input, .admin-form select { width:100%; box-sizing:border-box; border:1px solid rgba(61,45,45,.2); border-radius:10px; padding:11px 12px; background:#fff; color:#2d2525; }
+    .admin-form input, .admin-form select, .filters input, .filters select { width:100%; box-sizing:border-box; border:1px solid rgba(61,45,45,.2); border-radius:10px; padding:11px 12px; background:#fff; color:#2d2525; }
     .form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
     .checkbox-row { display:flex !important; grid-template-columns:none; align-items:center; gap:8px !important; }
     .checkbox-row input { width:auto; }
-    .summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
+    .filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:18px 0; }
+    .filters label { display:grid; gap:6px; font-size:.86rem; font-weight:600; }
+    .summary-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
     .metric { background:#fbf8f7; border-radius:12px; padding:14px; }
     .metric small { display:block; color:#766; }
-    .metric strong { display:block; font-size:1.3rem; margin-top:3px; }
+    .metric strong { display:block; font-size:1.2rem; margin-top:3px; }
     .table-wrap { overflow:auto; border:1px solid rgba(61,45,45,.1); border-radius:12px; }
-    table { width:100%; border-collapse:collapse; min-width:760px; background:#fff; }
+    table { width:100%; border-collapse:collapse; min-width:880px; background:#fff; }
     th,td { padding:11px 12px; text-align:left; border-bottom:1px solid rgba(61,45,45,.08); vertical-align:top; }
     th { background:#fbf8f7; font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; }
     .status { display:inline-flex; border-radius:999px; padding:4px 8px; background:#f1edeb; font-size:.78rem; }
@@ -38,8 +40,9 @@
     .partner-item { border:1px solid rgba(61,45,45,.1); border-radius:12px; padding:12px; display:flex; justify-content:space-between; gap:12px; align-items:center; }
     .partner-item button { white-space:nowrap; }
     .partner-item small { display:block; color:#766; margin-top:3px; }
-    @media (max-width:900px){ .admin-grid{grid-template-columns:1fr}.summary-grid{grid-template-columns:1fr 1fr}.partner-admin header{flex-direction:column} }
-    @media (max-width:520px){ .form-row,.summary-grid{grid-template-columns:1fr}.partner-admin{padding-inline:14px} }
+    @media (max-width:1000px){ .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.filters{grid-template-columns:1fr 1fr} }
+    @media (max-width:900px){ .admin-grid{grid-template-columns:1fr}.partner-admin header{flex-direction:column} }
+    @media (max-width:520px){ .form-row,.summary-grid,.filters{grid-template-columns:1fr}.partner-admin{padding-inline:14px} }
   </style>
 </head>
 <body>
@@ -52,6 +55,7 @@
       </div>
       <div class="admin-actions">
         <a class="button secondary" href="./plano.html">Meu plano</a>
+        <button class="button secondary" id="export-sales" type="button">Exportar CSV</button>
         <button class="button secondary" id="reload" type="button">Atualizar</button>
       </div>
     </header>
@@ -94,24 +98,32 @@
       </section>
 
       <section class="admin-card">
-        <div class="admin-actions" style="justify-content:space-between;align-items:end">
-          <div><h2 style="margin-bottom:4px">Vendas atribuídas</h2><p class="muted" style="margin:0">A comissão só fica pendente depois de pagamento confirmado.</p></div>
-          <label>Parceiro
-            <select id="sales-partner-filter"><option value="">Todos</option></select>
-          </label>
+        <div>
+          <h2 style="margin-bottom:4px">Vendas atribuídas</h2>
+          <p class="muted" style="margin:0">A comissão só fica pendente depois de pagamento confirmado.</p>
         </div>
 
-        <div class="summary-grid" style="margin-top:18px">
+        <div class="filters" aria-label="Filtros de vendas">
+          <label>Parceiro<select id="sales-partner-filter"><option value="">Todos</option></select></label>
+          <label>Plano<select id="sales-plan-filter"><option value="">Todos</option><option value="pro_monthly">Pro mensal</option><option value="pro_annual">Pro anual</option></select></label>
+          <label>Status da venda<select id="sales-status-filter"><option value="">Todos</option><option value="captured">Capturada</option><option value="checkout_created">Checkout criado</option><option value="paid">Paga</option><option value="cancelled">Cancelada</option><option value="refunded">Estornada</option><option value="chargeback">Chargeback</option></select></label>
+          <label>Status da comissão<select id="sales-commission-filter"><option value="">Todos</option><option value="none">Sem comissão</option><option value="pending">Pendente</option><option value="approved">Aprovada</option><option value="cancelled">Cancelada</option><option value="reversed">Revertida</option></select></label>
+          <label>De<input id="sales-from-filter" type="date"></label>
+          <label>Até<input id="sales-to-filter" type="date"></label>
+        </div>
+
+        <div class="summary-grid">
           <div class="metric"><small>Vendas pagas</small><strong id="metric-sales">0</strong></div>
           <div class="metric"><small>Receita atribuída</small><strong id="metric-revenue">R$ 0,00</strong></div>
+          <div class="metric"><small>Descontos</small><strong id="metric-discounts">R$ 0,00</strong></div>
           <div class="metric"><small>Comissão pendente</small><strong id="metric-pending">R$ 0,00</strong></div>
           <div class="metric"><small>Comissão aprovada</small><strong id="metric-approved">R$ 0,00</strong></div>
         </div>
 
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Parceiro</th><th>Plano</th><th>Status</th><th>Venda</th><th>Desconto</th><th>Comissão</th><th>Ação</th></tr></thead>
-            <tbody id="sales-body"><tr><td colspan="7">Nenhuma venda carregada.</td></tr></tbody>
+            <thead><tr><th>Data</th><th>Parceiro</th><th>Plano</th><th>Status</th><th>Venda</th><th>Desconto</th><th>Comissão</th><th>Ação</th></tr></thead>
+            <tbody id="sales-body"><tr><td colspan="8">Nenhuma venda carregada.</td></tr></tbody>
           </table>
         </div>
       </section>
