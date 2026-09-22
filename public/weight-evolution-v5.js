@@ -3,7 +3,7 @@ if(!document.getElementById(V5_STYLE_ID)){
   const link=document.createElement('link');
   link.id=V5_STYLE_ID;
   link.rel='stylesheet';
-  link.href='./weight-evolution-v5.css';
+  link.href='/weight-evolution-v5.css';
   document.head.appendChild(link);
 }
 
