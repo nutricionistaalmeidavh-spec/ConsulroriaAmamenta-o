@@ -37,11 +37,8 @@ CREATE TABLE IF NOT EXISTS billing_pending_signups (
   plan_code TEXT NOT NULL CHECK (plan_code IN ('pro_monthly','pro_annual')),
   signup_nonce_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending','paid','email_sent','activated','cancelled','expired')),
+    CHECK (status IN ('pending','paid','activated','cancelled','expired')),
   payment_confirmed_at TEXT,
-  email_verification_token_hash TEXT,
-  email_verification_expires_at TEXT,
-  email_verification_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   activated_at TEXT
