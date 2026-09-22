@@ -1,3 +1,5 @@
+import './package-card-singleton-guard.js';
+
 let phase68Started=false;
 function css(href,key){if(document.querySelector(`link[data-${key}]`))return;const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.setAttribute(`data-${key}`,'1');document.head.appendChild(link)}
 async function start(){
@@ -9,7 +11,6 @@ async function start(){
     css('/patient-records-hub.css','phase68-hub');
     css('/patient-workspace.css','phase68-workspace');
     css('/package-audit-feature.css','phase68-package-audit');
-    await import('./package-card-singleton-guard.js');
     await import('./referral-finalization.js');
     await import('./record-export-feature.js');
     await import('./patient-workspace.js');
