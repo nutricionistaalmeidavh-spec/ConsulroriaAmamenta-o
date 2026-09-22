@@ -35,7 +35,8 @@ assert.match(runtime, /finalize_encounter_billing/);
 assert.match(runtime, /supabaseClinicalWrites:\s*false/);
 
 assert.match(domain, /handleCloudflareClinicalRuntime/);
-assert.match(domain, /CLINICAL_DB is the cutover switch/);
+// Validate the actual D1 cutover behavior, not a stale explanatory comment.
+assert.match(domain, /if\s*\(env\.CLINICAL_DB\s*&&\s*url\.pathname\s*===\s*'\/api\/license\/me'/);
 assert.match(domain, /ensureExplicitCommercialMarker\(request, env\)/);
 assert.match(commercialBootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
 assert.match(commercialBootstrap, /source='migrated_saas_account'/);
