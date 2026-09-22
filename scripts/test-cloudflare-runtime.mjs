@@ -49,9 +49,12 @@ assert.match(schema, /CREATE TABLE IF NOT EXISTS auth_refresh_sessions/);
 assert.match(clientOverlay, /sessionStorage = globalThis\.localStorage/);
 assert.match(canonicalIdentity, /\[localStorage, sessionStorage\]/);
 
-// Commercial checkout remains on its proven transition path while clinical data
-// and clinical auth move to Cloudflare. Cloudflare accepts those legacy tokens.
-assert.match(commercialConfig, /zxowxdfhtksevhnjmeyu\.supabase\.co/);
+// Commercial browser traffic is Cloudflare-native after the billing cutover.
+// Legacy Supabase remains only as the temporary clinical auth/session bridge handled server-side.
+assert.match(commercialConfig, /window\.location\.origin/);
+assert.match(commercialConfig, /backend:\s*'cloudflare-d1'/);
+assert.match(commercialConfig, /clientRuntimeKey:\s*'cloudflare-runtime'/);
+assert.doesNotMatch(commercialConfig, /supabase/i);
 assert.match(runtime, /allowLegacy = true/);
 
 // Legacy clinical feature modules still containing the old Supabase origin are redirected
