@@ -13,12 +13,33 @@ const recovery = read('public/comercial/auth-recovery.js');
 const domainEntry = read('worker/domain-entry.js');
 const wrangler = read('wrangler.jsonc');
 const postPaymentEmail = read('supabase/functions/_shared/post-payment-email.ts');
+const phase02Loader = read('public/phase02-loader.js');
+const phase35Loader = read('public/phase35-loader.js');
+const phase68Loader = read('public/phase68-loader.js');
 
 assert.ok(existsSync('app/index.html'), 'canonical /app entry must exist');
 assert.ok(existsSync('public/debora/index.html'), 'dedicated /debora landing must exist');
 assert.ok(existsSync('worker/domain-entry.js'), 'custom-domain worker entry must exist');
 assert.match(root, /src\/bootstrap\.js/, 'root compatibility entry must keep the canonical bootstrap');
 assert.match(appEntry, /src\/bootstrap\.js/, '/app must use the exact same canonical bootstrap');
+
+const appBridgePos = appEntry.indexOf('/src/cloudflare-fetch-bridge.js');
+const appEventBusPos = appEntry.indexOf('/eventbus-runtime.js');
+const appBootstrapPos = appEntry.indexOf('/src/bootstrap.js');
+assert.ok(appBridgePos >= 0, '/app must install the Cloudflare fetch bridge before legacy clinical modules');
+assert.ok(appEventBusPos > appBridgePos, '/app must install EventBus after the fetch bridge');
+assert.ok(appBootstrapPos > appEventBusPos, '/app bootstrap must start only after bridge and EventBus are installed');
+assert.match(bootstrap, /growth-feature\.js/, 'canonical bootstrap must continue loading the growth feature');
+
+for (const [label, source, assets] of [
+  ['phase 0-2', phase02Loader, ['documents-feature.css']],
+  ['phase 3-5', phase35Loader, ['album-feature.css', 'referrals-feature.css']],
+  ['phase 6-8', phase68Loader, ['record-export-feature.css', 'patient-records-hub.css', 'patient-workspace.css', 'package-audit-feature.css']],
+]) {
+  for (const asset of assets) {
+    assert.ok(source.includes(`/${asset}`), `${label} loader must use root-safe CSS path /${asset}`);
+  }
+}
 
 assert.deepEqual(resolveAppIdentity({ pathname: '/' }), {
   productName: 'Gestão de Amamentação',
