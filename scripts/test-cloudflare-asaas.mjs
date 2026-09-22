@@ -14,9 +14,12 @@ assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 
-// With CLINICAL_DB bound, every commercial billing route is intercepted before the legacy worker.
+// Every commercial billing route is intercepted by Cloudflare D1 and cannot fall through to another backend.
 assert.match(domain, /handleCloudflareBillingRuntime/);
-assert.match(domain, /cloudflareBillingResponse[\s\S]*coreWorker\.fetch/);
+assert.match(domain, /cloudflareBillingResponse/);
+assert.match(domain, /D1_BILLING_PATHS/);
+assert.match(domain, /d1BillingRequired/);
+assert.doesNotMatch(domain, /coreWorker\.fetch|\.\/index\.js/);
 assert.match(runtime, /if \(!env\.CLINICAL_DB \|\| !ROUTES\.has\(url\.pathname\)\) return null/);
 assert.match(runtime, /\/api\/asaas\/checkout/);
 assert.match(runtime, /\/api\/webhooks\/asaas/);
