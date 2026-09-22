@@ -63,6 +63,14 @@ function validCheckoutUrl(value: string, environment: string) {
   }
 }
 
+function normalizePartnerCode(value: unknown) {
+  return String(value || '').trim().toUpperCase().slice(0, 64);
+}
+
+function normalizeAttributionSource(value: unknown) {
+  return String(value || '') === 'ref_link' ? 'ref_link' : 'manual_code';
+}
+
 async function sha256Hex(value: string) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -84,6 +92,54 @@ async function fetchPlan(supabaseUrl: string, serviceKey: string, planCode: stri
   const plans = await planResponse.json().catch(() => []);
   const plan = Array.isArray(plans) ? plans[0] : null;
   return { planResponse, plan };
+}
+
+async function resolvePartnerOffer(
+  supabaseUrl: string,
+  serviceKey: string,
+  partnerCode: string,
+  planCode: string,
+) {
+  if (!partnerCode) return { response: null, offer: null, error: null };
+  const response = await rest(
+    supabaseUrl,
+    serviceKey,
+    '/rest/v1/rpc/resolve_partner_offer',
+    {
+      method: 'POST',
+      body: JSON.stringify({ p_code: partnerCode, p_plan_code: planCode }),
+    },
+  );
+  const rows = await response.json().catch(() => []);
+  if (!response.ok) return { response, offer: null, error: 'partner_lookup_failed' };
+  const offer = Array.isArray(rows) ? rows[0] || null : null;
+  if (!offer) return { response, offer: null, error: 'invalid_partner_code' };
+  return { response, offer, error: null };
+}
+
+function pricedPlan(plan: Record<string, unknown>, offer: Record<string, unknown> | null) {
+  const base = Number(plan?.price_cents || 0);
+  const effective = offer ? Number(offer.total_cents || 0) : base;
+  return {
+    ...plan,
+    effective_price_cents: effective,
+    discount_cents: offer ? Number(offer.discount_cents || 0) : 0,
+    partner_name: offer ? String(offer.partner_name || '') : '',
+    partner_code: offer ? String(offer.partner_code || '') : '',
+  };
+}
+
+function partnerCheckoutFields(offer: Record<string, unknown> | null, attributionSource: string) {
+  if (!offer) return {};
+  return {
+    partner_id: offer.partner_id,
+    partner_code_snapshot: String(offer.partner_code || ''),
+    attribution_source: attributionSource,
+    subtotal_cents: Number(offer.subtotal_cents || 0),
+    discount_cents: Number(offer.discount_cents || 0),
+    total_cents: Number(offer.total_cents || 0),
+    commission_cents: Number(offer.commission_cents || 0),
+  };
 }
 
 async function fetchAccount(supabaseUrl: string, serviceKey: string, ownerId: string) {
@@ -168,8 +224,6 @@ async function prepareSignup(url: string, key: string, body: Record<string, unkn
     if (typeof id !== 'string' || !validUuid(id)) return json(400, { error: 'signup_credentials_invalid' });
     userId = id;
   } else if (auth.error_code === 'invalid_credentials') {
-    // The admin creation API sends no email and does not confirm the address.
-    // It refuses existing emails: never overwrite an existing user's password.
     const created = await rest(url, key, '/auth/v1/admin/users', {
       method: 'POST', body: JSON.stringify({ email, password, email_confirm: false,
         user_metadata: { signup_source: 'commercial_saas', plan_intent: planCode },
@@ -180,7 +234,6 @@ async function prepareSignup(url: string, key: string, body: Record<string, unkn
     if (!created.ok || !user?.id) return json(created.status >= 500 ? 503 : 400, { error: 'signup_credentials_invalid' });
     userId = user.id;
   } else {
-    // Do not turn CAPTCHA/hook/provider failures into permission to create users.
     return json(login.status || 400, { error: 'signup_auth_unavailable' });
   }
   const { response, user } = await fetchAdminUser(url, key, userId);
@@ -218,6 +271,8 @@ async function createPendingRequest(
   const userId = String(body?.userId || '');
   const signupNonce = String(body?.signupNonce || '');
   const planCode = String(body?.planCode || '');
+  const partnerCode = normalizePartnerCode(body?.partnerCode);
+  const attributionSource = normalizeAttributionSource(body?.attributionSource);
   if (!validUuid(userId) || !validNonce(signupNonce)) return json(400, { error: 'invalid_signup_proof' });
   if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
 
@@ -229,7 +284,6 @@ async function createPendingRequest(
   if (deferred) {
     if (user.app_metadata.checkout_nonce !== signupNonce) return json(401, { error: 'invalid_signup_proof' });
   } else {
-    // Keep already-open legacy checkouts compatible during rollout.
     if (metadata?.signup_source !== 'commercial_saas'
         || metadata?.plan_intent !== planCode || metadata?.signup_nonce !== signupNonce) {
       return json(401, { error: 'invalid_signup_proof' });
@@ -238,15 +292,17 @@ async function createPendingRequest(
     if (!Number.isFinite(createdAt) || Date.now() - createdAt > 30 * 60 * 1000) return json(410, { error: 'signup_proof_expired' });
   }
 
-  // Reuse even a legacy pending purchase for this owner, including after a lost response.
   const priorResponse = await rest(supabaseUrl, serviceKey,
-    `/rest/v1/billing_checkout_requests?owner_id=eq.${encodeURIComponent(userId)}&provider=eq.asaas&status=in.(pending_provider,checkout_created,paid)&select=id,status,plan_code,checkout_url&order=created_at.desc&limit=1`);
+    `/rest/v1/billing_checkout_requests?owner_id=eq.${encodeURIComponent(userId)}&provider=eq.asaas&status=in.(pending_provider,checkout_created,paid)&select=id,status,plan_code,checkout_url,partner_code_snapshot&order=created_at.desc&limit=1`);
   const priorRows = await priorResponse.json().catch(() => []);
   if (!priorResponse.ok) return json(503, { error: 'checkout_lookup_failed' });
   const prior = priorRows[0];
-  if (prior?.status === 'paid') return json(200, { status: 'paid' });
   if (prior) {
     if (prior.plan_code !== planCode) return json(409, { error: 'pending_checkout_other_plan' });
+    if (partnerCode && String(prior.partner_code_snapshot || '') !== partnerCode) {
+      return json(409, { error: 'pending_checkout_partner_mismatch' });
+    }
+    if (prior.status === 'paid') return json(200, { status: 'paid' });
     if (prior.status === 'checkout_created' && validCheckoutUrl(prior.checkout_url, environment)) {
       return json(200, { status: 'checkout_created', checkoutUrl: prior.checkout_url, requestId: prior.id });
     }
@@ -255,6 +311,11 @@ async function createPendingRequest(
 
   const { planResponse, plan } = await fetchPlan(supabaseUrl, serviceKey, planCode);
   if (!planResponse.ok || !plan) return json(404, { error: 'plan_not_available' });
+
+  const partnerResult = await resolvePartnerOffer(supabaseUrl, serviceKey, partnerCode, planCode);
+  if (partnerResult.error === 'invalid_partner_code') return json(400, { error: 'invalid_partner_code' });
+  if (partnerResult.error) return json(503, { error: partnerResult.error });
+  const offer = partnerResult.offer;
 
   const account = await ensurePendingAccount(supabaseUrl, serviceKey, userId);
   if (!account) return json(500, { error: 'pending_account_failed' });
@@ -277,6 +338,7 @@ async function createPendingRequest(
         plan_code: planCode,
         provider,
         status: 'pending_provider',
+        ...partnerCheckoutFields(offer, attributionSource),
         metadata: {
           source,
           environment,
@@ -295,7 +357,7 @@ async function createPendingRequest(
     status: 'pending_provider',
     requestId: checkoutRequest.id,
     requestSecret,
-    plan,
+    plan: pricedPlan(plan, offer),
     environment,
   });
 }
@@ -422,12 +484,19 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'create_request') {
     const planCode = String(body?.planCode || '');
+    const partnerCode = normalizePartnerCode(body?.partnerCode);
+    const attributionSource = normalizeAttributionSource(body?.attributionSource);
     if (!['pro_monthly', 'pro_annual'].includes(planCode)) {
       return json(400, { error: 'invalid_plan' });
     }
 
     const { planResponse, plan } = await fetchPlan(supabaseUrl, serviceKey, planCode);
     if (!planResponse.ok || !plan) return json(404, { error: 'plan_not_available' });
+
+    const partnerResult = await resolvePartnerOffer(supabaseUrl, serviceKey, partnerCode, planCode);
+    if (partnerResult.error === 'invalid_partner_code') return json(400, { error: 'invalid_partner_code' });
+    if (partnerResult.error) return json(503, { error: partnerResult.error });
+    const offer = partnerResult.offer;
 
     const accountResponse = await fetchAccount(supabaseUrl, serviceKey, user.id);
     if (!accountResponse.response.ok || !accountResponse.account) return json(409, { error: 'onboarding_required' });
@@ -445,6 +514,7 @@ Deno.serve(async (req: Request) => {
           plan_code: planCode,
           provider,
           status: 'pending_provider',
+          ...partnerCheckoutFields(offer, attributionSource),
           metadata: { source, environment },
         }),
       },
@@ -456,7 +526,7 @@ Deno.serve(async (req: Request) => {
     return json(200, {
       status: 'pending_provider',
       requestId: checkoutRequest.id,
-      plan,
+      plan: pricedPlan(plan, offer),
       environment,
     });
   }
