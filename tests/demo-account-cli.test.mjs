@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEMO_EMAIL, DEMO_USER_ID } from '../scripts/demo-account-fixture.mjs';
-import { buildWranglerQueryArgs, extractD1Rows } from '../scripts/demo-account-d1.mjs';
+import { buildNpxInvocation, buildWranglerQueryArgs, extractD1Rows } from '../scripts/demo-account-d1.mjs';
 import { seedDemoAccount } from '../scripts/seed-demo-account.mjs';
 import { resetDemoAccount } from '../scripts/reset-demo-account.mjs';
 
@@ -21,6 +21,22 @@ test('wrangler query args are pinned to the remote clinical D1', () => {
   assert.ok(commandIndex >= 0);
   assert.equal(args[commandIndex + 1], 'SELECT 1;');
   assert.ok(args.includes('--json'));
+});
+
+test('Windows invokes npx through cmd.exe instead of executing npx.cmd directly', () => {
+  const invocation = buildNpxInvocation(['--yes', 'wrangler@4', '--version'], {
+    platform: 'win32',
+    comspec: 'C:\\Windows\\System32\\cmd.exe',
+  });
+  assert.equal(invocation.command, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(invocation.args.slice(0, 4), ['/d', '/s', '/c', 'npx']);
+  assert.deepEqual(invocation.args.slice(4), ['--yes', 'wrangler@4', '--version']);
+});
+
+test('non-Windows keeps direct npx invocation', () => {
+  const invocation = buildNpxInvocation(['--yes', 'wrangler@4', '--version'], { platform: 'linux' });
+  assert.equal(invocation.command, 'npx');
+  assert.deepEqual(invocation.args, ['--yes', 'wrangler@4', '--version']);
 });
 
 test('seed validates password before any remote operation', async () => {

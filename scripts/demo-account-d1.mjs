@@ -7,8 +7,18 @@ import { buildIdentityProbeSql } from './demo-account-sql.mjs';
 
 export const DEMO_D1_DATABASE = 'debora-lactacao-clinical';
 
-function npxExecutable() {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+export function buildNpxInvocation(args, {
+  platform = process.platform,
+  comspec = process.env.ComSpec,
+} = {}) {
+  const npxArgs = Array.from(args || [], (value) => String(value));
+  if (platform === 'win32') {
+    return {
+      command: String(comspec || 'cmd.exe'),
+      args: ['/d', '/s', '/c', 'npx', ...npxArgs],
+    };
+  }
+  return { command: 'npx', args: npxArgs };
 }
 
 export function buildWranglerQueryArgs(sql) {
@@ -46,7 +56,8 @@ export function extractD1Rows(output) {
 }
 
 export async function queryD1(sql, { execFile = execFileSync } = {}) {
-  const output = execFile(npxExecutable(), buildWranglerQueryArgs(sql), {
+  const invocation = buildNpxInvocation(buildWranglerQueryArgs(sql));
+  const output = execFile(invocation.command, invocation.args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -62,7 +73,8 @@ export async function executeD1Sql(sql, {
   const filePath = join(tempDirectory, `debora-demo-${randomUUID()}.sql`);
   writeFile(filePath, String(sql), { encoding: 'utf8', mode: 0o600 });
   try {
-    execFile(npxExecutable(), buildWranglerFileArgs(filePath), {
+    const invocation = buildNpxInvocation(buildWranglerFileArgs(filePath));
+    execFile(invocation.command, invocation.args, {
       encoding: 'utf8',
       stdio: ['ignore', 'inherit', 'inherit'],
     });
