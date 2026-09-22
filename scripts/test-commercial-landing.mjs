@@ -32,9 +32,13 @@ const lower = html.toLowerCase();
 for (const section of ['id="problema"','id="produto"','id="recursos"','id="para-quem"','id="planos"','id="faq"']) {
   if (!lower.includes(section)) fail(`missing sales-story section ${section}`);
 }
-for (const phrase of ['começar grátis','até 3 mães/pacientes','r$ 79,90/mês','r$ 799,90/ano','upload de fotos e vídeos']) {
+for (const phrase of ['começar grátis','até 3 mães/pacientes','r$ 79,90/mês','r$ 799,90/ano','até 12x','upload de fotos e vídeos']) {
   if (!lower.includes(phrase)) fail(`missing commercial promise: ${phrase}`);
 }
+if (lower.includes('r$ 49,90')) fail('old monthly price must not return to commercial index');
+if (/r\$ 499(?:\/|<)/i.test(html)) fail('old annual price must not return to commercial index');
+if (!motion.includes("'R$ 799,90' : 'R$ 79,90'")) fail('billing switch must use current monthly and annual prices');
+if (motion.includes("'R$ 499' : 'R$ 49,90'")) fail('billing switch still contains legacy prices');
 if ((html.match(/<details\b/g) || []).length < 6) fail('FAQ must contain at least 6 native details items');
 if (!html.includes('class="comparison-table"')) fail('plan comparison table is missing');
 if (!html.includes('data-plan="freemium" data-open="signup"')) fail('Freemium CTA contract changed');
@@ -122,6 +126,7 @@ if (!motion.includes('injectCompactCrop')) fail('feature crop controller is miss
 if (!fs.existsSync(realPreviewCssPath)) fail('real preview stylesheet is missing');
 else {
   const realPreviewCss = fs.readFileSync(realPreviewCssPath, 'utf8');
+  // Only flag actual width declarations, not responsive `max-width: 760px` breakpoints.
   if (/^\s*width:\s*(?:390|760)px\s*;/m.test(realPreviewCss)) fail('feature previews must not use fixed iframe widths');
   if (!realPreviewCss.includes('calc(100% / var(--preview-scale))')) fail('feature preview must size from its crop container');
   if (!realPreviewCss.includes('.feature-card:nth-child(6).has-real-preview')) fail('Pro media card crop styling is missing');
