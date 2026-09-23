@@ -1,5 +1,6 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { ownerRows, recordById, recordByIdForOwner, unownedRows } from './d1-record-store.js';
+import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 
 const REFERENCES = Object.freeze([
   ['mother_id', 'mothers'],
@@ -204,6 +205,14 @@ export async function handleRelationalIntegrityGuard(request, env, url = new URL
   const recordsRequest = url.pathname.startsWith(CLINICAL_RECORDS_PREFIX);
   const rpcRequest = url.pathname.startsWith(CLINICAL_RPC_PREFIX);
   if (!recordsRequest && !rpcRequest) return null;
+
+  // Generic CRUD policy must fail closed before relation validation. Otherwise a
+  // forbidden domain-managed POST can leak a 403/409 from relationship checks and
+  // never reach the explicit generic-mutation restriction.
+  if (recordsRequest) {
+    const policyResponse = handleGenericCrudPolicy(request, url);
+    if (policyResponse) return policyResponse;
+  }
 
   const rpcName = rpcRequest ? decodeURIComponent(url.pathname.slice(CLINICAL_RPC_PREFIX.length)) : '';
   if (rpcRequest && !RELATIONAL_RPC_NAMES.has(rpcName)) return null;
