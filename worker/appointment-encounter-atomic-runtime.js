@@ -29,6 +29,17 @@ function uniqueBabyIds(input) {
   return [...new Set((Array.isArray(input?.p_baby_ids) ? input.p_baby_ids : []).map(String).filter(Boolean))];
 }
 
+async function deterministicEncounterId(userId, appointmentId) {
+  const payload = new TextEncoder().encode(`clinical-encounter|${userId}|${appointmentId}`);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', payload));
+  const bytes = digest.slice(0, 16);
+  // Keep the stable appointment-derived identity inside the UUID contract consumed by the UI.
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function appointmentRow(input, appointmentId, userId, now) {
   const babyIds = uniqueBabyIds(input);
   return {
@@ -145,8 +156,9 @@ async function startScheduledEncounter(input, user, env) {
   if (!babyIds.length && appointmentEntry.record?.baby_id) babyIds.push(appointmentEntry.record.baby_id);
 
   const now = new Date().toISOString();
-  // One stable key per appointment makes the storage constraint itself the concurrency guard.
-  const encounterId = `appointment:${appointmentId}:encounter`;
+  // One stable UUID per owner+appointment makes the storage constraint the concurrency guard
+  // without breaking consumers that require persisted clinical identifiers in UUID format.
+  const encounterId = await deterministicEncounterId(user.id, appointmentId);
   const encounter = encounterRow({
     encounterId,
     appointmentId,
