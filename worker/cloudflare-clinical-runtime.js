@@ -8,6 +8,7 @@ import { handleClinicalNoteVersioning } from './clinical-note-versioning-runtime
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleClaimedStorageDelete } from './storage-delete-claim-runtime.js';
 import { handleConsistentStorageMutation } from './storage-consistency-runtime.js';
 import {
   handleCloudflareDataRuntime,
@@ -55,6 +56,9 @@ export async function handleCloudflareClinicalRuntime(request, env) {
       ok: Boolean(env.CLINICAL_DB && env.CLINICAL_FILES && env.CLINICAL_AUTH_SECRET),
     }));
   }
+
+  const claimedDeleteResponse = await handleClaimedStorageDelete(request, env, url);
+  if (claimedDeleteResponse) return claimedDeleteResponse;
 
   const storageResponse = await handleConsistentStorageMutation(request, env, url);
   if (storageResponse) return storageResponse;
