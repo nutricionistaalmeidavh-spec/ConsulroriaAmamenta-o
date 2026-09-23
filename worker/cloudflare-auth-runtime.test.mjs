@@ -106,7 +106,7 @@ async function fixture() {
 }
 
 function loginRequest(email, password) {
-  return new Request('https://deboralactacao.com/auth/v1/token?grant_type=password', {
+  return new Request('https://deboralactacao.com/api/auth/token?grant_type=password', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -171,7 +171,7 @@ test('unknown refresh token fails closed on D1 without legacy refresh fallback',
   };
 
   try {
-    const request = new Request('https://deboralactacao.com/auth/v1/token?grant_type=refresh_token', {
+    const request = new Request('https://deboralactacao.com/api/auth/token?grant_type=refresh_token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refresh_token: 'refresh-inexistente' }),
