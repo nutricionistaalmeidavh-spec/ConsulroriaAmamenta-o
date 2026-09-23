@@ -57,8 +57,13 @@ test('final materialized build completes the critical clinical flow through real
   expect(appointmentId).toBeTruthy();
 
   const complaint = uniqueLabel('Final complaint');
+  const clinicalNote = uniqueLabel('Final clinical note');
   await page.locator('[data-wizard-step="2"] [data-encounter-field="notes"]').fill(complaint);
   await page.locator('[data-wizard-next]').click();
+  await expect(page.locator('#cn-overlay')).toBeVisible();
+  await page.locator('#cn-note').fill(clinicalNote);
+  await page.locator('#cn-overlay [data-cn-continue]').click();
+  await expect(page.locator('#cn-overlay')).toHaveCount(0);
   await expect(page.locator('[data-wizard-step="3"]')).toBeVisible();
 
   await page.locator('[data-clinical-media-input]').setInputFiles({
@@ -91,6 +96,7 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.baby_id).toBe(patient.babies[0].id);
   expect(encounter?.appointment_id).toBe(appointmentId);
   expect(encounter?.chief_complaint?.notes).toBe(complaint);
+  expect(encounter?.clinical_note_body).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
   expect(encounter?.care_plan?.instructions).toBe(instructions);
 
@@ -116,6 +122,7 @@ test('final materialized build completes the critical clinical flow through real
   await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]`).click();
   await expect(page.locator('#cn-overlay')).toBeVisible();
   await expect(page.locator('#cn-overlay')).toContainText(motherName);
+  await expect(page.locator('#cn-note')).toHaveValue(clinicalNote);
   await page.locator('#cn-overlay [data-cn-close]').click();
   await expect(page.locator('#cn-overlay')).toHaveCount(0);
 
