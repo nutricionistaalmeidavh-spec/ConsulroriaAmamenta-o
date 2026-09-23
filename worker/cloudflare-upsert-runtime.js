@@ -135,12 +135,11 @@ export function mergeUpsertRecord(existingRecord, incoming, existingKey, now) {
 }
 
 export async function handleCloudflareUpsertRuntime(request, env, url = new URL(request.url), deps = {}) {
-  if (request.method !== 'POST' || !url.pathname.startsWith('/rest/v1/')) return null;
+  if (request.method !== 'POST' || !url.pathname.startsWith('/api/clinical/records/')) return null;
   if (!url.searchParams.get('on_conflict')) return null;
-  if (url.pathname.includes('/rpc/')) return null;
   if (!env.CLINICAL_DB) return json(503, { error: 'cloudflare_d1_required' });
 
-  const table = decodeURIComponent(url.pathname.slice('/rest/v1/'.length).split('/')[0] || '');
+  const table = decodeURIComponent(url.pathname.slice('/api/clinical/records/'.length).split('/')[0] || '');
   if (!/^[A-Za-z0-9_]+$/.test(table)) return json(400, { error: 'invalid_table' });
 
   const authenticate = deps.authenticate || authenticateClinicalRequest;
