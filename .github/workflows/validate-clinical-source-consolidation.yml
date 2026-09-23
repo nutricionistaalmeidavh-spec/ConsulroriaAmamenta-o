@@ -11,17 +11,24 @@ on:
       - 'index.html'
       - 'app/**'
       - 'vite.config.js'
+      - 'playwright.config.mjs'
       - 'package.json'
       - 'src/bootstrap.js'
       - 'src/app-identity.js'
+      - 'public/sw.js'
       - 'public/manifest.webmanifest'
       - 'public/canonical-identity-runtime.js'
       - 'public/clinical-source/**'
       - 'public/debora/**'
       - 'public/comercial/**'
+      - 'worker/cloudflare-clinical-runtime.js'
+      - 'worker/deploy-version.js'
+      - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/materialize-clinical-source.mjs'
       - 'scripts/test-canonical-app-routing.mjs'
       - 'tests/clinical-source-*.test.mjs'
+      - 'tests/deploy-hardening-p01.test.mjs'
+      - 'tests/e2e/**'
       - '.github/workflows/validate-clinical-source-consolidation.yml'
 
 jobs:
@@ -49,11 +56,17 @@ jobs:
           node scripts/test-billing-scaffold.mjs
       - name: Validate current Cloudflare Asaas contract
         run: node scripts/test-cloudflare-asaas.mjs
+      - name: Validate P0.1 deployment hardening contract
+        run: npm run test:deploy-safety
       - name: Syntax-check Cloudflare worker
         run: |
           node --check worker/index.js
           node --check worker/cloudflare-clinical-runtime.js
       - run: npm run build
+      - name: Install Chromium for cache-upgrade E2E
+        run: npx playwright install --with-deps chromium
+      - name: Verify version N to N+1 cache upgrade
+        run: npx playwright test tests/e2e/deploy-version-upgrade.spec.mjs
       - name: Validate canonical multi-client routing on materialized runtime
         run: node scripts/test-canonical-app-routing.mjs
       - name: Verify canonical runtime is published
