@@ -9,6 +9,7 @@ import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
+import { handleClinicalPagedRead } from './clinical-read-page-runtime.js';
 import { handleClaimedStorageDelete } from './storage-delete-claim-runtime.js';
 import { handleConsistentStorageMutation } from './storage-consistency-runtime.js';
 import {
@@ -85,6 +86,12 @@ export async function handleCloudflareClinicalRuntime(request, env) {
     const user = await authenticateClinicalRequest(request, env);
     if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required' });
   }
+
+  // Current owner-backed records are filtered, ordered and paginated by D1. Imported
+  // legacy rows without a physical owner_id deliberately fall through to the existing
+  // relationship-aware adapter so performance hardening never changes ownership rules.
+  const pagedReadResponse = await handleClinicalPagedRead(request, env, url);
+  if (pagedReadResponse) return pagedReadResponse;
 
   const versioningResponse = await handleClinicalNoteVersioning(request, env, url);
   if (versioningResponse) return versioningResponse;
