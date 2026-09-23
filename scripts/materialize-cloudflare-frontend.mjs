@@ -86,6 +86,16 @@ function retireDestructiveClinicalDelete(source) {
     .replace(/<button type="button" class="danger" data-cn-delete>Excluir atendimento<\/button>/g, '');
 }
 
+function stabilizePatientDetailNavigation(source) {
+  const start = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;`;
+  const stableStart = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;\n  if (navigateRoute) {\n    const route = routeFor('patient', patient.mother.id);\n    if (location.hash !== route) history.pushState({}, '', route);\n  }`;
+  const finish = `  if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');`;
+  const stableFinish = `  showScreen('patient');`;
+  let next = String(source);
+  if (!next.includes(stableStart)) next = next.replace(start, stableStart);
+  return next.replace(finish, stableFinish);
+}
+
 export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   let next = String(source);
 
@@ -116,6 +126,10 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
 
   if (relativePath === 'public/clinical-source/features/clinical-note-feature.js') {
     next = retireDestructiveClinicalDelete(next);
+  }
+
+  if (relativePath === 'public/clinical-source/core/app-shell.js') {
+    next = stabilizePatientDetailNavigation(next);
   }
 
   return next;
