@@ -105,6 +105,13 @@ test('clinical native runtimes no longer depend on compatibility translation', (
   assert.equal(existsSync(resolve(ROOT, 'worker/cloudflare-data-runtime.js')), true, 'native clinical data runtime must exist');
 });
 
+test('clinical join rows remain owner-scoped and queryable after native RPC writes', () => {
+  const data = read('worker/cloudflare-data-runtime.js');
+  const ownerSet = data.match(/const OWNER_TABLES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
+  assert.match(ownerSet, /['"]appointment_babies['"]/, 'appointment_babies must be read through owner scope');
+  assert.match(ownerSet, /['"]clinical_encounter_babies['"]/, 'clinical_encounter_babies must be read through owner scope');
+});
+
 test('materialized browser output is zero-Supabase and uses owned APIs only', () => {
   const publicRoot = resolve(ROOT, 'public');
   const offenders = [];
