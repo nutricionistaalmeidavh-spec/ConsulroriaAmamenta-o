@@ -37,11 +37,14 @@ test('successful aggregate edit persists mother and baby across reload', async (
   const saved = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'PATCH');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   expect((await saved).status()).toBe(200);
+  await expect(page.locator('[data-patient-title]')).toHaveText(`${changedMother} + ${changedBaby}`);
+  const detailUrl = page.url();
 
   await page.reload();
   await expect(page.locator('[data-patient-title]')).toHaveText(`${changedMother} + ${changedBaby}`);
   expect((await record(page, 'mothers', patient.mother.id)).name).toBe(changedMother);
   expect((await record(page, 'babies', patient.babies[0].id)).name).toBe(changedBaby);
+  expect(page.url()).toBe(detailUrl);
 });
 
 test('late consent failure rolls back mother and baby edits as one aggregate', async ({ page, request }) => {
@@ -49,6 +52,7 @@ test('late consent failure rolls back mother and baby edits as one aggregate', a
   const motherName = uniqueLabel('Rollback mother');
   const babyName = uniqueLabel('Rollback baby');
   const patient = await createPatient(page, motherName, babyName);
+  const detailUrl = page.url();
 
   const enable = await request.post('http://127.0.0.1:4174/control/fail-patient-consent', { data: { enabled: true } });
   expect(enable.ok()).toBeTruthy();
@@ -67,6 +71,6 @@ test('late consent failure rolls back mother and baby edits as one aggregate', a
 
   expect((await record(page, 'mothers', patient.mother.id)).name).toBe(motherName);
   expect((await record(page, 'babies', patient.babies[0].id)).name).toBe(babyName);
-  await page.reload();
+  await page.goto(detailUrl);
   await expect(page.locator('[data-patient-title]')).toHaveText(`${motherName} + ${babyName}`);
 });
