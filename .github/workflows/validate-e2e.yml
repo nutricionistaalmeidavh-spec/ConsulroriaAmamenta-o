@@ -1,0 +1,64 @@
+name: Validate E2E
+
+on:
+  push:
+    branches:
+      - main
+      - test/p0-e2e-hardening
+    paths:
+      - 'app/**'
+      - 'public/**'
+      - 'worker/**'
+      - 'cloudflare/**'
+      - 'src/**'
+      - 'tests/e2e/**'
+      - 'tests/helpers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.mjs'
+      - '.github/workflows/validate-e2e.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'public/**'
+      - 'worker/**'
+      - 'cloudflare/**'
+      - 'src/**'
+      - 'tests/e2e/**'
+      - 'tests/helpers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.mjs'
+      - '.github/workflows/validate-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Chromium browser gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser E2E suite
+        run: npm run test:e2e
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.run_id }}
+          path: |
+            artifacts/e2e-results
+            artifacts/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
