@@ -1,7 +1,14 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const TABLES = ['mothers','babies','appointments','clinical_encounters','weights','followups','financial_entries','consents','library_items','media'];
 const ITERATIONS = 180000;
+const BACKUP_FORMAT = 'debora-lactacao-clinical-account-backup';
+const BACKUP_VERSION = 2;
+const BACKUP_TABLES = [
+  'mothers','babies','appointments','appointment_babies','clinical_encounters','clinical_encounter_babies',
+  'weights','growth_measurements','followups','financial_entries','consents','library_items','media','clinical_media',
+  'clinical_document_templates','clinical_documents','clinical_encounter_addenda','clinical_note_revisions',
+  'care_packages','care_package_items','care_package_sessions','care_package_item_usages','professional_profiles',
+];
 
 function toBase64(bytes) {
   if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
@@ -38,6 +45,8 @@ export async function encryptBackup(payload, passphrase, { cryptoImpl = globalTh
   return {
     format: 'debora-lactacao-backup',
     version: 1,
+    payloadFormat: BACKUP_FORMAT,
+    payloadVersion: BACKUP_VERSION,
     kdf: 'PBKDF2-SHA256',
     iterations: ITERATIONS,
     cipher: 'AES-256-GCM',
@@ -62,30 +71,28 @@ export async function decryptBackup(envelope, passphrase, { cryptoImpl = globalT
   }
 }
 
-export function createBackupService(client, { now = () => new Date().toISOString() } = {}) {
-  if (!client) throw new Error('Cliente de dados é obrigatório.');
+function assertCurrentBackup(backup) {
+  if (backup?.format === BACKUP_FORMAT && backup?.version === BACKUP_VERSION) return backup;
+  if (backup?.version === 1 && backup?.data) {
+    throw new Error('Este backup legado é incompleto e não pode ser restaurado automaticamente. Gere um novo backup completo nesta versão do sistema.');
+  }
+  throw new Error('Backup incompatível.');
+}
+
+export function createBackupService(client) {
+  if (!client?.workerRequest) throw new Error('Cliente de dados é obrigatório.');
 
   async function exportAll() {
-    const data = {};
-    for (const table of TABLES) data[table] = await client.rest(table, { query: 'select=*' });
-    return { version: 1, exportedAt: now(), data };
+    const backup = await client.workerRequest('/api/clinical/backup/export');
+    return assertCurrentBackup(backup);
   }
 
   async function restoreAll(backup) {
-    if (!backup?.data || backup?.version !== 1) throw new Error('Backup incompatível.');
-    for (const table of TABLES) {
-      const rows = Array.isArray(backup.data[table]) ? backup.data[table] : [];
-      if (!rows.length) continue;
-      await client.rest(table, {
-        method: 'POST',
-        query: 'on_conflict=id',
-        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: rows
-      });
-    }
+    assertCurrentBackup(backup);
+    return client.workerRequest('/api/clinical/backup/restore', { method: 'POST', body: backup });
   }
 
   return { exportAll, restoreAll, encryptBackup, decryptBackup };
 }
 
-export { TABLES as backupTables };
+export { BACKUP_TABLES as backupTables, BACKUP_FORMAT as backupFormat, BACKUP_VERSION as backupVersion };
