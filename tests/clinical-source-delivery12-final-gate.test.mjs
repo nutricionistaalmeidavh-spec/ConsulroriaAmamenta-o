@@ -63,3 +63,13 @@ test('Stage 12 note handoff cancels a pending wizard autosave before flushing th
     'opening the SQL note must cancel the delayed wizard autosave before its explicit flush',
   );
 });
+
+test('Stage 12 note save synchronizes optimistic encounter version before replaying the wizard action', () => {
+  const appData = read('patch-source/cloudflare-license-authority/core/lib/app-data.js');
+  const materializedShell = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
+  const noteHardener = read('scripts/harden-delivery3-versioning.mjs');
+  assert.match(appData, /function syncEncounterVersion\(id, version\)/, 'app data must accept a version produced by the SQL note editor');
+  assert.match(appData, /syncEncounterVersion,/, 'version synchronizer must be part of the app-data public contract');
+  assert.match(materializedShell, /syncVersion:\(id,version\)=>appData\?\.syncEncounterVersion\?\.\(id,version\)/, 'wizard bridge must expose encounter version synchronization');
+  assert.match(noteHardener, /syncVersion\?\.\(enc\.id,rows\[0\]\.record_version\)/, 'note persistence must publish its new record version before replaying the wizard button');
+});
