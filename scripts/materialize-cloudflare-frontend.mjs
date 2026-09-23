@@ -86,6 +86,14 @@ function retireDestructiveClinicalDelete(source) {
     .replace(/<button type="button" class="danger" data-cn-delete>Excluir atendimento<\/button>/g, '');
 }
 
+function stabilizePatientDetailNavigation(source) {
+  const start = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;`;
+  const stableStart = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;\n  if (navigateRoute) {\n    const route = routeFor('patient', patient.mother.id);\n    if (location.hash !== route) history.pushState({}, '', route);\n  }`;
+  const finish = `  if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');`;
+  const stableFinish = `  showScreen('patient');`;
+  return String(source).replace(start, stableStart).replace(finish, stableFinish);
+}
+
 export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   let next = String(source);
 
@@ -116,6 +124,10 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
 
   if (relativePath === 'public/clinical-source/features/clinical-note-feature.js') {
     next = retireDestructiveClinicalDelete(next);
+  }
+
+  if (relativePath === 'public/clinical-source/core/app-shell.js') {
+    next = stabilizePatientDetailNavigation(next);
   }
 
   return next;
@@ -185,7 +197,7 @@ function ensureClinicalMaterializerHook() {
   if (!source.includes('frontend-cloudflare-cutover')) {
     const marker = "replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');\n\n";
     if (!source.includes(marker)) throw new Error('clinical materializer normalization marker missing');
-    const hook = `for (const [outputPath, bytes] of resolved) {\n  const runtimePath = \`public/clinical-source/\${outputPath}\`;\n  const text = Buffer.from(bytes).toString('utf8');\n  const normalized = normalizeCloudflareFrontendSource(text, runtimePath);\n  if (normalized !== text) {\n    resolved.set(outputPath, new Uint8Array(Buffer.from(normalized, 'utf8')));\n    sourceByPath.set(outputPath, \`\${sourceByPath.get(outputPath)}+frontend-cloudflare-cutover\`);\n  }\n}\n\n`;
+    const hook = `for (const [outputPath, bytes] of resolved) {\n  const runtimePath = \`public/clinical-source/\${outputPath}\`;\n  const text = Buffer.from(bytes).toString('utf8');\n  const normalized = normalizeCloudflareFrontendSource(text, runtimePath);\n  if (normalized !== text) {\n    resolved.set(outputPath, new Uint8Array(Buffer.from(normalized, 'utf8'));\n    sourceByPath.set(outputPath, \`\${sourceByPath.get(outputPath)}+frontend-cloudflare-cutover\`);\n  }\n}\n\n`;
     source = source.replace(marker, `${marker}${hook}`);
     changed = true;
   }
