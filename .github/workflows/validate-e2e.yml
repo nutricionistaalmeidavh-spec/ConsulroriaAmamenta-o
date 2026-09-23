@@ -16,6 +16,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'playwright.config.mjs'
+      - 'playwright.smoke.config.mjs'
       - '.github/workflows/validate-e2e.yml'
   pull_request:
     paths:
@@ -29,6 +30,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'playwright.config.mjs'
+      - 'playwright.smoke.config.mjs'
       - '.github/workflows/validate-e2e.yml'
   workflow_dispatch:
 
@@ -53,6 +55,8 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
+      - name: Run stability contracts
+        run: npm run test:stability
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser E2E suite
