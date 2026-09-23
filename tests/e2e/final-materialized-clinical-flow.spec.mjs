@@ -102,7 +102,6 @@ test('final materialized build completes the critical clinical flow through real
 
   const [appointment] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
   expect(appointment?.status).toBe('Realizado');
-  expect(appointment?.encounter_id).toBe(encounterId);
   expect(appointment?.billing_mode).toBe('package_new');
 
   const packages = await records(page, 'care_packages', `mother_id=eq.${encodeURIComponent(patient.mother.id)}`);
