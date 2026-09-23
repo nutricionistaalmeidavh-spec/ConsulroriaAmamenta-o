@@ -24,50 +24,57 @@ function currentBabyId(){return document.querySelector('[data-baby-selector] .ba
 function toast(message,tone='info'){if(window.DeboraUI?.toast)return window.DeboraUI.toast(message,{tone:tone==='error'?'danger':tone});console[tone==='error'?'error':'info'](message)}
 function escapeHTML(v=''){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
+function documentsRuntimeClient(){const client=window.DeboraRuntimeClient;if(!client?.rest||!client?.workerRequest||!client?.storageRequest)throw new Error('Cliente de sessão indisponível.');return client}
 async function rest(path,{method='GET',body=null,headers={}}={}){
-  if(!API_BASE_URL||!CLIENT_RUNTIME_KEY)throw new Error('Configuração do banco indisponível.');
-  const token=accessToken(); if(!token)throw new Error('Sessão não encontrada.');
-  const response=await fetch(`${API_BASE_URL}/rest/v1/${path}`,{method,headers:{apikey:CLIENT_RUNTIME_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json',...headers},body:body==null?undefined:JSON.stringify(body)});
-  if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.message||j.error_description||j.error||msg}catch{}throw new Error(msg)}
-  if(response.status===204)return null;
-  const text=await response.text(); return text?JSON.parse(text):null;
+  const [table,...queryParts]=String(path).split('?');
+  return documentsRuntimeClient().rest(table,{method,query:queryParts.join('?'),body:body==null?undefined:body,headers});
 }
 async function storageRequest(path,{method='GET',body=null,contentType='application/json',headers={}}={}){
-  if(!API_BASE_URL||!CLIENT_RUNTIME_KEY)throw new Error('Configuração do banco indisponível.');
-  const token=accessToken(); if(!token)throw new Error('Sessão não encontrada.');
-  const response=await fetch(`${API_BASE_URL}/storage/v1/${path}`,{method,headers:{apikey:CLIENT_RUNTIME_KEY,Authorization:`Bearer ${token}`,...(contentType?{'Content-Type':contentType}:{}),...headers},body});
-  if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.message||j.error||msg}catch{}throw new Error(msg)}
-  if(response.status===204)return null;
-  const text=await response.text();return text?JSON.parse(text):null;
+  return documentsRuntimeClient().storageRequest(path,{method,body:body==null?undefined:body,headers:{...(contentType?{'Content-Type':contentType}:{}),...headers}});
+}
+function resolveSignedFileUrl(signed){
+  const raw=String(signed||'').trim();if(!raw)return'';
+  if(/^https?:\/\//i.test(raw))return raw;
+  return `${API_BASE_URL}${raw.startsWith('/')?raw:`/${raw}`}`;
 }
 async function signedClinicalMediaUrl(storagePath,expiresIn=900){
-  const row=await storageRequest(`object/sign/clinical-media/${storagePath}`,{method:'POST',body:JSON.stringify({expiresIn})});
+  const row=await storageRequest(`object/sign/clinical-media/${storagePath}`,{method:'POST',body:{expiresIn}});
   const signed=row?.signedURL||row?.signedUrl||row?.signed_url;
-  return signed?`${API_BASE_URL}/storage/v1${signed.startsWith('/')?signed:`/${signed}`}`:'';
+  return resolveSignedFileUrl(signed);
 }
 function clinicalMediaUploadUrl(storagePath){return `/api/clinical/media/upload?path=${encodeURIComponent(storagePath).replace(/%2F/g,'/')}`}
-async function uploadClinicalMedia(storagePath,file,onProgress=null,contentType=file?.type||'application/octet-stream'){
+async function uploadClinicalMedia(storagePath,file,onProgress=null,contentType=file?.type||'application/octet-stream',operationKey=''){
   const safeContentType=String(contentType||file?.type||'application/octet-stream').toLowerCase();
-  const token=accessToken();if(!token)throw new Error('Sessão não encontrada.');
+  const headers={'Content-Type':safeContentType,...(operationKey?{'x-clinical-media-operation':operationKey}:{})};
+  const client=documentsRuntimeClient();
   if(typeof onProgress!=='function'){
-    const response=await fetch(clinicalMediaUploadUrl(storagePath),{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':safeContentType},body:file});
-    if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.error==='SAAS_MEDIA_UPLOAD_NOT_ALLOWED'?'Upload de fotos e vídeos está disponível no plano Pro.':j.message||j.error||msg}catch{}throw new Error(msg)}
-    const text=await response.text();return text?JSON.parse(text):null;
+    return client.workerRequest(clinicalMediaUploadUrl(storagePath),{method:'POST',headers,body:file,raw:true});
   }
-  return await new Promise((resolve,reject)=>{
+  const send=async(attempt=0)=>new Promise((resolve,reject)=>{
+    const token=client.getSession()?.access_token;if(!token){reject(new Error('Sessão não encontrada.'));return}
     const xhr=new XMLHttpRequest();
     xhr.open('POST',clinicalMediaUploadUrl(storagePath));
     xhr.setRequestHeader('Authorization',`Bearer ${token}`);
     xhr.setRequestHeader('Content-Type',safeContentType);
+    if(operationKey)xhr.setRequestHeader('x-clinical-media-operation',operationKey);
     xhr.upload.onprogress=event=>{if(event.lengthComputable)onProgress(Math.max(0,Math.min(100,Math.round(event.loaded/event.total*100))))};
     xhr.onerror=()=>reject(new Error('Falha de rede durante o upload.'));
     xhr.onabort=()=>reject(new Error('Upload cancelado.'));
-    xhr.onload=()=>{
+    xhr.onload=async()=>{
       if(xhr.status>=200&&xhr.status<300){onProgress(100);try{resolve(xhr.responseText?JSON.parse(xhr.responseText):null)}catch{resolve(null)};return}
+      if(xhr.status===401&&attempt===0){try{await client.refreshSession();resolve(await send(1));return}catch(error){reject(error);return}}
       let msg=`Erro ${xhr.status}`;try{const j=JSON.parse(xhr.responseText||'{}');msg=j.error==='SAAS_MEDIA_UPLOAD_NOT_ALLOWED'?'Upload de fotos e vídeos está disponível no plano Pro.':j.message||j.error||msg}catch{}reject(new Error(msg));
     };
     onProgress(0);xhr.send(file);
   });
+  return send();
+}
+async function confirmClinicalMedia(operationKey,storagePath,metadata={}){
+  if(!operationKey||!storagePath)throw new Error('Operação de mídia inválida.');
+  return documentsRuntimeClient().workerRequest('/api/clinical/media/confirm',{method:'POST',body:{operation_key:operationKey,storage_path:storagePath,...metadata}});
+}
+async function reconcileClinicalMediaUploads(maxAgeSeconds=3600){
+  return documentsRuntimeClient().workerRequest('/api/clinical/media/reconcile',{method:'POST',body:{max_age_seconds:maxAgeSeconds}});
 }
 async function deleteClinicalMedia(storagePath){
   return storageRequest(`object/clinical-media/${storagePath}`,{method:'DELETE',contentType:''});
@@ -122,5 +129,5 @@ new MutationObserver(scheduleContext).observe(document.documentElement,{subtree:
 setTimeout(emitContext,200);
 
 window.DeboraDocuments={
-  version:'0.7.0',rest,storageRequest,accessToken,userId,currentMotherId,currentBabyId,patientContext,consents,listDocuments,saveDocument,updateDocument,latestEncounter,signedClinicalMediaUrl,uploadClinicalMedia,deleteClinicalMedia,toast,escapeHTML
+  version:'0.8.0',rest,storageRequest,accessToken,userId,currentMotherId,currentBabyId,patientContext,consents,listDocuments,saveDocument,updateDocument,latestEncounter,signedClinicalMediaUrl,resolveSignedFileUrl,uploadClinicalMedia,confirmClinicalMedia,reconcileClinicalMediaUploads,deleteClinicalMedia,toast,escapeHTML
 };
