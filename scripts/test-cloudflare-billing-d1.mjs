@@ -29,11 +29,12 @@ assert.match(runtime, /external_subscription_id/);
 assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 
-// The domain entry must intercept billing before the local API terminal. Block 7
-// removes the legacy worker fallback entirely.
+// The domain entry must intercept billing before the local API terminal. Block 8
+// retains the public API identity while same-process compatibility paths are used internally.
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
-const apiTerminal = domainEntry.indexOf("if (url.pathname.startsWith('/api/')) return apiNotFound();");
+const apiTerminal = domainEntry.indexOf("if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();");
 assert.ok(billingGate >= 0 && apiTerminal >= 0 && billingGate < apiTerminal, 'D1 billing gate must run before the local API 404 terminal');
+assert.match(domainEntry, /normalizeOwnedApiRequest/);
 assert.doesNotMatch(domainEntry, /coreWorker\.fetch|import\s+coreWorker\s+from\s+['"]\.\/index\.js['"]/);
 assert.doesNotMatch(domainEntry, /\/api\/asaas\/confirm-email/);
 
