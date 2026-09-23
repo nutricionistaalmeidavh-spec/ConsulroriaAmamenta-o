@@ -43,3 +43,12 @@ test('Stage 12 critical browser flow is UI-driven for package, start and finaliz
   assert.doesNotMatch(source, /page\.request\.post\(['\"]\/api\/clinical\/rpc\/(?:start_clinical_encounter|set_appointment_billing|finalize_encounter_billing)/,
     'critical package/start/finalize actions must be driven by UI clicks, not API shortcuts');
 });
+
+test('billing v2 schedules an initial mount so an early appointment navigation cannot miss initialization', () => {
+  const billing = read('public/billing-v2.js');
+  assert.match(
+    billing,
+    /window\.DeboraBilling=\{[\s\S]*?\};\s*bvSchedule\(\);\s*$/,
+    'billing v2 must schedule once immediately after exposing its runtime API',
+  );
+});
