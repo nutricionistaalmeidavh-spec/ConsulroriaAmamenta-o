@@ -186,7 +186,7 @@ async function boot() {
   }
   shell = shell.replace(
     "navigator.serviceWorker.register('./service-worker.js')",
-    "navigator.serviceWorker.register('/sw.js')",
+    "navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => registration.update())",
   );
 
   const shellUrl = moduleUrl(shell);
