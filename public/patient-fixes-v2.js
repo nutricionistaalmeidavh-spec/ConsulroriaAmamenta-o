@@ -1,5 +1,5 @@
-const PF_SB='https://zxowxdfhtksevhnjmeyu.supabase.co';
-const PF_KEY='sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const PF_SB=(globalThis.location?.origin || '');
+const PF_KEY='cloudflare-runtime';
 const PF_BUCKET='clinical-media';
 const PF_DRAFT='debora-billing-draft-v4';
 const PF_TEST_MEDIA_CLEANUP='6dc02e4b-d2e7-41f9-8438-79c9d9e3ee40/22d69ac2-c59c-438e-8e31-1f2a5fd86d7d/0a014268-dd83-4f78-873f-b4120fdf6762/1787437631944-pvmi8cg2.jpg';

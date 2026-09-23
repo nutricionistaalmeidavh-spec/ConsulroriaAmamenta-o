@@ -1,5 +1,5 @@
-const SB_URL='https://zxowxdfhtksevhnjmeyu.supabase.co';
-const SB_KEY='sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const SB_URL=(globalThis.location?.origin || '');
+const SB_KEY='cloudflare-runtime';
 const PORTAL_HASH='#mae';
 const MKEY='debora-mother-portal-session-v1';
 const TIER_LABEL={free:'Gratuito',essential:'Essencial',premium:'Premium'};

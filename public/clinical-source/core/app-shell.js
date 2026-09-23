@@ -55,9 +55,10 @@ const CLINIC_OFFSET = '-03:00';
 let agendaSelectedDay = null;
 
 export function configured() {
-  return /^https:\/\/.+\.supabase\.co$/.test(config.SUPABASE_URL || '') &&
-    /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
-    !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
+  if (config.BACKEND_MODE === 'cloudflare') return Boolean(config.API_BASE_URL && config.CLIENT_RUNTIME_KEY);
+  return /^https:\/\/.+\.supabase\.co$/.test(config.API_BASE_URL || '') &&
+    /^(sb_publishable_|eyJ)/.test(config.CLIENT_RUNTIME_KEY || '') &&
+    !String(config.API_BASE_URL).includes('YOUR_PROJECT');
 }
 
 function escapeHTML(value = '') {
@@ -414,12 +415,18 @@ patientForm?.addEventListener('submit', async (event) => {
   const status = document.querySelector('[data-patient-form-status]');
   try {
     const payload = patientFormPayload();
+    const consents = patientConsentPayload();
     let saved;
     if (editingPatientId) {
       const current = patientByMotherId(editingPatientId) || await appData.getPatient(editingPatientId);
       saved = await appData.updatePatient({ mother: { ...payload.mother, id: current.mother.id }, babies: payload.babies });
-    } else saved = await appData.createPatient(payload);
-    await appData.saveConsents(saved.mother.id, patientConsentPayload());
+      await appData.saveConsents(saved.mother.id, consents);
+    } else {
+      saved = await repositories.client.workerRequest('/api/clinical/patients', {
+        method: 'POST',
+        body: { ...payload, consents }
+      });
+    }
     editingPatientId = null;
     await refreshData();
     await openPatient(saved.mother.id);

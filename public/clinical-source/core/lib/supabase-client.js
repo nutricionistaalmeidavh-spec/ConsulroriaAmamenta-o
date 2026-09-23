@@ -1,14 +1,14 @@
 const SESSION_KEY = 'debora-lactacao-session';
 
 function assertConfig(config) {
-  if (!config?.SUPABASE_URL || !config?.SUPABASE_PUBLISHABLE_KEY) {
+  if (!config?.API_BASE_URL || !config?.CLIENT_RUNTIME_KEY) {
     throw new Error('Configuração do backend incompleta.');
   }
 }
 
 function jsonHeaders(config, session, extra = {}) {
   const headers = {
-    apikey: config.SUPABASE_PUBLISHABLE_KEY,
+    apikey: config.CLIENT_RUNTIME_KEY,
     'Content-Type': 'application/json',
     ...extra
   };
@@ -45,7 +45,7 @@ export function createSupabaseClient(config, {
   assertConfig(config);
   if (typeof fetchImpl !== 'function') throw new Error('Fetch indisponível.');
   const storage = sessionStorage || createMemorySessionStorage();
-  const base = String(config.SUPABASE_URL).replace(/\/$/, '');
+  const base = String(config.API_BASE_URL).replace(/\/$/, '');
   let refreshInFlight = null;
 
   function getSession() {
@@ -202,7 +202,7 @@ export function createSupabaseClient(config, {
     const res = await authenticatedFetch((session) => fetchImpl(`${base}/storage/v1/${normalized}`, {
       method,
       headers: {
-        apikey: config.SUPABASE_PUBLISHABLE_KEY,
+        apikey: config.CLIENT_RUNTIME_KEY,
         Authorization: `Bearer ${session.access_token}`,
         ...headers
       },

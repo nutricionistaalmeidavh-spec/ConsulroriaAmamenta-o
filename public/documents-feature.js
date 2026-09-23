@@ -1,6 +1,6 @@
 const CONFIG=globalThis.DEBORA_APP_CONFIG||{};
-const SUPABASE_URL=String(CONFIG.SUPABASE_URL||'').replace(/\/$/,'');
-const SUPABASE_KEY=String(CONFIG.SUPABASE_PUBLISHABLE_KEY||'');
+const API_BASE_URL=String(CONFIG.API_BASE_URL||(globalThis.location?.origin || '')).replace(/\/$/,'');
+const CLIENT_RUNTIME_KEY=String(CONFIG.CLIENT_RUNTIME_KEY||'cloudflare-runtime');
 
 function tokenWalk(v){
   if(!v)return null;
@@ -25,17 +25,17 @@ function toast(message,tone='info'){if(window.DeboraUI?.toast)return window.Debo
 function escapeHTML(v=''){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 async function rest(path,{method='GET',body=null,headers={}}={}){
-  if(!SUPABASE_URL||!SUPABASE_KEY)throw new Error('Configuração do banco indisponível.');
+  if(!API_BASE_URL||!CLIENT_RUNTIME_KEY)throw new Error('Configuração do banco indisponível.');
   const token=accessToken(); if(!token)throw new Error('Sessão não encontrada.');
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json',...headers},body:body==null?undefined:JSON.stringify(body)});
+  const response=await fetch(`${API_BASE_URL}/rest/v1/${path}`,{method,headers:{apikey:CLIENT_RUNTIME_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json',...headers},body:body==null?undefined:JSON.stringify(body)});
   if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.message||j.error_description||j.error||msg}catch{}throw new Error(msg)}
   if(response.status===204)return null;
   const text=await response.text(); return text?JSON.parse(text):null;
 }
 async function storageRequest(path,{method='GET',body=null,contentType='application/json',headers={}}={}){
-  if(!SUPABASE_URL||!SUPABASE_KEY)throw new Error('Configuração do banco indisponível.');
+  if(!API_BASE_URL||!CLIENT_RUNTIME_KEY)throw new Error('Configuração do banco indisponível.');
   const token=accessToken(); if(!token)throw new Error('Sessão não encontrada.');
-  const response=await fetch(`${SUPABASE_URL}/storage/v1/${path}`,{method,headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${token}`,...(contentType?{'Content-Type':contentType}:{}),...headers},body});
+  const response=await fetch(`${API_BASE_URL}/storage/v1/${path}`,{method,headers:{apikey:CLIENT_RUNTIME_KEY,Authorization:`Bearer ${token}`,...(contentType?{'Content-Type':contentType}:{}),...headers},body});
   if(!response.ok){let msg=`Erro ${response.status}`;try{const j=await response.json();msg=j.message||j.error||msg}catch{}throw new Error(msg)}
   if(response.status===204)return null;
   const text=await response.text();return text?JSON.parse(text):null;
@@ -43,7 +43,7 @@ async function storageRequest(path,{method='GET',body=null,contentType='applicat
 async function signedClinicalMediaUrl(storagePath,expiresIn=900){
   const row=await storageRequest(`object/sign/clinical-media/${storagePath}`,{method:'POST',body:JSON.stringify({expiresIn})});
   const signed=row?.signedURL||row?.signedUrl||row?.signed_url;
-  return signed?`${SUPABASE_URL}/storage/v1${signed.startsWith('/')?signed:`/${signed}`}`:'';
+  return signed?`${API_BASE_URL}/storage/v1${signed.startsWith('/')?signed:`/${signed}`}`:'';
 }
 function clinicalMediaUploadUrl(storagePath){return `/api/clinical/media/upload?path=${encodeURIComponent(storagePath).replace(/%2F/g,'/')}`}
 async function uploadClinicalMedia(storagePath,file,onProgress=null,contentType=file?.type||'application/octet-stream'){

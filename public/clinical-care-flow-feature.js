@@ -1,5 +1,5 @@
-const CCF_SB_URL='https://zxowxdfhtksevhnjmeyu.supabase.co';
-const CCF_SB_KEY='sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const CCF_SB_URL=(globalThis.location?.origin || '');
+const CCF_SB_KEY='cloudflare-runtime';
 const CCF_MOTHER_SESSION='debora-mother-portal-session-v1';
 
 const clean=value=>String(value??'').trim();

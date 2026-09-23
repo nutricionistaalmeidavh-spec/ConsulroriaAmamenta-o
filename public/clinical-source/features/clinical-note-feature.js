@@ -1,5 +1,5 @@
-const CN_SB_URL='https://zxowxdfhtksevhnjmeyu.supabase.co';
-const CN_SB_KEY='sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
+const CN_SB_URL=(globalThis.location?.origin || '');
+const CN_SB_KEY='cloudflare-runtime';
 const cnState={encounter:null,mother:null,babies:[],addenda:[],revisions:[],saveTimer:null,saving:false,pendingButton:null,direction:'forward',opening:false};
 
 function cnWalk(v){if(!v)return null;if(typeof v==='string'){try{return cnWalk(JSON.parse(v))}catch{return v.split('.').length===3?v:null}}if(Array.isArray(v)){for(const x of v){const t=cnWalk(x);if(t)return t}}if(typeof v==='object'){if(v.access_token)return v.access_token;if(v.session?.access_token)return v.session.access_token;for(const x of Object.values(v)){const t=cnWalk(x);if(t)return t}}return null}
