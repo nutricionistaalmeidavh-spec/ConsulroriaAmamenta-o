@@ -2,10 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
+import { transformDelivery4Billing } from '../scripts/harden-delivery4-package-billing.mjs';
 
 const billingSource = readFileSync('public/billing-v2.js', 'utf8');
-const packageSource = readFileSync('worker/package-lifecycle-runtime.js', 'utf8');
+const hardenedBillingSource = transformDelivery4Billing(billingSource);
+const packageSource = readFileSync('worker/package-integrity-atomic-runtime.js', 'utf8');
 const sessionSource = readFileSync('worker/package-session-atomic-runtime.js', 'utf8');
+const packageJson = readFileSync('package.json', 'utf8');
 
 async function seed(db, table, id, record, ownerId = userId) {
   const now = new Date().toISOString();
@@ -82,7 +85,6 @@ test('R12 package_new replay after a lost response returns the same package inst
   const firstPayload = await first.json();
   assert.ok(firstPayload.package_id);
 
-  // Simulate the client not receiving/accepting the first response and retrying the exact operation.
   const retry = await rpc(runtime, headers, 'set_appointment_billing', body);
   assert.equal(retry.status, 200);
   const retryPayload = await retry.json();
@@ -191,8 +193,9 @@ test('C09 concurrent additional items add their amounts without overwriting each
 });
 
 test('R12 frontend sends a stable package-new operation key tied to the appointment identity', () => {
-  assert.match(billingSource, /p_request_key/);
-  assert.match(billingSource, /package-new:/);
+  assert.match(hardenedBillingSource, /p_request_key/);
+  assert.match(hardenedBillingSource, /package-new:/);
+  assert.match(packageJson, /harden-delivery4-package-billing\.mjs --write/);
 });
 
 test('R14/R15/C09 package runtimes contain conditional claims instead of stale whole-record package debits', () => {
@@ -201,4 +204,5 @@ test('R14/R15/C09 package runtimes contain conditional claims instead of stale w
   assert.match(packageSource, /NOT EXISTS/);
   assert.match(sessionSource, /NOT EXISTS/);
   assert.match(sessionSource, /care_package_sessions/);
+  assert.match(sessionSource, /handleAtomicPackageIntegrityRuntime/);
 });
