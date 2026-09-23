@@ -135,6 +135,20 @@ try {
   & $NpxCmd --yes wrangler@4 d1 execute $D1Database --remote --command "SELECT state_key,state_value FROM runtime_state WHERE state_key='billing_backend';" --yes
   Assert-Exit 'validação billing_backend'
 
+  Write-Host "`n==> Revalidando main imediatamente antes da publicação" -ForegroundColor Cyan
+  Push-Location $RepoRoot
+  try {
+    & $GitCmd fetch origin main --quiet
+    Assert-Exit 'git fetch origin main pre-publish'
+    $PrePublishLocalSha = Invoke-GitText @('rev-parse','HEAD')
+    $PrePublishRemoteMainSha = Invoke-GitText @('rev-parse','origin/main')
+    if ($PrePublishLocalSha -ne $LocalSha -or $PrePublishRemoteMainSha -ne $LocalSha) {
+      throw "Deploy abortado: main mudou durante a execução (início=$LocalSha, HEAD=$PrePublishLocalSha, origin/main=$PrePublishRemoteMainSha)."
+    }
+  } finally {
+    Pop-Location
+  }
+
   Write-Host "`n==> Executando deploy protegido Cloudflare D1/R2" -ForegroundColor Cyan
   & powershell -NoProfile -ExecutionPolicy Bypass -File $Cutover -D1Database $D1Database -R2Bucket $R2Bucket -HealthUrl $HealthUrl
   Assert-Exit 'cutover Cloudflare'
