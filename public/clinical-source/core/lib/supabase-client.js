@@ -89,6 +89,16 @@ export function createSupabaseClient(config, {
     return data;
   }
 
+  async function waitForSessionReplacement(previousRefreshToken, timeoutMs = 2000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const latest = getSession();
+      if (latest?.refresh_token && latest.refresh_token !== previousRefreshToken) return latest;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return null;
+  }
+
   async function performRefresh() {
     const current = getSession();
     if (!current?.refresh_token) throw new Error('Sessão indisponível para atualização.');
@@ -98,12 +108,19 @@ export function createSupabaseClient(config, {
         body: { refresh_token: current.refresh_token }
       });
     } catch (error) {
-      const latest = getSession();
+      let latest = getSession();
       if ([400, 401, 403].includes(error.status)
         && latest?.refresh_token
         && latest.refresh_token !== current.refresh_token) {
         // Another tab won the refresh race. Adopt the already-persisted canonical session.
         return latest;
+      }
+      if (error.status === 401 && /outra aba/i.test(error.message || '')) {
+        // The backend may reject the losing tab a few milliseconds before the winner
+        // has persisted its replacement session in shared localStorage.
+        const replacement = await waitForSessionReplacement(current.refresh_token);
+        if (replacement) return replacement;
+        latest = getSession();
       }
       if ([400, 401, 403].includes(error.status)
         && latest?.refresh_token === current.refresh_token) {
