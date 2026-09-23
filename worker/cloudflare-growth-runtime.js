@@ -42,7 +42,7 @@ function requestIdempotencyKey(request) {
 }
 
 export async function handleCloudflareGrowthRuntime(request, env, url = new URL(request.url), deps = {}) {
-  if (url.pathname !== '/rest/v1/rpc/record_growth_measurement') return null;
+  if (url.pathname !== '/api/clinical/rpc/record_growth_measurement') return null;
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
   if (!env.CLINICAL_DB) return json(503, { error: 'cloudflare_d1_required' });
 
@@ -131,8 +131,6 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
     ));
   }
 
-  // D1 batch is transactional: measurement, optional weight history, baby's current
-  // state and the idempotency claim commit or roll back together.
   try {
     await db.batch(statements);
   } catch (error) {
