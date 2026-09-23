@@ -92,15 +92,36 @@ export function createSupabaseClient(config, {
   async function performRefresh() {
     const current = getSession();
     if (!current?.refresh_token) throw new Error('Sessão indisponível para atualização.');
-    const session = await authRequest('token?grant_type=refresh_token', {
-      body: { refresh_token: current.refresh_token }
-    });
+    let session;
+    try {
+      session = await authRequest('token?grant_type=refresh_token', {
+        body: { refresh_token: current.refresh_token }
+      });
+    } catch (error) {
+      const latest = getSession();
+      if ([400, 401, 403].includes(error.status)
+        && latest?.refresh_token
+        && latest.refresh_token !== current.refresh_token) {
+        // Another tab won the refresh race. Adopt the already-persisted canonical session.
+        return latest;
+      }
+      if ([400, 401, 403].includes(error.status)
+        && latest?.refresh_token === current.refresh_token) {
+        setSession(null);
+      }
+      throw error;
+    }
     if (!session?.access_token || !session?.refresh_token) {
       throw new Error('Sessão atualizada inválida.');
     }
-    if (getSession()?.refresh_token !== current.refresh_token) {
-      // A late refresh must not resurrect a session after logout/account change.
+    const latest = getSession();
+    if (!latest) {
+      // A late refresh must not resurrect a session after logout.
       throw new Error('A sessão mudou durante a atualização. Tente novamente.');
+    }
+    if (latest.refresh_token !== current.refresh_token) {
+      // Another tab refreshed while this request was in flight. Its session is authoritative.
+      return latest;
     }
     return setSession(session);
   }
@@ -108,10 +129,6 @@ export function createSupabaseClient(config, {
   async function refreshSession() {
     if (refreshInFlight) return refreshInFlight;
     refreshInFlight = performRefresh()
-      .catch((error) => {
-        if ([400, 401, 403].includes(error.status)) setSession(null);
-        throw error;
-      })
       .finally(() => {
         refreshInFlight = null;
       });
@@ -128,18 +145,26 @@ export function createSupabaseClient(config, {
 
     let current = getSession();
     try {
-      // Another request may already have refreshed the session while this request was in flight.
+      // Another request/tab may already have refreshed the shared canonical session.
       if (!current?.access_token || current.access_token === attemptedAccessToken) {
         current = await refreshSession();
       }
     } catch (error) {
-      if (!getSession()) throw expiredSessionError();
-      throw error;
+      const latest = getSession();
+      if (!latest?.access_token) throw expiredSessionError();
+      if (latest.access_token === attemptedAccessToken) throw error;
+      current = latest;
     }
 
+    const replayedAccessToken = current?.access_token;
     res = await send(current);
     if (res.status === 401) {
-      setSession(null);
+      const latest = getSession();
+      if (latest?.access_token && latest.access_token !== replayedAccessToken) {
+        res = await send(latest);
+        if (res.status !== 401) return res;
+      }
+      if (getSession()?.access_token === replayedAccessToken) setSession(null);
       throw expiredSessionError();
     }
     return res;
@@ -234,17 +259,20 @@ export function createSupabaseClient(config, {
     return data;
   }
 
-  return {
+  const api = {
     config,
     getSession,
     setSession,
     signInWithPassword,
     signUp,
     refreshSession,
+    authenticatedFetch,
     signOut,
     rest,
     rpc,
     storageRequest,
     workerRequest
   };
+  globalThis.DeboraRuntimeClient = api;
+  return api;
 }
