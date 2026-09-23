@@ -6,6 +6,7 @@ import { handleAtomicAppointmentEncounterStart } from './appointment-encounter-a
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleConsistentStorageMutation } from './storage-consistency-runtime.js';
 import {
   handleCloudflareDataRuntime,
   hasOwnedRecord,
@@ -45,6 +46,17 @@ export async function handleCloudflareClinicalRuntime(request, env) {
     return runtimeJson(404, { error: 'not_found' });
   }
 
+  // Public probes need only availability and the release identifier. Do not expose
+  // user/record counts, migration state or backend configuration details.
+  if (url.pathname === '/api/cloudflare/health' && request.method === 'GET') {
+    return withDeploymentGitSha(runtimeJson(200, {
+      ok: Boolean(env.CLINICAL_DB && env.CLINICAL_FILES && env.CLINICAL_AUTH_SECRET),
+    }));
+  }
+
+  const storageResponse = await handleConsistentStorageMutation(request, env, url);
+  if (storageResponse) return storageResponse;
+
   const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
   if (growthResponse) return growthResponse;
 
@@ -63,11 +75,7 @@ export async function handleCloudflareClinicalRuntime(request, env) {
   const atomicStartResponse = await handleAtomicAppointmentEncounterStart(request, env, url);
   if (atomicStartResponse) return atomicStartResponse;
 
-  const response = await handleCloudflareDataRuntime(request, env, url);
-  if (url.pathname === '/api/cloudflare/health' && request.method === 'GET') {
-    return withDeploymentGitSha(response);
-  }
-  return response;
+  return handleCloudflareDataRuntime(request, env, url);
 }
 
 export {
