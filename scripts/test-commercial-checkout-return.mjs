@@ -2,9 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const app = fs.readFileSync(path.join(root, 'public', 'comercial', 'app.js'), 'utf8');
-const sandboxHtml = fs.readFileSync(path.join(root, 'public', 'comercial', 'sandbox-teste.html'), 'utf8');
-const sandboxJs = fs.readFileSync(path.join(root, 'public', 'comercial', 'sandbox-teste.js'), 'utf8');
+function readArtifact(relativePath) {
+  const built = path.join(root, 'dist', relativePath);
+  const source = path.join(root, 'public', relativePath);
+  return fs.readFileSync(fs.existsSync(built) ? built : source, 'utf8');
+}
+
+const app = readArtifact(path.join('comercial', 'app.js'));
+const sandboxHtml = readArtifact(path.join('comercial', 'sandbox-teste.html'));
+const sandboxJs = readArtifact(path.join('comercial', 'sandbox-teste.js'));
 
 function requireText(source, text, label) {
   if (!source.includes(text)) {
