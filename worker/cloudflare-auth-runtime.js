@@ -203,7 +203,24 @@ async function handlePasswordLogin(request, env) {
   if (!email || !password) return json(400, { message: 'Informe e-mail e senha.' });
 
   const row = await userRowByEmail(env, email);
-  if (!row || !(await verifyLocalPassword(env, row.user_id, password))) {
+  if (!row) return json(400, { message: 'E-mail ou senha inválidos.' });
+  if (Boolean(Number(row.password_reset_required || 0))) {
+    return json(403, {
+      error: 'password_reset_required',
+      message: 'Esta conta precisa definir uma senha no novo acesso. Use “Esqueci minha senha”.',
+    });
+  }
+  if (!(await verifyLocalPassword(env, row.user_id, password))) {
+    const credential = await requireDb(env)
+      .prepare('SELECT * FROM auth_credentials WHERE user_id = ? LIMIT 1')
+      .bind(row.user_id)
+      .first();
+    if (!credential) {
+      return json(403, {
+        error: 'password_reset_required',
+        message: 'Esta conta precisa definir uma senha no novo acesso. Use “Esqueci minha senha”.',
+      });
+    }
     return json(400, { message: 'E-mail ou senha inválidos.' });
   }
 
@@ -246,8 +263,13 @@ async function handleSignup(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { message: 'Informe um e-mail válido e senha com pelo menos 8 caracteres.' });
   }
-  if (await userRowByEmail(env, email)) {
-    return json(400, { message: 'Este e-mail já possui cadastro. Use Entrar.' });
+  const existing = await userRowByEmail(env, email);
+  if (existing) {
+    const needsReset = Boolean(Number(existing.password_reset_required || 0));
+    return json(needsReset ? 403 : 400, needsReset ? {
+      error: 'password_reset_required',
+      message: 'Conta importada. Use “Esqueci minha senha” para definir sua senha no novo acesso.',
+    } : { message: 'Este e-mail já possui cadastro. Use Entrar.' });
   }
 
   const userId = crypto.randomUUID();
@@ -270,11 +292,8 @@ async function handleSignup(request, env) {
       .bind(userId, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS),
   ];
 
-  if (typeof database.batch === 'function') {
-    await database.batch(statements);
-  } else {
-    for (const statement of statements) await statement.run();
-  }
+  if (typeof database.batch === 'function') await database.batch(statements);
+  else for (const statement of statements) await statement.run();
 
   const user = await runtimeUserById(env, userId);
   return json(200, await issueSession(env, user));
@@ -296,11 +315,13 @@ const RECOVERY_ACCEPTED = {
 };
 
 async function handleRecovery(request, env) {
-  // No implicit provider, network fallback or caller-controlled redirect.
   let origin;
   try { origin = new URL(env.AUTH_RECOVERY_ORIGIN); } catch {}
   if (!env.AUTH_RECOVERY_DELIVERY?.fetch || origin?.protocol !== 'https:') {
-    return json(503, { error: 'recovery_delivery_unavailable', message: 'Recuperação por e-mail indisponível no momento. Entre em contato com o suporte.' });
+    return json(503, {
+      error: 'recovery_delivery_unavailable',
+      message: 'Recuperação por e-mail indisponível no momento. Entre em contato com o suporte.',
+    });
   }
   const input = await request.json().catch(() => null);
   const email = String(input?.email || '').trim().toLowerCase();
@@ -317,19 +338,24 @@ async function handleRecovery(request, env) {
       VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
       token_hash=excluded.token_hash,expires_at=excluded.expires_at,created_at=excluded.created_at
       WHERE auth_recovery_tokens.created_at < ?`)
-      .bind(tokenHash, row.user_id, new Date(Date.now() + 30 * 60 * 1000).toISOString(), now,
-        new Date(Date.now() - 60 * 1000).toISOString()).run();
+      .bind(
+        tokenHash,
+        row.user_id,
+        new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        now,
+        new Date(Date.now() - 60 * 1000).toISOString(),
+      ).run();
     if (result.meta.changes) {
       const link = new URL('/comercial/index.html?recovery=1', origin.origin);
       link.hash = `recovery_token=${token}`;
       try {
         const response = await env.AUTH_RECOVERY_DELIVERY.fetch(new Request('https://recovery-delivery.internal/send', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ to: row.email, recoveryUrl: link.href, expiresInSeconds: 1800 }),
         }));
         if (!response.ok) throw new Error('delivery_failed');
       } catch {
-        // Do not log the recipient or secret, or expose account existence on delivery errors.
         console.error('auth_recovery_delivery_failed');
         await db.prepare('DELETE FROM auth_recovery_tokens WHERE token_hash = ?').bind(tokenHash).run();
       }
@@ -350,47 +376,51 @@ async function handleResetPassword(request, env) {
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const now = new Date().toISOString();
-  // D1 batch is atomic: eligibility is checked inside the write, never before it.
-  // A competing reset cannot consume the same token or change the password twice.
-  const results = await db.batch([
+
+  // Claim the one-use token with a single D1 write before opening the credential batch.
+  // Concurrent requests are serialized at this statement: exactly one can receive user_id.
+  const claimed = await db.prepare(`DELETE FROM auth_recovery_tokens
+      WHERE token_hash = ? AND expires_at > ?
+      RETURNING user_id`)
+    .bind(tokenHash, now)
+    .first();
+  if (!claimed?.user_id) {
+    return json(400, { message: 'Link inválido ou expirado. Solicite uma nova recuperação.' });
+  }
+
+  await db.batch([
     db.prepare(`INSERT INTO auth_credentials(user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at)
-      SELECT user_id,?,?,?,'PBKDF2-SHA256',?,? FROM auth_recovery_tokens WHERE token_hash=? AND expires_at>?
+      VALUES(?,?,?,?, 'PBKDF2-SHA256',?,?)
       ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
       password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=excluded.updated_at`)
-      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now,tokenHash,now),
-    db.prepare(`UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(now,salt,hash),
-    db.prepare(`UPDATE auth_users SET password_reset_required=0,updated_at=? WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(now,salt,hash),
-    db.prepare(`DELETE FROM auth_recovery_tokens WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(salt,hash),
+      .bind(claimed.user_id,salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now),
+    db.prepare('UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id=?')
+      .bind(now,claimed.user_id),
+    db.prepare('UPDATE auth_users SET password_reset_required=0,updated_at=? WHERE user_id=?')
+      .bind(now,claimed.user_id),
   ]);
-  if (!results[0].meta.changes) return json(400, { message: 'Link inválido ou expirado. Solicite uma nova recuperação.' });
   return json(200, { message: 'Senha atualizada. Entre novamente com sua nova senha.' });
 }
 
 export async function handleCloudflareAuthRuntime(request, env, url = new URL(request.url)) {
-  if (!url.pathname.startsWith('/auth/v1/') && !url.pathname.startsWith('/api/auth/')) return null;
+  if (!url.pathname.startsWith('/api/auth/')) return null;
   if (!env.CLINICAL_DB) return json(503, { error: 'cloudflare_auth_required' });
 
   try {
     if (url.pathname === '/api/auth/recovery' && request.method === 'POST') return await handleRecovery(request, env);
     if (url.pathname === '/api/auth/reset-password' && request.method === 'POST') return await handleResetPassword(request, env);
-    if (url.pathname === '/auth/v1/token' && request.method === 'POST') {
+    if (url.pathname === '/api/auth/token' && request.method === 'POST') {
       const grant = url.searchParams.get('grant_type') || '';
       if (grant === 'password') return await handlePasswordLogin(request, env);
       if (grant === 'refresh_token') return await handleRefresh(request, env);
       return json(400, { message: 'Grant type não suportado.' });
     }
-    if (url.pathname === '/auth/v1/signup' && request.method === 'POST') return await handleSignup(request, env);
-    if (url.pathname === '/auth/v1/user' && request.method === 'GET') {
+    if (url.pathname === '/api/auth/signup' && request.method === 'POST') return await handleSignup(request, env);
+    if (url.pathname === '/api/auth/user' && request.method === 'GET') {
       const user = await authenticateClinicalRequest(request, env);
       return user ? json(200, user) : json(401, { message: 'Sessão inválida.' });
     }
-    if (url.pathname === '/auth/v1/logout' && request.method === 'POST') return await handleLogout(request, env);
+    if (url.pathname === '/api/auth/logout' && request.method === 'POST') return await handleLogout(request, env);
     return json(404, { message: 'Auth endpoint não encontrado.' });
   } catch (error) {
     console.error('cloudflare auth runtime error', error);

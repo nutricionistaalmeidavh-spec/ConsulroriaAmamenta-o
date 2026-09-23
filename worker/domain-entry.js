@@ -12,7 +12,7 @@ import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
-const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
+const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -44,12 +44,11 @@ function isPrivateRobotsPath(pathname) {
 
 function requiresCloudflareIdentity(request, url) {
   const path = url.pathname;
-  if (path.startsWith('/rest/v1/')) return true;
   if (path.startsWith('/api/clinical/')) return true;
   if (path.startsWith('/api/license/')) return true;
   if (path.startsWith('/api/admin/')) return true;
   if (D1_AUTH_REQUIRED_EXACT.has(path)) return true;
-  if (path.startsWith('/storage/v1/')) {
+  if (path.startsWith('/api/files/')) {
     return !(request.method === 'GET' && url.searchParams.has('token'));
   }
   return false;
@@ -94,17 +93,16 @@ export function withNoIndex(response) {
 
 export default {
   async fetch(request, env) {
-    // Block 8 exposes owned API families while the D1/R2 compatibility handlers
-    // are retired incrementally. Translation happens only inside this Worker.
     const incomingUrl = new URL(request.url);
     const publicApiRequest = incomingUrl.pathname.startsWith('/api/');
     const ownedFilesRequest = incomingUrl.pathname.startsWith('/api/files/');
+
+    // Auth, clinical data and files stay on their public owned paths. Only billing
+    // keeps a private same-process map to its Asaas-specific implementation names.
     const normalized = normalizeOwnedApiRequest(request, incomingUrl);
     request = normalized.request;
     const url = normalized.url;
 
-    // Signed file URLs do not require an authenticated user, but the owned files API
-    // must still fail closed if the D1-backed runtime itself is unavailable.
     if (ownedFilesRequest && !env.CLINICAL_DB) {
       return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
     }
@@ -119,22 +117,21 @@ export default {
       return withNoIndex(await handleSeoGoogleOverview(request, env));
     }
     if (url.pathname === '/api/license/register-commercial') {
-      return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+      return withNoIndex(new Response(JSON.stringify({ error: 'not_found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      }));
     }
 
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
 
-    // Protected clinical, licensing and partner routes are D1-only. Missing D1 or
-    // identity terminates here and can never escape to another backend.
     if (requiresCloudflareIdentity(request, url)) {
       if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
       const user = await authenticateClinicalRequest(request, env);
       if (!user?.id) return cloudflareIdentityRequired(401, 'cloudflare_auth_required');
     }
 
-    // Billing and partner attribution are Cloudflare D1-only. These routes are never
-    // allowed to fall through to a retired commercial worker.
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
@@ -152,8 +149,6 @@ export default {
     const block6Response = await handleBlock6RpcRuntime(request, env, url);
     if (block6Response) return withNoIndex(block6Response);
 
-    // High-value clinical writes are intercepted by explicit D1 runtimes before the
-    // compatibility REST layer. This keeps them atomic and removes legacy fallbacks.
     const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
     if (growthResponse) return withNoIndex(growthResponse);
 
@@ -163,8 +158,6 @@ export default {
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
-    // Block 7/8: public API requests stay terminal even when their internal
-    // compatibility path no longer starts with /api/ after same-process translation.
     if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();
 
     const route = resolvePublicHostRoute(url);

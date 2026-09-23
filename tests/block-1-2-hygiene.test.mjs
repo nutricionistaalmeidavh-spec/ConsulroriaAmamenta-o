@@ -10,11 +10,12 @@ test('active clinical facade cannot perform Supabase auth fallback', () => {
   assert.doesNotMatch(runtime, /supabase\.co|LEGACY_SUPABASE|legacyAuth\s*\(|legacyUserForToken|allowLegacy\s*=\s*true/i);
 });
 
-test('generic clinical facade intercepts corrected upserts before quarantined compatibility code', () => {
+test('generic clinical facade intercepts corrected upserts before native data runtime', () => {
   const runtime = read('worker/cloudflare-clinical-runtime.js');
   const upsert = runtime.indexOf('handleCloudflareUpsertRuntime(request, env, url)');
-  const legacy = runtime.indexOf('handleLegacyClinicalRuntime(request, env)');
-  assert.ok(upsert >= 0 && legacy >= 0 && upsert < legacy);
+  const data = runtime.indexOf('handleCloudflareDataRuntime(request, env, url)');
+  assert.ok(upsert >= 0 && data >= 0 && upsert < data);
+  assert.doesNotMatch(runtime, /handleLegacyClinicalRuntime|cloudflare-clinical-legacy-runtime/);
 });
 
 test('versioned growth entrypoint contains no retired backend material', () => {

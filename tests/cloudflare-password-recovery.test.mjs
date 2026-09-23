@@ -24,7 +24,7 @@ test('D1 recovery: private, hashed, expiring, one-use; password and refresh cred
   const env={CLINICAL_DB:db,CLINICAL_AUTH_SECRET:'test-secret',AUTH_RECOVERY_ORIGIN:'https://app.test',AUTH_RECOVERY_DELIVERY:{async fetch(request){messages.push(await request.json());return new Response(null,{status:204});}}};
   const original=globalThis.fetch; globalThis.fetch=()=>{throw new Error('external network forbidden');};
   try {
-    const signup=await handle(req('/auth/v1/signup',{email:'synthetic@example.test',password:'old-password'}),env);
+    const signup=await handle(req('/api/auth/signup',{email:'synthetic@example.test',password:'old-password'}),env);
     const session=await signup.json(); assert.equal(signup.status,200);
     const ask=()=>handle(req('/api/auth/recovery',{email:'synthetic@example.test'}),env);
     const first=await ask(); assert.equal(first?.status,202);
@@ -41,9 +41,9 @@ test('D1 recovery: private, hashed, expiring, one-use; password and refresh cred
     assert.equal((await reset(valid)).status,200);
     assert.equal((await reset(valid,'another-password')).status,400);
     for(const [password,status] of [['old-password',400],['new-password',200]]) {
-      assert.equal((await handle(req('/auth/v1/token?grant_type=password',{email:'synthetic@example.test',password}),env)).status,status);
+      assert.equal((await handle(req('/api/auth/token?grant_type=password',{email:'synthetic@example.test',password}),env)).status,status);
     }
-    assert.equal((await handle(req('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token}),env)).status,401);
+    assert.equal((await handle(req('/api/auth/token?grant_type=refresh_token',{refresh_token:session.refresh_token}),env)).status,401);
     const unavailable={...env,AUTH_RECOVERY_DELIVERY:undefined};
     for(const email of ['synthetic@example.test','unknown@example.test']) assert.equal((await handle(req('/api/auth/recovery',{email}),unavailable)).status,503);
     assert.equal((await handle(req('/api/auth/reset-password',{token:valid,password:'new-password'}),{})).status,503);

@@ -9,7 +9,7 @@ test('actual local D1 atomically accepts only one concurrent reset',async()=>{
     const token=new URL(runtime.recoveryMessages[0].recoveryUrl).hash.slice('#recovery_token='.length);
     const results=await Promise.all(['First-password-2026!','Second-password-2026!'].map(password=>post('/api/auth/reset-password',{token,password})));
     assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
-    const logins=await Promise.all(['First-password-2026!','Second-password-2026!'].map(password=>post('/auth/v1/token?grant_type=password',{email:credentials.email,password})));
+    const logins=await Promise.all(['First-password-2026!','Second-password-2026!'].map(password=>post('/api/auth/token?grant_type=password',{email:credentials.email,password})));
     assert.deepEqual(logins.map(r=>r.status).sort(),[200,400]);
   } finally {await runtime.close();}
 });

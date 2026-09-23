@@ -39,9 +39,14 @@ class FakeD1 {
   async all(sql, args) {
     if (/SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?/i.test(sql)) {
       const table = String(args[0]);
+      const ownerEq = /AND owner_id = \?/i.test(sql);
+      const ownerNull = /AND owner_id IS NULL/i.test(sql);
+      const ownerId = ownerEq ? String(args[1]) : null;
       return {
         results: [...this.records.values()]
           .filter((entry) => entry.table === table)
+          .filter((entry) => !ownerEq || String(entry.ownerId || '') === ownerId)
+          .filter((entry) => !ownerNull || entry.ownerId == null)
           .map((entry) => ({ record_key: entry.key, owner_id: entry.ownerId, record_json: JSON.stringify(entry.record) })),
       };
     }
@@ -157,10 +162,10 @@ test('new patient is written in one batch and remains visible after a runtime re
   const headers = { authorization: `Bearer ${token}` };
 
   const mothersResponse = await handleCloudflareClinicalRuntime(
-    new Request('https://app.test/rest/v1/mothers?select=*&order=created_at.desc', { headers }), env,
+    new Request('https://app.test/api/clinical/records/mothers?select=*&order=created_at.desc', { headers }), env,
   );
   const babiesResponse = await handleCloudflareClinicalRuntime(
-    new Request('https://app.test/rest/v1/babies?select=*&order=created_at.asc', { headers }), env,
+    new Request('https://app.test/api/clinical/records/babies?select=*&order=created_at.asc', { headers }), env,
   );
 
   assert.equal(mothersResponse.status, 200);

@@ -26,7 +26,7 @@ class FakeD1 {
 
 const member = { id: 'member-user-1', email: 'mae@example.test' };
 const authenticate = async () => member;
-function req() { return new Request('https://app.test/rest/v1/portal_content?select=*&owner_id=eq.professional-1&order=position.asc'); }
+function req() { return new Request('https://app.test/api/clinical/records/portal_content?select=*&owner_id=eq.professional-1&order=position.asc'); }
 function seedBase(db, tier) {
   db.seed('member_portal_access', 'access-1', 'professional-1', {
     id: 'access-1', owner_id: 'professional-1', mother_id: 'mother-1', email: member.email,

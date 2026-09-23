@@ -21,6 +21,16 @@ class FakeD1{
   table(table){return [...this.records.values()].filter(x=>x.table===table).map(x=>x.record)}
   async first(sql,args){
     if(/SELECT \* FROM auth_users WHERE user_id = \? LIMIT 1/i.test(sql))return this.authUsers.get(String(args[0]))||null;
+    if(/FROM supabase_records[\s\S]+WHERE table_name = \? AND owner_id = \? AND \(record_key = \? OR json_extract\(record_json,'\$\.id'\) = \?\) LIMIT 1/i.test(sql)){
+      const[table,ownerId,key,jsonId]=args;
+      const row=[...this.records.values()].find(x=>x.table===String(table)&&String(x.ownerId||'')===String(ownerId)&&(String(x.key)===String(key)||String(x.record?.id||'')===String(jsonId)));
+      return row?{record_key:row.key,owner_id:row.ownerId,record_json:JSON.stringify(row.record)}:null;
+    }
+    if(/WHERE table_name = \? AND record_key = \? LIMIT 1/i.test(sql)){
+      const[table,key]=args;
+      const row=this.records.get(`${table}:${key}`);
+      return row?{record_key:row.key,owner_id:row.ownerId,record_json:JSON.stringify(row.record)}:null;
+    }
     throw new Error(`unexpected first SQL: ${sql}`);
   }
   async all(sql,args){
@@ -93,7 +103,7 @@ test('creating a new package heals stale exhausted active packages and keeps one
   const{db,user,env,headers}=await setup();
   db.seed('appointments','appt-1',user.id,{id:'appt-1',owner_id:user.id,mother_id:'mother-1',status:'Em atendimento'});
   db.seed('care_packages','old-package',user.id,{id:'old-package',owner_id:user.id,mother_id:'mother-1',service_label:'Plano antigo',total_cents:76000,sessions_total:4,sessions_used:4,status:'active'});
-  const response=await packageAware(new Request('https://app.test/rest/v1/rpc/set_appointment_billing',{method:'POST',headers,body:JSON.stringify({
+  const response=await packageAware(new Request('https://app.test/api/clinical/rpc/set_appointment_billing',{method:'POST',headers,body:JSON.stringify({
     p_appointment_id:'appt-1',p_billing_mode:'package_new',p_service_label:'Novo acompanhamento',p_value_cents:90000,p_payment_method:'Pix',p_package_total_cents:90000,p_package_sessions_total:5,p_package_id:null
   })}),env);
   assert.equal(response.status,200);
@@ -114,7 +124,7 @@ test('manual package consumption is supported by Cloudflare and is idempotent',a
   const{db,user,env,headers}=await setup();
   db.seed('care_packages','package-1',user.id,{id:'package-1',owner_id:user.id,mother_id:'mother-1',service_label:'Plano',total_cents:76000,sessions_total:2,sessions_used:1,status:'active'});
   const body={p_package_id:'package-1',p_notes:'Baixa manual de teste',p_request_key:'req-1'};
-  const request=()=>new Request('https://app.test/rest/v1/rpc/consume_care_package_session_manual',{method:'POST',headers,body:JSON.stringify(body)});
+  const request=()=>new Request('https://app.test/api/clinical/rpc/consume_care_package_session_manual',{method:'POST',headers,body:JSON.stringify(body)});
   const first=await packageAware(request(),env);
   assert.equal(first.status,200);
   const firstPayload=await first.json();
@@ -147,7 +157,7 @@ test('add_care_package_item_v2 is idempotent and updates package financial total
     p_package_id:'package-v2',p_catalog_item_id:null,p_item_type:'service',p_label:'Visita adicional',p_quantity_total:2,
     p_pricing_mode:'additional',p_unit_price_cents:5000,p_amount_cents:10000,p_request_key:'11111111-1111-4111-8111-111111111111'
   };
-  const request=()=>new Request('https://app.test/rest/v1/rpc/add_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
+  const request=()=>new Request('https://app.test/api/clinical/rpc/add_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
   const first=await packageAware(request(),env);
   assert.equal(first.status,200);
   const firstPayload=await first.json();
@@ -174,7 +184,7 @@ test('consume_care_package_item_v2 consumes once and preserves request-key idemp
   db.seed('care_packages','package-v2',user.id,{id:'package-v2',owner_id:user.id,mother_id:'mother-1',service_label:'Plano',total_cents:76000,sessions_total:0,sessions_used:0,status:'active'});
   db.seed('care_package_items','item-v2',user.id,{id:'item-v2',owner_id:user.id,package_id:'package-v2',mother_id:'mother-1',label:'Retorno',quantity_total:2,quantity_used:0,pricing_mode:'included',status:'active'});
   const body={p_item_id:'item-v2',p_appointment_id:null,p_encounter_id:null,p_notes:'uso',p_request_key:'22222222-2222-4222-8222-222222222222'};
-  const request=()=>new Request('https://app.test/rest/v1/rpc/consume_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
+  const request=()=>new Request('https://app.test/api/clinical/rpc/consume_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
   const first=await packageAware(request(),env);
   assert.equal(first.status,200);
   const firstPayload=await first.json();

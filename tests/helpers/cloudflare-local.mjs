@@ -41,7 +41,7 @@ export async function createLocalRuntime({ port = 0, assets = false } = {}) {
     await db.prepare('INSERT INTO auth_credentials(user_id,password_salt,password_hash,password_iterations) VALUES(?,?,?,100000)').bind(id, salt, hash).run();
   }
   return { mf, db, recoveryMessages, close: () => mf.dispose(), async login(email = credentials.email) {
-    const r = await mf.dispatchFetch('http://localhost/auth/v1/token?grant_type=password', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...credentials, email }) });
+    const r = await mf.dispatchFetch('http://localhost/api/auth/token?grant_type=password', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...credentials, email }) });
     if (!r.ok) throw new Error(`Local login ${r.status}: ${await r.text()}`);
     return r.json();
   } };

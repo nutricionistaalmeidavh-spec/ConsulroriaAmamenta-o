@@ -6,9 +6,9 @@ import { pathToFileURL } from 'node:url';
 const root = resolve(import.meta.dirname, '..');
 const runtimePath = resolve(root, 'worker', 'cloudflare-clinical-runtime.js');
 const authPath = resolve(root, 'worker', 'cloudflare-auth-runtime.js');
-const legacyRuntimePath = resolve(root, 'worker', 'cloudflare-clinical-legacy-runtime.js');
+const dataRuntimePath = resolve(root, 'worker', 'cloudflare-data-runtime.js');
 const runtime = readFileSync(runtimePath, 'utf8');
-const legacyRuntime = readFileSync(legacyRuntimePath, 'utf8');
+const dataRuntime = readFileSync(dataRuntimePath, 'utf8');
 const domain = readFileSync(resolve(root, 'worker', 'domain-entry.js'), 'utf8');
 const commercialBootstrap = readFileSync(resolve(root, 'worker', 'commercial-license-bootstrap.js'), 'utf8');
 const materializer = readFileSync(resolve(root, 'scripts', 'materialize-clinical-source.mjs'), 'utf8');
@@ -19,23 +19,28 @@ const index = readFileSync(resolve(root, 'index.html'), 'utf8');
 const commercialConfig = readFileSync(resolve(root, 'public', 'comercial', 'config.js'), 'utf8');
 const serviceWorker = readFileSync(resolve(root, 'public', 'sw.js'), 'utf8');
 const canonicalIdentity = readFileSync(resolve(root, 'public', 'canonical-identity-runtime.js'), 'utf8');
+const forbiddenCompatRoutes = /\/auth\/v1(?:\/|\b)|\/rest\/v1(?:\/|\b)|\/storage\/v1(?:\/|\b)/;
+const forbiddenBackend = /supabase\.co|LEGACY_SUPABASE|SUPABASE_URL|SUPABASE_KEY|\/functions\/v1/i;
 
-// The active clinical module is now a D1-only facade. Historical compatibility
-// code is quarantined in a separately named module until the REST/storage shape
-// is removed in a later cutover block.
+// Block 10: the active clinical module delegates only to the native D1/R2 data runtime.
 assert.match(runtime, /cloudflare-auth-runtime\.js/);
-assert.match(runtime, /cloudflare-clinical-legacy-runtime\.js/);
+assert.match(runtime, /cloudflare-data-runtime\.js/);
+assert.doesNotMatch(runtime, /cloudflare-clinical-legacy-runtime\.js/);
 assert.match(runtime, /handleCloudflareUpsertRuntime/);
 assert.match(runtime, /handleCloudflareGrowthRuntime/);
-assert.match(runtime, /cloudflare_auth_runtime_required/);
-assert.doesNotMatch(runtime, /supabase\.co|LEGACY_SUPABASE|legacyAuth\s*\(|legacyUserForToken|allowLegacy\s*=\s*true/i);
-assert.match(legacyRuntime, /rest\/v1\//);
-assert.match(legacyRuntime, /storage\/v1\//);
+assert.doesNotMatch(runtime, forbiddenCompatRoutes);
+assert.doesNotMatch(runtime, forbiddenBackend);
+assert.match(dataRuntime, /\/api\/clinical\/records\//);
+assert.match(dataRuntime, /\/api\/clinical\/rpc\//);
+assert.match(dataRuntime, /\/api\/files\//);
+assert.doesNotMatch(dataRuntime, forbiddenCompatRoutes);
+assert.doesNotMatch(dataRuntime, forbiddenBackend);
 
 assert.match(domain, /handleCloudflareClinicalRuntime/);
 assert.match(domain, /handleCloudflareAuthRuntime/);
 assert.match(domain, /requiresCloudflareIdentity/);
 assert.match(domain, /cloudflare_auth_required/);
+assert.doesNotMatch(domain, forbiddenCompatRoutes);
 assert.match(domain, /if\s*\(env\.CLINICAL_DB\s*&&\s*url\.pathname\s*===\s*'\/api\/license\/me'/);
 assert.match(domain, /ensureExplicitCommercialMarker\(request, env\)/);
 assert.match(commercialBootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
@@ -58,8 +63,8 @@ assert.doesNotMatch(commercialConfig, /supabase/i);
 assert.doesNotMatch(index, /cloudflare-fetch-bridge/);
 assert.match(index, /src\/bootstrap\.js/);
 
-// Same-origin clinical APIs carry sensitive health data and must never enter the PWA cache.
-for (const prefix of ['/api/','/auth/','/rest/','/storage/']) assert.ok(serviceWorker.includes(`'${prefix}'`), `service worker missing private prefix ${prefix}`);
+// Same-origin API traffic carries sensitive health data and must never enter the PWA cache.
+assert.ok(serviceWorker.includes("'/api/'"), 'service worker missing private /api/ prefix');
 assert.doesNotMatch(serviceWorker, /appdeploy/i);
 
 const imported = await import(pathToFileURL(runtimePath).href);
@@ -69,8 +74,8 @@ assert.equal(imported.authenticateClinicalRequest, authImported.authenticateClin
 assert.equal(imported.runtimeUserById, authImported.runtimeUserById, 'clinical facade must export D1-backed user lookup');
 assert.equal(typeof imported.hasOwnedRecord, 'function');
 
-const missingDb = await imported.handleCloudflareClinicalRuntime(new Request('https://app.test/rest/v1/mothers'), {});
-assert.equal(missingDb.status, 503, 'direct compatibility calls must fail closed without D1');
+const missingDb = await imported.handleCloudflareClinicalRuntime(new Request('https://app.test/api/clinical/records/mothers'), {});
+assert.equal(missingDb.status, 503, 'native clinical calls must fail closed without D1');
 assert.deepEqual(await missingDb.json(), { error: 'cloudflare_d1_required' });
 
-console.log('Cloudflare clinical runtime contract: OK');
+console.log('Cloudflare native clinical runtime contract: OK');

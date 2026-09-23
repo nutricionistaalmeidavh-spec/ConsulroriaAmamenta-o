@@ -1,10 +1,3 @@
-const AUTH_COMPAT = new Map([
-  ['/api/auth/token', '/auth/v1/token'],
-  ['/api/auth/signup', '/auth/v1/signup'],
-  ['/api/auth/user', '/auth/v1/user'],
-  ['/api/auth/logout', '/auth/v1/logout'],
-]);
-
 const BILLING_COMPAT = new Map([
   ['/api/billing/signup', '/api/asaas/signup'],
   ['/api/billing/pending-status', '/api/asaas/pending-status'],
@@ -18,24 +11,13 @@ const BILLING_COMPAT = new Map([
 ]);
 
 function internalPath(pathname) {
-  if (AUTH_COMPAT.has(pathname)) return AUTH_COMPAT.get(pathname);
   if (BILLING_COMPAT.has(pathname)) return BILLING_COMPAT.get(pathname);
-  if (pathname.startsWith('/api/clinical/rpc/')) {
-    return `/rest/v1/rpc/${pathname.slice('/api/clinical/rpc/'.length)}`;
-  }
-  if (pathname.startsWith('/api/clinical/records/')) {
-    return `/rest/v1/${pathname.slice('/api/clinical/records/'.length)}`;
-  }
-  if (pathname.startsWith('/api/files/')) {
-    return `/storage/v1/${pathname.slice('/api/files/'.length)}`;
-  }
   return pathname;
 }
 
 /**
- * Translate the public Block 8 API contract to the quarantined compatibility
- * handlers that still own the D1/R2 implementation. The translation is
- * same-process only: callers never see or follow the historical route shapes.
+ * Billing keeps a same-process compatibility map while its Asaas-specific
+ * implementation names are internal. Auth, clinical data and files are native.
  */
 export function normalizeOwnedApiRequest(request, url = new URL(request.url)) {
   const pathname = internalPath(url.pathname);
