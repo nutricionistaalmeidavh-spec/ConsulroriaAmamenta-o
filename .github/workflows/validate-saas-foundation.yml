@@ -32,6 +32,7 @@ on:
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'tests/block-6-*.test.mjs'
+      - 'tests/block-7-*.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'tests/block-1-2-hygiene.test.mjs'
       - 'tests/cloudflare-client-refresh.test.mjs'
@@ -87,6 +88,7 @@ on:
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
       - 'tests/block-6-*.test.mjs'
+      - 'tests/block-7-*.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'tests/block-1-2-hygiene.test.mjs'
       - 'tests/cloudflare-client-refresh.test.mjs'
@@ -166,6 +168,8 @@ jobs:
         run: node --test tests/package-lifecycle-cloudflare.test.mjs
       - name: Validate Block 6 RPC closure
         run: npm run test:block6
+      - name: Validate Block 7 no-core fallback
+        run: npm run test:block7
       - name: Validate D1-only authentication
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate Block 1 and 2 Cloudflare regressions
