@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { handleCloudflareGrowthRuntime } from '../worker/cloudflare-growth-runtime.js';
+
+async function readCanonicalArtifact(relativePath) {
+  const dist = new URL(`../dist/${relativePath}`, import.meta.url);
+  try {
+    await access(dist);
+    return readFile(dist, 'utf8');
+  } catch {
+    return readFile(new URL(`../public/${relativePath}`, import.meta.url), 'utf8');
+  }
+}
 
 class FakeStatement {
   constructor(db, sql, args = []) { this.db = db; this.sql = sql; this.args = args; }
@@ -137,7 +147,7 @@ test('R20 historical weight is stored without replacing a newer current weight',
 });
 
 test('R18 old appointment delete UI uses canonical RPC and does not promise clinical-record deletion', async () => {
-  const source = await readFile(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url), 'utf8');
+  const source = await readCanonicalArtifact('clinical-source/features/patient-fixes.js');
   assert.doesNotMatch(source, /rpc\/delete_appointment/);
   assert.match(source, /delete_scheduled_appointment/);
   assert.doesNotMatch(source, /agendamento e o prontuário clínico vinculado serão removidos/i);
@@ -145,7 +155,7 @@ test('R18 old appointment delete UI uses canonical RPC and does not promise clin
 });
 
 test('C06 patient plan invalidates previous identity before awaiting the new package and renders explicit error state', async () => {
-  const source = await readFile(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
+  const source = await readCanonicalArtifact('billing-v2.js');
   const start = source.indexOf('async function bvMountPatientPlan');
   const end = source.indexOf('function bvClosePlanDialog', start);
   const mount = source.slice(start, end);
@@ -158,7 +168,7 @@ test('C06 patient plan invalidates previous identity before awaiting the new pac
 });
 
 test('C07 encounter history uses canonical refresh-capable client and surfaces read failure instead of empty history', async () => {
-  const source = await readFile(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url), 'utf8');
+  const source = await readCanonicalArtifact('clinical-source/features/patient-fixes.js');
   const encounterStart = source.indexOf('async function pfEncounterRows');
   const encounterEnd = source.indexOf('async function pfMountProntuario', encounterStart);
   const encounter = source.slice(encounterStart, encounterEnd);
