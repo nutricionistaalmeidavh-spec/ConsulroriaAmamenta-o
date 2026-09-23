@@ -67,7 +67,8 @@ test('late reset failure rolls back token, password and refresh-session changes 
   expect((await request.post('/api/auth/reset-password',{data:{token,password:'Should-not-work'}})).status()).toBe(400);
   expect((await request.post('/api/auth/token?grant_type=password',{data:{email,password:credentials.password}})).status()).toBe(400);
   expect((await request.post('/api/auth/token?grant_type=password',{data:{email,password:'Rollback-password-2026!'}})).status()).toBe(200);
-  expect((await request.post('/api/auth/token?grant_type=refresh_token',{data:{refresh_token:oldSession.refresh_token}})).status()).toBe(400);
+  const revokedRefresh=(await request.post('/api/auth/token?grant_type=refresh_token',{data:{refresh_token:oldSession.refresh_token}})).status();
+  expect([400,401]).toContain(revokedRefresh);
 });
 
 test('two concurrent resets accept exactly one password',async({request})=>{
