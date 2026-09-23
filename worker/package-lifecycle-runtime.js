@@ -27,10 +27,11 @@ function insertStatement(env,table,entry,row){
 }
 async function saveEntry(env,table,entry,row){await saveStatement(env,table,entry,row).run();return row}
 function remaining(pkg){return Math.max(0,Number(pkg.sessions_total||0)-Number(pkg.sessions_used||0))}
-function packagePayload(pkg,{idempotent=false}={}){
+function packagePayload(pkg,{idempotent=false,billingMode=null}={}){
   return{
     handled:true,
     idempotent,
+    ...(billingMode?{billing_mode:billingMode}:{}),
     package_id:pkg.id,
     sessions_total:Number(pkg.sessions_total||0),
     sessions_used:Number(pkg.sessions_used||0),
@@ -48,9 +49,18 @@ async function runAtomic(env,statements){
   if(typeof database.batch==='function')return database.batch(statements);
   const out=[];for(const statement of statements)out.push(await statement.run());return out;
 }
+async function packageSessions(env,userId,packageId){
+  return(await tableRows(env,'care_package_sessions')).filter(session=>
+    owned(session,userId)&&String(session.record?.package_id||session.record?.care_package_id||'')===String(packageId)
+  );
+}
 async function existingManualSession(env,userId,packageId,key){
-  const sessions=(await tableRows(env,'care_package_sessions')).filter(session=>owned(session,userId));
-  return sessions.find(session=>String(session.record?.request_key||'')===key&&String(session.record?.package_id||session.record?.care_package_id||'')===packageId)||null;
+  return(await packageSessions(env,userId,packageId)).find(session=>String(session.record?.request_key||'')===key)||null;
+}
+async function existingEncounterSession(env,userId,packageId,appointmentId,encounterId){
+  return(await packageSessions(env,userId,packageId)).find(session=>
+    String(session.record?.appointment_id||'')===String(appointmentId)&&String(session.record?.encounter_id||'')===String(encounterId)
+  )||null;
 }
 
 async function reconcileBeforeNewPackage(request,env,user,input){
@@ -122,6 +132,81 @@ async function consumeManualPackageSession(request,env,user,input){
       }
       const current=await ownedPackage(env,packageId,user.id);
       if(!current)return runtimeJson(404,{message:'Plano não encontrado ou sem permissão.'});
+      if(current.record?.status!=='active'||remaining(current.record)<=0){
+        return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
+      }
+      if(Number(current.record?.sessions_used||0)>Number(pkg.sessions_used||0))continue;
+      throw error;
+    }
+  }
+  return runtimeJson(409,{message:'Plano alterado por outra operação. Tente novamente.',error:'package_concurrency_conflict'});
+}
+
+async function finalizePackageEncounter(env,user,input){
+  const appointmentId=String(input?.p_appointment_id||'').trim();
+  const encounterId=String(input?.p_encounter_id||'').trim();
+  if(!appointmentId)return runtimeJson(400,{message:'Agendamento obrigatório.'});
+  if(!encounterId)return runtimeJson(400,{message:'Atendimento obrigatório.'});
+
+  const appointment=await ownedAppointment(env,appointmentId,user.id);
+  if(!appointment)return runtimeJson(404,{message:'Agendamento não encontrado.'});
+  const mode=String(appointment.record?.billing_mode||'individual');
+  if(mode!=='package_active'&&mode!=='package_new')return null;
+  const packageId=String(appointment.record?.package_id||'');
+  if(!packageId)return runtimeJson(409,{message:'Plano ativo não encontrado.'});
+  const encounter=await ownedRecord(env,'clinical_encounters',encounterId,user.id);
+  if(!encounter||String(encounter.record?.appointment_id||'')!==appointmentId){
+    return runtimeJson(409,{message:'Atendimento incompatível com este agendamento.'});
+  }
+
+  let entry=await ownedPackage(env,packageId,user.id);
+  if(!entry)return runtimeJson(409,{message:'Plano ativo não encontrado.'});
+  const maxAttempts=Math.max(2,Number(entry.record?.sessions_total||0)+2);
+  const key=`finalize:${appointmentId}:${encounterId}`;
+
+  for(let attempt=0;attempt<maxAttempts;attempt+=1){
+    const existing=await existingEncounterSession(env,user.id,packageId,appointmentId,encounterId);
+    if(existing){
+      const current=(await ownedPackage(env,packageId,user.id))?.record||entry.record;
+      return runtimeJson(200,packagePayload(current,{idempotent:true,billingMode:mode}));
+    }
+
+    entry=await ownedPackage(env,packageId,user.id);
+    if(!entry)return runtimeJson(409,{message:'Plano ativo não encontrado.'});
+    const pkg=entry.record;
+    if(pkg.status!=='active'||remaining(pkg)<=0){
+      if(pkg.status==='active'&&remaining(pkg)<=0)await saveEntry(env,'care_packages',entry,{...pkg,status:'completed',updated_at:new Date().toISOString()});
+      return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
+    }
+
+    const now=new Date().toISOString();
+    const used=Number(pkg.sessions_used||0)+1;
+    const slotKey=`${packageId}:session:${used}`;
+    const nextPackage={...pkg,sessions_used:used,status:used>=Number(pkg.sessions_total||0)?'completed':'active',updated_at:now};
+    const claim={
+      id:slotKey,owner_id:user.id,package_id:packageId,slot:used,request_key:key,
+      appointment_id:appointmentId,encounter_id:encounterId,created_at:now,updated_at:now
+    };
+    const session={
+      id:crypto.randomUUID(),owner_id:user.id,package_id:packageId,care_package_id:packageId,mother_id:pkg.mother_id||null,
+      appointment_id:appointmentId,encounter_id:encounterId,source:'encounter',request_key:key,
+      consumed_at:now,used_at:now,created_at:now,updated_at:now
+    };
+    try{
+      await runAtomic(env,[
+        insertStatement(env,'care_package_session_claims',{key:slotKey,ownerId:user.id,record:claim},claim),
+        saveStatement(env,'care_package_sessions',{key:session.id,ownerId:user.id,record:session},session),
+        saveStatement(env,'care_packages',entry,nextPackage)
+      ]);
+      return runtimeJson(200,packagePayload(nextPackage,{idempotent:false,billingMode:mode}));
+    }catch(error){
+      const replay=await existingEncounterSession(env,user.id,packageId,appointmentId,encounterId);
+      if(replay){
+        const current=(await ownedPackage(env,packageId,user.id))?.record||nextPackage;
+        return runtimeJson(200,packagePayload(current,{idempotent:true,billingMode:mode}));
+      }
+      const current=await ownedPackage(env,packageId,user.id);
+      if(!current)return runtimeJson(409,{message:'Plano ativo não encontrado.'});
       if(current.record?.status!=='active'||remaining(current.record)<=0){
         return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
       }
@@ -250,10 +335,11 @@ async function consumePackageItemV2(env,user,input){
 export async function handlePackageLifecycleRuntime(request,env,url=new URL(request.url)){
   if(!env.CLINICAL_DB||request.method!=='POST'||!url.pathname.startsWith('/api/clinical/rpc/'))return null;
   const name=decodeURIComponent(url.pathname.slice('/api/clinical/rpc/'.length));
-  if(!['set_appointment_billing','consume_care_package_session_manual','add_care_package_item_v2','consume_care_package_item_v2'].includes(name))return null;
+  if(!['set_appointment_billing','finalize_encounter_billing','consume_care_package_session_manual','add_care_package_item_v2','consume_care_package_item_v2'].includes(name))return null;
   const user=await authenticateClinicalRequest(request,env);
   if(!user?.id)return runtimeJson(401,{message:'Sessão expirada. Entre novamente.'});
   const input=await request.clone().json().catch(()=>({}));
+  if(name==='finalize_encounter_billing')return finalizePackageEncounter(env,user,input);
   if(name==='consume_care_package_session_manual')return consumeManualPackageSession(request,env,user,input);
   if(name==='add_care_package_item_v2')return addPackageItemV2(env,user,input);
   if(name==='consume_care_package_item_v2')return consumePackageItemV2(env,user,input);
