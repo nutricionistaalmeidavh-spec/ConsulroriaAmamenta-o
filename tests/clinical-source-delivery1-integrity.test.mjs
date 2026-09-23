@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
+import {
+  hardenDelivery1AppShell,
+  hardenDelivery1PatientFixes,
+} from '../scripts/harden-delivery1-integrity.mjs';
 
-const appShellSource = readFileSync('public/clinical-source/core/app-shell.js', 'utf8');
-const patientFixesSource = readFileSync('public/clinical-source/features/patient-fixes.js', 'utf8');
+const appShellSource = hardenDelivery1AppShell(readFileSync('public/clinical-source/core/app-shell.js', 'utf8'));
+const patientFixesSource = hardenDelivery1PatientFixes(readFileSync('public/clinical-source/features/patient-fixes.js', 'utf8'));
 
 async function seed(db, table, id, ownerId, record) {
   const now = new Date().toISOString();
@@ -42,13 +46,17 @@ test('R01 openPatient invalidates stale asynchronous patient projections before 
     'patient identity must still match before async UI is applied');
   assert.match(appShellSource, /currentBabyId\s*!==\s*\(selectedBaby\?\.id\s*\|\|\s*null\)/,
     'baby identity must still match before async UI is applied');
+  assert.match(appShellSource, /if\s*\(screen\s*!==\s*'patient'\)\s*patientOpenRevision\s*\+=\s*1/,
+    'navigating away from the patient screen must invalidate pending patient reads');
 });
 
-test('R19 patient action bindings are refreshed by patient identity and ignore a stale wire response', () => {
+test('R19 patient action bindings are refreshed by patient identity and ignore stale context on lookup and click', () => {
   assert.match(patientFixesSource, /if\(pfPatientId\(\)!==mid\)return;/,
     'a delayed patient lookup must not bind actions after navigation changed');
   assert.match(patientFixesSource, /b\.dataset\.pfBound===mid/,
     'the same DOM node may only skip rebinding for the same patient');
+  assert.match(patientFixesSource, /if\(pfPatientId\(\)!==mid\)\{pfSchedule\(\);return\}/,
+    'patient-targeted actions must verify the active patient again at click time');
   assert.doesNotMatch(patientFixesSource, /if\(!t\|\|b\.dataset\.pfBound\)continue;/,
     'a permanent boolean bound marker preserves the previous patient target');
 });
@@ -87,6 +95,25 @@ test('R02 PATCH validates the persisted baby together with a changed mother_id',
   assert.equal(response.status, 409);
 });
 
+test('R02 PATCH rejects an encounter_id incompatible with the persisted appointment_id', async (t) => {
+  const runtime = await createLocalRuntime();
+  t.after(() => runtime.close());
+  const headers = await authHeaders(runtime);
+  await seed(runtime.db, 'mothers', 'm1', userId, { name: 'Mãe 1' });
+  await seed(runtime.db, 'appointments', 'a1', userId, { mother_id: 'm1', status: 'Em atendimento' });
+  await seed(runtime.db, 'appointments', 'a2', userId, { mother_id: 'm1', status: 'Em atendimento' });
+  await seed(runtime.db, 'clinical_encounters', 'e1', userId, { mother_id: 'm1', appointment_id: 'a1', status: 'draft' });
+  await seed(runtime.db, 'clinical_encounters', 'e2', userId, { mother_id: 'm1', appointment_id: 'a2', status: 'draft' });
+  await seed(runtime.db, 'financial_entries', 'f1', userId, {
+    mother_id: 'm1', appointment_id: 'a1', encounter_id: 'e1', amount_cents: 10000, status: 'Pendente',
+  });
+
+  const response = await api(runtime, '/api/clinical/records/financial_entries?id=eq.f1', headers, {
+    method: 'PATCH', body: { encounter_id: 'e2' },
+  });
+  assert.equal(response.status, 409);
+});
+
 test('R03 schedule_clinical_appointment rejects a mother owned by another account', async (t) => {
   const runtime = await createLocalRuntime();
   t.after(() => runtime.close());
@@ -113,6 +140,19 @@ test('R03 schedule_clinical_appointment rejects mother and baby from different f
     body: { p_mother_id: 'm1', p_baby_ids: ['b2'], p_starts_at: '2026-09-24T12:00:00.000Z' },
   });
   assert.equal(response.status, 409);
+});
+
+test('R03 schedule_clinical_appointment rejects an unknown baby reference', async (t) => {
+  const runtime = await createLocalRuntime();
+  t.after(() => runtime.close());
+  const headers = await authHeaders(runtime);
+  await seed(runtime.db, 'mothers', 'm1', userId, { name: 'Mãe 1' });
+
+  const response = await api(runtime, '/api/clinical/rpc/schedule_clinical_appointment', headers, {
+    method: 'POST',
+    body: { p_mother_id: 'm1', p_baby_ids: ['missing-baby'], p_starts_at: '2026-09-24T12:00:00.000Z' },
+  });
+  assert.equal(response.status, 403);
 });
 
 test('R04 finalize_encounter_billing rejects an encounter from another appointment of the same mother', async (t) => {
