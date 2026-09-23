@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const MODE = process.argv.includes('--write') ? 'write' : 'check';
 const PATH = resolve(ROOT, 'public/clinical-source/features/clinical-note-feature.js');
+const MANIFEST_PATH = resolve(ROOT, 'public/clinical-source/manifest.json');
 
 const stateLine = "const cnState={encounter:null,mother:null,babies:[],addenda:[],revisions:[],saveTimer:null,saving:false,editRevision:0,persistedRevision:0,saveChain:Promise.resolve(),pendingBody:null,pendingButton:null,direction:'forward',opening:false};";
 
@@ -29,11 +31,32 @@ function transform(source) {
   return next;
 }
 
+function manifestWithNoteHash(noteSource) {
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+  const entry = manifest?.modules?.['features/clinical-note-feature.js'];
+  if (!entry) throw new Error('delivery 3 manifest: módulo de prontuário ausente');
+  entry.sha256 = createHash('sha256').update(noteSource, 'utf8').digest('hex');
+  if (!String(entry.source || '').includes('+delivery3-versioning')) {
+    entry.source = `${entry.source || 'release:features/clinical-note-feature.js'}+delivery3-versioning`;
+  }
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+}
+
 const source = readFileSync(PATH, 'utf8');
 const next = transform(source);
 for (const marker of ['editRevision:0','persistedRevision:0','saveChain:Promise.resolve()','pendingBody:null','async function cnDrainSaves()','_expected_version','record_version']) {
   if (!next.includes(marker)) throw new Error(`delivery 3 note hardening missing marker: ${marker}`);
 }
-if (MODE === 'check' && next !== source) throw new Error('clinical note delivery 3 hardening ainda não materializado');
-if (MODE === 'write' && next !== source) writeFileSync(PATH, next, 'utf8');
-console.log(`Delivery 3 note hardening ${MODE}: ${next === source ? 'already hardened' : 'updated'}`);
+const manifestSource = readFileSync(MANIFEST_PATH, 'utf8');
+const nextManifest = manifestWithNoteHash(next);
+const noteChanged = next !== source;
+const manifestChanged = nextManifest !== manifestSource;
+if (MODE === 'check' && (noteChanged || manifestChanged)) {
+  throw new Error('clinical note delivery 3 hardening ou manifest ainda não materializado');
+}
+if (MODE === 'write') {
+  if (noteChanged) writeFileSync(PATH, next, 'utf8');
+  if (manifestChanged) writeFileSync(MANIFEST_PATH, nextManifest, 'utf8');
+}
+const changed = [noteChanged ? 'note' : '', manifestChanged ? 'manifest' : ''].filter(Boolean).join(', ');
+console.log(`Delivery 3 note hardening ${MODE}: ${changed || 'already hardened'}`);
