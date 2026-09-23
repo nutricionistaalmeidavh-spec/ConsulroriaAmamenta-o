@@ -22,6 +22,7 @@
     "test:block7": "node --test tests/block-7-no-core-fallback.test.mjs",
     "test:block8": "node --test tests/block-8-owned-api.test.mjs",
     "test:block9": "node --test tests/block-9-d1-hardening.test.mjs",
+    "test:block10": "node --test tests/block-10-zero-supabase-runtime.test.mjs",
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
