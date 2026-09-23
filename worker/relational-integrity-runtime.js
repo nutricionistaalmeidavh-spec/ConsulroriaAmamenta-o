@@ -165,9 +165,21 @@ async function validateAppointmentRpc(env, input, userId) {
 async function validateFinalizeBillingRpc(env, input, userId) {
   const appointmentId = String(input?.p_appointment_id || '').trim();
   const encounterId = String(input?.p_encounter_id || '').trim();
-  if (!appointmentId || !encounterId) return null;
+  if (!appointmentId) return null;
   const appointment = await ownedRecord(env, 'appointments', appointmentId, userId);
   if (!appointment) return json(403, { error: 'record_relationship_outside_account', field: 'appointment_id' });
+
+  const billingMode = String(appointment.record?.billing_mode || 'individual');
+  const packageMode = billingMode === 'package_active' || billingMode === 'package_new';
+  if (packageMode && !encounterId) {
+    return json(400, {
+      error: 'invalid_payload',
+      field: 'encounter_id',
+      message: 'Prontuário obrigatório para finalizar uma sessão de pacote.',
+    });
+  }
+  if (!encounterId) return null;
+
   return validateRelationalRow(env, {
     mother_id: appointment.record?.mother_id || null,
     appointment_id: appointmentId,
