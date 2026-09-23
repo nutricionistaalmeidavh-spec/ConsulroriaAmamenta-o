@@ -19,6 +19,7 @@ const OWNER_TABLES = new Set([
   'professional_profiles','saas_accounts','subscriptions','entitlements',
   'billing_checkout_requests','billing_webhook_events','member_content_unlocks',
   'member_engagement_events','member_portal_access','member_shared_items',
+  'appointment_babies','clinical_encounter_babies',
 ]);
 const NO_ID_TABLES = new Set(['appointment_babies','clinical_encounter_babies']);
 const RELATIONAL_TABLES = new Set([
