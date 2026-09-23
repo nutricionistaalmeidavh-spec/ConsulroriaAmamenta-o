@@ -44,6 +44,16 @@ test('two tabs may be last-write-wins for distinct edits but never partially cor
   expect((await responseA).status()).toBe(200);
   expect((await responseB).status()).toBe(200);
 
+  // A successful PATCH response precedes the handler's asynchronous refreshData()
+  // and openPatient() work. Wait for both tabs to finish that success path before
+  // inspecting persisted state or forcing a reload, otherwise the test itself can
+  // interrupt the canonical post-save navigation.
+  const patientRoute = new RegExp(`#\\/patient\\/${patient.mother.id}$`);
+  await Promise.all([
+    expect(page).toHaveURL(patientRoute),
+    expect(second).toHaveURL(patientRoute),
+  ]);
+
   const headers = await authHeaders(page);
   const motherResponse = await page.request.get(`/api/clinical/records/mothers?id=eq.${encodeURIComponent(patient.mother.id)}&limit=1`, { headers });
   expect(motherResponse.ok()).toBeTruthy();
