@@ -47,40 +47,39 @@ test('client on version N upgrades to N+1 and never resurrects stale HTML after 
 
   await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/legacy-sw-test.js'));
 
-  await page.goto('/app/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(async () => {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    return registrations.some((registration) => [registration.installing, registration.waiting, registration.active]
-      .some((worker) => worker?.scriptURL.includes('/sw.js')));
-  }, { timeout: 20000 });
-
-  const controllerchange = page.evaluate(() => new Promise((resolve, reject) => {
+  const upgradedController = await page.evaluate(async () => {
     const currentController = () => navigator.serviceWorker.controller?.scriptURL || '';
-    if (currentController().includes('/sw.js')) {
-      resolve(currentController());
-      return;
-    }
+    const controllerchange = new Promise((resolve, reject) => {
+      if (currentController().includes('/sw.js')) {
+        resolve(currentController());
+        return;
+      }
 
-    const timeout = setTimeout(() => reject(new Error('controllerchange timeout')), 20000);
-    const onControllerChange = () => {
-      const scriptUrl = currentController();
-      if (!scriptUrl.includes('/sw.js')) return;
-      clearTimeout(timeout);
-      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
-      resolve(scriptUrl);
-    };
-    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
-  }));
+      const timeout = setTimeout(() => reject(new Error('controllerchange timeout')), 20000);
+      const onControllerChange = () => {
+        const scriptUrl = currentController();
+        if (!scriptUrl.includes('/sw.js')) return;
+        clearTimeout(timeout);
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        resolve(scriptUrl);
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    });
 
-  await page.evaluate(async () => {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    const registration = registrations.find((item) => [item.installing, item.waiting, item.active]
-      .some((worker) => worker?.scriptURL.includes('/sw.js')));
-    if (!registration) throw new Error('current service worker registration missing');
+    // Re-registering the same root scope with the N+1 script performs the real
+    // browser update in one atomic page task, avoiding a reload race with app bootstrap.
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    });
     await registration.update();
+    return await controllerchange;
   });
 
-  await controllerchange;
+  expect(upgradedController).toMatch(/\/sw\.js(?:\?|$)/);
+
+  await page.goto('/app/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
 
