@@ -15,6 +15,10 @@ const RELATIONAL_APPOINTMENT_RPCS = new Set([
   'schedule_clinical_appointment',
   'start_clinical_encounter',
 ]);
+const RELATIONAL_RPC_NAMES = new Set([
+  ...RELATIONAL_APPOINTMENT_RPCS,
+  'finalize_encounter_billing',
+]);
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -180,6 +184,9 @@ export async function handleRelationalIntegrityGuard(request, env, url = new URL
   const rpcRequest = url.pathname.startsWith(CLINICAL_RPC_PREFIX);
   if (!recordsRequest && !rpcRequest) return null;
 
+  const rpcName = rpcRequest ? decodeURIComponent(url.pathname.slice(CLINICAL_RPC_PREFIX.length)) : '';
+  if (rpcRequest && !RELATIONAL_RPC_NAMES.has(rpcName)) return null;
+
   const authenticate = deps.authenticate || authenticateClinicalRequest;
   const user = await authenticate(request, env);
   if (!user?.id) return json(401, { error: 'cloudflare_auth_required' });
@@ -188,9 +195,8 @@ export async function handleRelationalIntegrityGuard(request, env, url = new URL
   if (!input || typeof input !== 'object') return json(400, { error: 'invalid_payload' });
 
   if (rpcRequest) {
-    const name = decodeURIComponent(url.pathname.slice(CLINICAL_RPC_PREFIX.length));
-    if (RELATIONAL_APPOINTMENT_RPCS.has(name)) return validateAppointmentRpc(env, input, user.id);
-    if (name === 'finalize_encounter_billing') return validateFinalizeBillingRpc(env, input, user.id);
+    if (RELATIONAL_APPOINTMENT_RPCS.has(rpcName)) return validateAppointmentRpc(env, input, user.id);
+    if (rpcName === 'finalize_encounter_billing') return validateFinalizeBillingRpc(env, input, user.id);
     return null;
   }
 
