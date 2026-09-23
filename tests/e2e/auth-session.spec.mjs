@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.mjs';
 import { login, session } from './helpers.mjs';
 
 const CANONICAL = 'debora-lactacao-session';
@@ -38,7 +38,7 @@ for (const failure of [503, 429, 'offline']) {
 test('reload keeps the canonical session and does not resurrect a stale commercial alias', async ({ page }) => {
   await login(page);
   const fresh = await session(page);
-  const stale = { access_token: 'stale-token', refresh_token: 'stale-refresh' };
+  const stale = { access_token: 'synthetic-old-access', refresh_token: 'synthetic-old-refresh' };
 
   await page.evaluate(({ staleValue }) => {
     sessionStorage.setItem('commercial.saas.session.v1', JSON.stringify(staleValue));
@@ -57,6 +57,6 @@ test('reload keeps the canonical session and does not resurrect a stale commerci
 
   expect(values.canonical.access_token).toBe(fresh.access_token);
   for (const alias of values.aliases) {
-    expect(alias?.access_token).not.toBe('stale-token');
+    expect(alias?.access_token).not.toBe('synthetic-old-access');
   }
 });
