@@ -16,6 +16,20 @@ const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
 const DYNAMIC_DOCUMENT_CACHE_CONTROL = 'no-store, no-cache, must-revalidate';
 const REVALIDATE_ASSET_CACHE_CONTROL = 'no-cache, must-revalidate';
 const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = `
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((key) => key.startsWith('debora-lactacao-v'))
+      .map((key) => caches.delete(key)));
+    await self.registration.unregister();
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    await Promise.all(windows.map((client) => client.navigate(client.url).catch(() => undefined)));
+  })());
+});
+`;
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -48,6 +62,18 @@ function isPrivateRobotsPath(pathname) {
 function isImmutableVersionedAsset(url) {
   if (/^\/who\/v\d{4}-\d{2}-\d{2}\//.test(url.pathname)) return true;
   return (url.pathname === '/icon-192.png' || url.pathname === '/icon-512.png') && url.searchParams.has('v');
+}
+
+function legacyServiceWorkerRetirementResponse() {
+  return new Response(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT, {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'cache-control': DYNAMIC_DOCUMENT_CACHE_CONTROL,
+      'pragma': 'no-cache',
+      'expires': '0',
+      'service-worker-allowed': '/',
+    },
+  });
 }
 
 function withAssetCachePolicy(request, url, response) {
@@ -132,6 +158,10 @@ export default {
     const publicApiRequest = incomingUrl.pathname.startsWith('/api/');
     const ownedFilesRequest = incomingUrl.pathname.startsWith('/api/files/');
 
+    if (incomingUrl.pathname === '/service-worker.js') {
+      return legacyServiceWorkerRetirementResponse();
+    }
+
     // Auth, clinical data and files stay on their public owned paths. Only billing
     // keeps a private same-process map to its Asaas-specific implementation names.
     const normalized = normalizeOwnedApiRequest(request, incomingUrl);
@@ -201,7 +231,9 @@ export default {
         status: route.status,
         headers: {
           location: route.location,
-          'cache-control': 'public, max-age=300',
+          'cache-control': DYNAMIC_DOCUMENT_CACHE_CONTROL,
+          'pragma': 'no-cache',
+          'expires': '0',
         },
       });
     }
