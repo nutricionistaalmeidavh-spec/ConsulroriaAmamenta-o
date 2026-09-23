@@ -55,6 +55,15 @@ test('billing v2 materialization schedules an initial mount so early appointment
   );
 });
 
+test('Stage 12 billing remount preserves package_new for the appointment that just created its package', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
+  assert.match(
+    materialized,
+    /!packages\.length\|\|selection\.mode==='package_new'/,
+    'once package_new creates an active package, remount must keep package_new selectable for that same appointment instead of downgrading to individual',
+  );
+});
+
 test('Stage 12 note handoff cancels a pending wizard autosave before flushing the shared encounter', () => {
   const materialized = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
   assert.match(
