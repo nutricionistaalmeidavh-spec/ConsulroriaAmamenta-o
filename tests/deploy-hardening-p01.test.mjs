@@ -79,7 +79,8 @@ test('Playwright performs a real version N to N+1 service worker replacement', (
   assert.match(upgradeE2e, /readFileSync\([^\n]*public\/sw\.js/);
   assert.match(upgradeE2e, /registration\.update\(\)/);
   assert.match(upgradeE2e, /controllerchange/);
-  assert.match(upgradeE2e, /page\.reload/);
+  assert.match(upgradeE2e, /context\.newPage\(\)/);
+  assert.match(upgradeE2e, /\.reload\s*\(/);
   assert.match(upgradeE2e, /caches\.keys\(\)/);
 });
 
