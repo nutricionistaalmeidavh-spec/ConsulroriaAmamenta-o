@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures.mjs';
 import { login, session, uniqueLabel } from './helpers.mjs';
 
+// Playwright page.route() does not reliably intercept requests once a Service Worker
+// controls the page. P0 network-failure tests therefore disable SW only in this file;
+// the rest of the E2E suite keeps normal PWA behavior enabled.
+test.use({ serviceWorkers: 'block' });
+
 async function openSyntheticPatientForm(page, prefix) {
   const motherName = uniqueLabel(`${prefix} mother`);
   const babyName = uniqueLabel(`${prefix} baby`);
@@ -36,6 +41,7 @@ for (const status of [503, 429]) {
     await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
     await expect(page.locator('[data-patient-form-status]')).toContainText(`temporary ${status}`);
     expect((await session(page)).access_token).toBe(before.access_token);
+    expect(keys).toHaveLength(1);
 
     await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
     await expect(page.locator('[data-patient-title]')).toHaveText(`${motherName} + ${babyName}`);
