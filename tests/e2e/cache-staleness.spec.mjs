@@ -2,15 +2,31 @@ import { test, expect } from '@playwright/test';
 
 const CACHE_NAME = 'debora-lactacao-v1.14.2-cache-reset';
 const STALE_MARKER = 'STALE_ROOT_MARKER';
+const OFFLINE_PATHS = ['/app/', '/comercial/'];
 
 test.use({ serviceWorkers: 'allow' });
 
 async function installServiceWorkerAndSeedStaleRoot(page) {
-  await page.goto('/app/');
-  await page.waitForFunction(() => 'serviceWorker' in navigator && Boolean(navigator.serviceWorker.controller));
-  await page.evaluate(async ({ cacheName, staleMarker }) => {
+  await page.goto('/app/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(async () => {
     const registration = await navigator.serviceWorker.ready;
     await registration.update();
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 3000);
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+      });
+    }
+  });
+  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+  }
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+
+  await page.evaluate(async ({ cacheName, staleMarker }) => {
     const cache = await caches.open(cacheName);
     await cache.put('/', new Response(`<!doctype html><body>${staleMarker}</body>`, {
       headers: { 'content-type': 'text/html; charset=utf-8' },
@@ -24,9 +40,10 @@ async function installServiceWorkerAndSeedStaleRoot(page) {
   expect(seeded).toContain(STALE_MARKER);
 }
 
-for (const pathname of ['/app/', '/comercial/']) {
-  test(`${pathname} never falls back to cached root HTML when navigation is offline`, async ({ page, context }) => {
-    await installServiceWorkerAndSeedStaleRoot(page);
+test('app and commercial navigation never fall back to cached root HTML when offline', async ({ page, context }) => {
+  await installServiceWorkerAndSeedStaleRoot(page);
+
+  for (const pathname of OFFLINE_PATHS) {
     await context.setOffline(true);
     let navigationError = null;
     try {
@@ -39,6 +56,6 @@ for (const pathname of ['/app/', '/comercial/']) {
     } finally {
       await context.setOffline(false);
     }
-    expect(navigationError).toBeTruthy();
-  });
-}
+    expect(navigationError, `${pathname} must fail instead of rendering cached root HTML`).toBeTruthy();
+  }
+});
