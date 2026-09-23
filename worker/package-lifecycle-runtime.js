@@ -207,8 +207,8 @@ async function consumePackageItemV2(env,user,input){
 }
 
 export async function handlePackageLifecycleRuntime(request,env,url=new URL(request.url)){
-  if(!env.CLINICAL_DB||request.method!=='POST'||!url.pathname.startsWith('/rest/v1/rpc/'))return null;
-  const name=decodeURIComponent(url.pathname.slice('/rest/v1/rpc/'.length));
+  if(!env.CLINICAL_DB||request.method!=='POST'||!url.pathname.startsWith('/api/clinical/rpc/'))return null;
+  const name=decodeURIComponent(url.pathname.slice('/api/clinical/rpc/'.length));
   if(!['set_appointment_billing','consume_care_package_session_manual','add_care_package_item_v2','consume_care_package_item_v2'].includes(name))return null;
   const user=await authenticateClinicalRequest(request,env);
   if(!user?.id)return runtimeJson(401,{message:'Sessão expirada. Entre novamente.'});
