@@ -84,7 +84,7 @@ test('C02 backup exports a versioned complete clinical graph plus current R2 byt
     const restored = await runtime.mf.dispatchFetch('http://localhost/api/clinical/backup/restore', {
       method:'POST', headers:authHeaders(session), body:JSON.stringify(backup),
     });
-    assert.equal(restored.status, 200, await restored.text());
+    assert.equal(restored.status, 200);
     const result = await restored.json();
     assert.equal(result.verified, true);
     assert.equal(result.files, 1);
