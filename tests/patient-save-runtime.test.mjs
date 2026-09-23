@@ -157,10 +157,10 @@ test('new patient is written in one batch and remains visible after a runtime re
   const headers = { authorization: `Bearer ${token}` };
 
   const mothersResponse = await handleCloudflareClinicalRuntime(
-    new Request('https://app.test/rest/v1/mothers?select=*&order=created_at.desc', { headers }), env,
+    new Request('https://app.test/api/clinical/records/mothers?select=*&order=created_at.desc', { headers }), env,
   );
   const babiesResponse = await handleCloudflareClinicalRuntime(
-    new Request('https://app.test/rest/v1/babies?select=*&order=created_at.asc', { headers }), env,
+    new Request('https://app.test/api/clinical/records/babies?select=*&order=created_at.asc', { headers }), env,
   );
 
   assert.equal(mothersResponse.status, 200);
