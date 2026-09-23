@@ -181,3 +181,26 @@ test('R04 finalize_encounter_billing rejects an encounter from another appointme
     WHERE table_name='care_packages' AND record_key='pkg1'`).first();
   assert.equal(JSON.parse(pkg.record_json).sessions_used, 0, 'invalid linkage must not consume a package session');
 });
+
+test('R04 package finalization requires encounter_id so retries use one stable identity', async (t) => {
+  const runtime = await createLocalRuntime();
+  t.after(() => runtime.close());
+  const headers = await authHeaders(runtime);
+  await seed(runtime.db, 'mothers', 'm1', userId, { name: 'Mãe 1' });
+  await seed(runtime.db, 'care_packages', 'pkg1', userId, {
+    mother_id: 'm1', status: 'active', sessions_total: 3, sessions_used: 0, total_cents: 30000,
+  });
+  await seed(runtime.db, 'appointments', 'a1', userId, {
+    mother_id: 'm1', status: 'Em atendimento', billing_mode: 'package_active', package_id: 'pkg1',
+  });
+
+  const response = await api(runtime, '/api/clinical/rpc/finalize_encounter_billing', headers, {
+    method: 'POST', body: { p_appointment_id: 'a1' },
+  });
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.field, 'encounter_id');
+  const pkg = await runtime.db.prepare(`SELECT record_json FROM supabase_records
+    WHERE table_name='care_packages' AND record_key='pkg1'`).first();
+  assert.equal(JSON.parse(pkg.record_json).sessions_used, 0, 'missing encounter identity must not consume a package session');
+});
