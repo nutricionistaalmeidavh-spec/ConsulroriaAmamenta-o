@@ -166,6 +166,8 @@ jobs:
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate Block 1 and 2 Cloudflare regressions
         run: npm run test:cloudflare-regressions
+      - name: Install Block 5 test runtime
+        run: npm install --no-audit --no-fund
       - name: Validate native recovery and bootstrap
         run: npm run test:block5
       - name: Validate frontend Cloudflare cutover
