@@ -14,9 +14,11 @@ assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 
-// With CLINICAL_DB bound, every commercial billing route is intercepted before the legacy worker.
+// Commercial billing is intercepted by the D1 runtime and Block 7 terminates
+// unknown API routes locally. The retired worker/index.js is no longer reachable.
 assert.match(domain, /handleCloudflareBillingRuntime/);
-assert.match(domain, /cloudflareBillingResponse[\s\S]*coreWorker\.fetch/);
+assert.doesNotMatch(domain, /coreWorker\.fetch|import\s+coreWorker\s+from\s+['"]\.\/index\.js['"]/);
+assert.match(domain, /if \(url\.pathname\.startsWith\('\/api\/'\)\) return apiNotFound\(\)/);
 assert.match(runtime, /if \(!env\.CLINICAL_DB \|\| !ROUTES\.has\(url\.pathname\)\) return null/);
 assert.match(runtime, /\/api\/asaas\/checkout/);
 assert.match(runtime, /\/api\/webhooks\/asaas/);
