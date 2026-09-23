@@ -84,29 +84,33 @@ export async function handleAtomicAuthRefresh(request, env, url = new URL(reques
   const user = await runtimeUserById(env, row.user_id);
   if (!user) return json(401, { message: 'Sessão inválida.' });
 
-  // Prepare the replacement before consuming the old token. Only the request that
-  // atomically flips revoked_at from NULL is allowed to publish this replacement.
   const nextRefreshToken = randomToken();
   const nextRefreshHash = await sha256(nextRefreshToken);
   const accessToken = await signAccessToken(user, env);
   const nextExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000).toISOString();
 
-  const claimed = await db.prepare(`UPDATE auth_refresh_sessions
-    SET revoked_at = ?, last_used_at = ?
-    WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`)
-    .bind(now, now, tokenHash, now)
-    .run();
-  if (Number(claimed?.meta?.changes || 0) !== 1) {
-    return json(401, { message: 'Sessão já atualizada em outra aba.' });
-  }
-
   try {
-    await db.prepare(`INSERT INTO auth_refresh_sessions(token_hash,user_id,expires_at,created_at,last_used_at,revoked_at)
-      VALUES(?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL)`)
-      .bind(nextRefreshHash, user.id, nextExpiresAt)
-      .run();
+    // INSERT first, but only while the old token is still active. The following UPDATE
+    // runs in the same D1 batch/transaction. Concurrent batches serialize: the winner
+    // inserts+revokes, while the loser observes the revoked token and changes zero rows.
+    const [replacement, claim] = await db.batch([
+      db.prepare(`INSERT INTO auth_refresh_sessions(token_hash,user_id,expires_at,created_at,last_used_at,revoked_at)
+        SELECT ?, user_id, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+        FROM auth_refresh_sessions
+        WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?
+        LIMIT 1`)
+        .bind(nextRefreshHash, nextExpiresAt, tokenHash, now),
+      db.prepare(`UPDATE auth_refresh_sessions
+        SET revoked_at = ?, last_used_at = ?
+        WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`)
+        .bind(now, now, tokenHash, now),
+    ]);
+
+    if (Number(replacement?.meta?.changes || 0) !== 1 || Number(claim?.meta?.changes || 0) !== 1) {
+      return json(401, { message: 'Sessão já atualizada em outra aba.' });
+    }
   } catch (error) {
-    console.error('atomic refresh replacement failed', error);
+    console.error('atomic refresh rotation failed', error);
     return json(503, { message: 'Não foi possível atualizar a sessão. Entre novamente se o problema persistir.' });
   }
 
