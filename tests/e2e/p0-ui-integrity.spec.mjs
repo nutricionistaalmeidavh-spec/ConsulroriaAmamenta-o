@@ -21,13 +21,39 @@ async function createRecord(request, headers, table, body) {
   return (await response.json())[0];
 }
 
+async function startEncounter(request, headers, patient, { occurredAt, finalizePatch = null } = {}) {
+  const started = await request.post('/api/clinical/rpc/start_clinical_encounter', {
+    headers: { ...headers, 'content-type': 'application/json' },
+    data: {
+      p_mother_id: patient.mother.id,
+      p_baby_ids: [patient.babies[0].id],
+      p_starts_at: occurredAt || '2026-09-22T14:00:00.000Z',
+      p_appointment_type: 'Retorno',
+      p_request_key: uniqueLabel('p0-encounter'),
+    },
+  });
+  expect(started.status()).toBe(200);
+  const identity = await started.json();
+  if (!finalizePatch) return { id: identity.encounter_id, appointment_id: identity.appointment_id, record_version: 0 };
+
+  const finalized = await request.patch(`/api/clinical/records/clinical_encounters?id=eq.${encodeURIComponent(identity.encounter_id)}`, {
+    headers: { ...headers, 'content-type': 'application/json' },
+    data: { ...finalizePatch, _expected_version: 0 },
+  });
+  expect(finalized.status()).toBe(200);
+  return (await finalized.json())[0];
+}
+
 test('patient switch clears previous clinical projection before failed reads can leave stale data', async ({ page }) => {
   await login(page);
   const headers = await authHeaders(page);
   const first = await createPatient(page.request, headers, 'Stale A');
   const second = await createPatient(page.request, headers, 'Stale B');
   await createRecord(page.request, headers, 'weights', { baby_id: first.babies[0].id, measured_at: '2026-09-22T12:00:00.000Z', weight_g: 4321 });
-  await createRecord(page.request, headers, 'clinical_encounters', { mother_id: first.mother.id, baby_id: first.babies[0].id, status: 'finalized', occurred_at: '2026-09-22T13:00:00.000Z', chief_complaint: { notes: 'CLINICAL-A-ONLY' } });
+  await startEncounter(page.request, headers, first, {
+    occurredAt: '2026-09-22T13:00:00.000Z',
+    finalizePatch: { status: 'finalized', chief_complaint: { notes: 'CLINICAL-A-ONLY' } },
+  });
 
   await page.reload();
   await page.locator('[data-nav-target=patients]:visible').first().click();
@@ -65,7 +91,7 @@ test('clinical note save failure keeps the note open and preserves unsaved text'
   await login(page);
   const headers = await authHeaders(page);
   const patient = await createPatient(page.request, headers, 'Clinical note');
-  const encounter = await createRecord(page.request, headers, 'clinical_encounters', { mother_id: patient.mother.id, baby_id: patient.babies[0].id, status: 'draft', occurred_at: '2026-09-22T14:00:00.000Z', clinical_note: '' });
+  const encounter = await startEncounter(page.request, headers, patient, { occurredAt: '2026-09-22T14:00:00.000Z' });
   await page.waitForFunction(() => Boolean(window.DeboraClinicalNote?.openEncounter));
   await page.evaluate(id => window.DeboraClinicalNote.openEncounter(id, { direction: 'history' }), encounter.id);
   await expect(page.locator('#cn-overlay')).toBeVisible();
