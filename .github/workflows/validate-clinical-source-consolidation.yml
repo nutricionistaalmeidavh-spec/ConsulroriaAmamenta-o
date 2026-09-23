@@ -34,8 +34,6 @@ jobs:
           node-version: 22
       - run: npm install
       - run: node --test tests/clinical-source-*.test.mjs
-      - name: Validate canonical multi-client routing
-        run: node scripts/test-canonical-app-routing.mjs
       - name: Validate commercial and SaaS regressions
         run: |
           node scripts/test-commercial-funnel.mjs
@@ -56,6 +54,8 @@ jobs:
           node --check worker/index.js
           node --check worker/cloudflare-clinical-runtime.js
       - run: npm run build
+      - name: Validate canonical multi-client routing on materialized runtime
+        run: node scripts/test-canonical-app-routing.mjs
       - name: Verify canonical runtime is published
         run: |
           test -f dist/index.html

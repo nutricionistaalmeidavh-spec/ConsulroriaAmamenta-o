@@ -59,22 +59,17 @@ function bridgeCompatibleSession() {
     const canonical = validStoredSession(canonicalRaw);
     const commercial = validStoredSession(commercialRaw);
 
-    // `/app/` is reached from the commercial funnel. In that context the authenticated
-    // commercial session is authoritative and may safely seed the existing clinical key.
-    if (APP_CONTEXT.entryMode === 'app' && commercial) {
-      sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, commercialRaw);
-      localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, commercialRaw);
-      sessionStorage.setItem(CANONICAL_SESSION_KEY, commercialRaw);
-      return;
+    // The persistent session is authoritative after rotation. Explicit commercial
+    // handoff writes it before navigation; a reload must never restore old tokens.
+    const storedRaw = localStorage.getItem(LEGACY_CLINICAL_SESSION_KEY);
+    const selected = validStoredSession(storedRaw) ? storedRaw
+      : APP_CONTEXT.entryMode === 'app' && commercial ? commercialRaw
+        : legacy ? legacyRaw : canonical ? canonicalRaw : null;
+    if (!selected) return;
+    localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, selected);
+    for (const key of [LEGACY_CLINICAL_SESSION_KEY, CANONICAL_SESSION_KEY, COMMERCIAL_SESSION_KEY]) {
+      sessionStorage.setItem(key, selected);
     }
-
-    if (!localStorage.getItem(LEGACY_CLINICAL_SESSION_KEY) && (legacyRaw || canonicalRaw)) {
-      localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, legacyRaw || canonicalRaw);
-    }
-
-    // Root compatibility keeps Débora's already established clinical session untouched.
-    if (legacy && !canonical) sessionStorage.setItem(CANONICAL_SESSION_KEY, legacyRaw);
-    else if (!legacy && canonical) sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, canonicalRaw);
   } catch {
     // Restricted browser contexts may block sessionStorage. Login remains available.
   }

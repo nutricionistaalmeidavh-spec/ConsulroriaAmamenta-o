@@ -123,7 +123,7 @@ assert.match(bootstrap, /APP_CONTEXT\.entryMode === 'app'/, 'commercial session 
 assert.match(identityRuntime, /professional_profiles/, 'canonical identity runtime must resolve the professional profile');
 assert.match(identityRuntime, /owner_id=eq\.\$\{encodeURIComponent\(ownerId\)\}/, 'professional profile lookup must be owner-scoped');
 assert.match(identityRuntime, /Authorization:\s*`Bearer \$\{accessToken\}`/, 'profile lookup must use the authenticated session');
-assert.match(identityRuntime, /auth\/v1\/user/, 'identity runtime must hydrate user identity when an email-confirmation session lacks user payload');
+assert.match(identityRuntime, /api\/auth\/user/, 'identity runtime must hydrate user identity through the native D1 API');
 assert.doesNotMatch(identityRuntime, /mothers|clinical_encounters|financial_entries/, 'identity runtime must not read clinical tables');
 assert.match(identityRuntime, /commercial\.saas\.session\.v1/, 'identity may consume the same authenticated commercial session');
 

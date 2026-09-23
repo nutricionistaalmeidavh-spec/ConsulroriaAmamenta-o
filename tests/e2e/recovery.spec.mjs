@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {credentials} from '../helpers/cloudflare-local.mjs';
 test('commercial recovery resets the D1 password with a backend-generated link',async({page,request})=>{
   const email='recovery-e2e@example.test';
-  expect((await request.post('/auth/v1/signup',{data:{email,password:credentials.password}})).ok()).toBeTruthy();
+  expect((await request.post('/api/auth/signup',{data:{email,password:credentials.password}})).ok()).toBeTruthy();
   await page.goto('/comercial/index.html');
   await page.getByRole('button',{name:'Entrar',exact:true}).first().click();
   await page.locator('#login-form [name=email]').fill(email);
@@ -22,6 +22,6 @@ test('commercial recovery resets the D1 password with a backend-generated link',
   const loggedIn=page.waitForResponse(r=>r.url().includes('grant_type=password'));
   await page.locator('#login-form button[type=submit]').click();
   expect((await loggedIn).status()).toBe(200);
-  expect((await request.post('/auth/v1/token?grant_type=password',{data:{email,password:credentials.password}})).status()).toBe(400);
+  expect((await request.post('/api/auth/token?grant_type=password',{data:{email,password:credentials.password}})).status()).toBe(400);
   expect((await request.post('/api/auth/reset-password',{data:{token:link.hash.slice('#recovery_token='.length),password:'another-password'}})).status()).toBe(400);
 });

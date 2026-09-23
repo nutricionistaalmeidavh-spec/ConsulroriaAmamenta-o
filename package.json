@@ -23,7 +23,8 @@
     "test:block8": "node --test tests/block-8-owned-api.test.mjs",
     "test:block9": "node --test tests/block-9-d1-hardening.test.mjs",
     "test:block10": "node --test tests/block-10-zero-supabase-runtime.test.mjs",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "test:stability": "node scripts/materialize-clinical-source.mjs --write && node --test tests/session-stability.test.mjs tests/frontend-stability.test.mjs tests/patient-edit-atomic.test.mjs tests/cloudflare-recovery-d1.test.mjs"
   },
   "dependencies": {
     "lucide": "^0.469.0",

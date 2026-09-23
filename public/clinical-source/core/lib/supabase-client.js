@@ -57,6 +57,19 @@ export function createSupabaseClient(config, {
   function setSession(session) {
     if (!session) storage.removeItem(SESSION_KEY);
     else storage.setItem(SESSION_KEY, JSON.stringify(session));
+    // Feature modules still read these aliases. Keep them consistent on refresh/logout.
+    for (const store of [globalThis.localStorage, globalThis.sessionStorage]) {
+      if (!store) continue;
+      try {
+        for (const key of [SESSION_KEY, 'amamentacao-session', 'commercial.saas.session.v1']) {
+          if (session) store.setItem(key, JSON.stringify(session));
+          else store.removeItem(key);
+        }
+        if (session) store.setItem('debora-runtime-access-token', session.access_token);
+        else store.removeItem('debora-runtime-access-token');
+      } catch { /* Storage restrictions must not turn a successful request into failure. */ }
+    }
+    globalThis.__deboraAccessToken = session?.access_token || null;
     return session;
   }
 
@@ -68,7 +81,11 @@ export function createSupabaseClient(config, {
       body: body === undefined ? undefined : JSON.stringify(body)
     });
     const data = await parseResponse(res);
-    if (!res.ok) throw new Error(data?.msg || data?.message || data?.error || `Falha de autenticação (${res.status}).`);
+    if (!res.ok) {
+      const error = new Error(data?.msg || data?.message || data?.error || `Falha de autenticação (${res.status}).`);
+      error.status = res.status;
+      throw error;
+    }
     return data;
   }
 
@@ -81,6 +98,10 @@ export function createSupabaseClient(config, {
     if (!session?.access_token || !session?.refresh_token) {
       throw new Error('Sessão atualizada inválida.');
     }
+    if (getSession()?.refresh_token !== current.refresh_token) {
+      // A late refresh must not resurrect a session after logout/account change.
+      throw new Error('A sessão mudou durante a atualização. Tente novamente.');
+    }
     return setSession(session);
   }
 
@@ -88,7 +109,7 @@ export function createSupabaseClient(config, {
     if (refreshInFlight) return refreshInFlight;
     refreshInFlight = performRefresh()
       .catch((error) => {
-        setSession(null);
+        if ([400, 401, 403].includes(error.status)) setSession(null);
         throw error;
       })
       .finally(() => {
@@ -111,9 +132,9 @@ export function createSupabaseClient(config, {
       if (!current?.access_token || current.access_token === attemptedAccessToken) {
         current = await refreshSession();
       }
-    } catch {
-      setSession(null);
-      throw expiredSessionError();
+    } catch (error) {
+      if (!getSession()) throw expiredSessionError();
+      throw error;
     }
 
     res = await send(current);

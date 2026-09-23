@@ -152,32 +152,65 @@ const oldPatientSubmit = `patientForm?.addEventListener('submit', async (event) 
     reportError(error);
   }
 });`;
-const newPatientSubmit = `patientForm?.addEventListener('submit', async (event) => {
+const newPatientSubmit = `let patientSaveBusy = false;
+let patientSaveAttempt = null;
+patientForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (patientSaveBusy) return;
+  patientSaveBusy = true;
+  const submitButtons = [...patientForm.querySelectorAll('[type="submit"]')];
+  submitButtons.forEach(button => { button.disabled = true; });
   const status = document.querySelector('[data-patient-form-status]');
   try {
     const payload = patientFormPayload();
     const consents = patientConsentPayload();
-    let saved;
-    if (editingPatientId) {
-      const current = patientByMotherId(editingPatientId) || await appData.getPatient(editingPatientId);
-      saved = await appData.updatePatient({ mother: { ...payload.mother, id: current.mother.id }, babies: payload.babies });
-      await appData.saveConsents(saved.mother.id, consents);
-    } else {
-      saved = await repositories.client.workerRequest('/api/clinical/patients', {
-        method: 'POST',
-        body: { ...payload, consents }
-      });
+    const body = { ...payload, mother: { ...payload.mother, ...(editingPatientId ? { id: editingPatientId } : {}) }, consents };
+    const serialized = JSON.stringify(body);
+    if (!patientSaveAttempt || patientSaveAttempt.serialized !== serialized) {
+      patientSaveAttempt = { serialized, key: crypto.randomUUID() };
     }
-    editingPatientId = null;
+    const saved = await repositories.client.workerRequest('/api/clinical/patients', {
+      method: editingPatientId ? 'PATCH' : 'POST',
+      headers: { 'Idempotency-Key': patientSaveAttempt.key },
+      body
+    });
+    // If the following UI reload fails, the next submit edits this patient, never creates another.
+    editingPatientId = saved.mother.id;
+    patientSaveAttempt = null;
     await refreshData();
     await openPatient(saved.mother.id);
   } catch (error) {
     if (status) { status.textContent = error?.message || 'Não foi possível salvar.'; status.classList.add('error'); }
     reportError(error);
+  } finally {
+    patientSaveBusy = false;
+    submitButtons.forEach(button => { button.disabled = false; });
   }
 });`;
 replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');
+
+replaceText('core/app-shell.js',
+  '  editingPatientId = motherId || null;\n  patientForm.reset();',
+  '  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientForm.reset();',
+  'patient-save-attempt-lifecycle');
+
+const oldStartApp = `async function startApp() {
+  if (appStarted) return;
+  appStarted = true; showLoggedIn();
+  decorateClinicalChoices();
+  const pdfDefault = document.querySelector('[data-pdf-layout-default]'); if (pdfDefault) pdfDefault.value = selectedPdfLayout();
+  const pdfEncounter = document.querySelector('[data-pdf-layout-encounter]'); if (pdfEncounter) pdfEncounter.value = selectedPdfLayout();
+  try {
+    await refreshData();
+    if (!location.hash) history.replaceState({}, '', routes.home);
+    await renderRoute();
+  } catch (error) { reportError(error); }
+}`;
+replaceText('core/app-shell.js', oldStartApp,
+  oldStartApp.replace('appStarted = true; showLoggedIn();', 'appStarted = true;')
+    .replace('    await renderRoute();', '    await renderRoute();\n    showLoggedIn();')
+    .replace('reportError(error);', 'showLoggedOut(); throw error;'),
+  'await-startup-before-editing');
 
 for (const [outputPath, bytes] of resolved) {
   const runtimePath = `public/clinical-source/${outputPath}`;
