@@ -73,7 +73,7 @@ test('active Worker uses only owned auth, clinical and files route families', ()
   assert.deepEqual(offenders, [], `compatibility route families remain in active Worker graph:\n${offenders.join('\n')}`);
 
   const domain = read('worker/domain-entry.js');
-  assert.match(domain, /\/api\/auth/);
+  assert.match(domain, /handleCloudflareAuthRuntime/);
   assert.match(domain, /\/api\/clinical/);
   assert.match(domain, /\/api\/files/);
   assert.doesNotMatch(domain, /cloudflare-clinical-legacy-runtime|worker\/index\.js|\.\/index\.js/);
