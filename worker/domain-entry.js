@@ -8,6 +8,7 @@ import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
+import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -93,7 +94,20 @@ export function withNoIndex(response) {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
+    // Block 8 exposes owned API families while the D1/R2 compatibility handlers
+    // are retired incrementally. Translation happens only inside this Worker.
+    const incomingUrl = new URL(request.url);
+    const publicApiRequest = incomingUrl.pathname.startsWith('/api/');
+    const ownedFilesRequest = incomingUrl.pathname.startsWith('/api/files/');
+    const normalized = normalizeOwnedApiRequest(request, incomingUrl);
+    request = normalized.request;
+    const url = normalized.url;
+
+    // Signed file URLs do not require an authenticated user, but the owned files API
+    // must still fail closed if the D1-backed runtime itself is unavailable.
+    if (ownedFilesRequest && !env.CLINICAL_DB) {
+      return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
+    }
 
     if (url.pathname === '/api/seo/login' && request.method === 'POST') {
       return withNoIndex(await handleSeoPasswordLogin(request, env));
@@ -149,9 +163,9 @@ export default {
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
-    // Block 7: API routing terminates inside the Cloudflare-native entrypoint. There
-    // is deliberately no fallback to worker/index.js or any other backend.
-    if (url.pathname.startsWith('/api/')) return apiNotFound();
+    // Block 7/8: public API requests stay terminal even when their internal
+    // compatibility path no longer starts with /api/ after same-process translation.
+    if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();
 
     const route = resolvePublicHostRoute(url);
     if (route.type === 'redirect') {

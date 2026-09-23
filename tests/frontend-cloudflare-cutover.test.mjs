@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
+import { normalizeCloudflareFrontendSource } from '../scripts/materialize-cloudflare-frontend.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -33,6 +34,7 @@ function walk(dir) {
 }
 
 function text(path) { return readFileSync(resolve(ROOT, path), 'utf8'); }
+function runtimeText(path) { return normalizeCloudflareFrontendSource(text(path), path); }
 
 test('public runtime assets contain no retired Supabase project origin or publishable key', () => {
   const offenders = [];
@@ -52,11 +54,13 @@ test('Block 4 frontend modules no longer depend on Supabase configuration names'
   }
 });
 
-test('migrated frontend modules use same-origin Cloudflare compatibility routes', () => {
+test('materialized frontend modules use owned same-origin Cloudflare API families', () => {
   for (const path of TARGETS.slice(0, 7)) {
-    const source = text(path);
-    assert.doesNotMatch(source, /https:\/\/[^'"`]+\/rest\/v1|https:\/\/[^'"`]+\/storage\/v1|https:\/\/[^'"`]+\/auth\/v1/i, `${path} still builds an external backend URL`);
+    const source = runtimeText(path);
+    assert.doesNotMatch(source, /\/auth\/v1(?:\/|\b)|\/rest\/v1(?:\/|\b)|\/storage\/v1(?:\/|\b)/i, `${path} still emits a compatibility API route after materialization`);
+    assert.doesNotMatch(source, /https:\/\/[^'"`]+\/api\/(?:auth|clinical|files|billing)/i, `${path} builds an external API URL`);
   }
-  assert.match(text('public/canonical-identity-runtime.js'), /\/auth\/v1\/user/);
-  assert.match(text('public/documents-feature.js'), /\/api\/clinical\/media\/upload/);
+  assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/auth\/user/);
+  assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/clinical\/records\/professional_profiles/);
+  assert.match(runtimeText('public/documents-feature.js'), /\/api\/clinical\/media\/upload/);
 });

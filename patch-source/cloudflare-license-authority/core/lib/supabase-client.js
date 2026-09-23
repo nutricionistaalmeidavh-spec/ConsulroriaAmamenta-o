@@ -62,7 +62,7 @@ export function createSupabaseClient(config, {
 
   async function authRequest(path, { method = 'POST', body, token = null } = {}) {
     const headers = jsonHeaders(config, token ? { access_token: token } : null);
-    const res = await fetchImpl(`${base}/auth/v1/${path}`, {
+    const res = await fetchImpl(`${base}/api/auth/${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body)
@@ -168,7 +168,7 @@ export function createSupabaseClient(config, {
 
   async function rest(table, { method = 'GET', query = '', body, headers = {} } = {}) {
     const suffix = query ? `?${query}` : '';
-    const res = await authenticatedFetch((session) => fetchImpl(`${base}/rest/v1/${encodeURIComponent(table)}${suffix}`, {
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/api/clinical/records/${encodeURIComponent(table)}${suffix}`, {
       method,
       headers: jsonHeaders(config, session, headers),
       body: body === undefined ? undefined : JSON.stringify(body)
@@ -179,7 +179,7 @@ export function createSupabaseClient(config, {
   }
 
   async function rpc(name, body = {}) {
-    const res = await authenticatedFetch((session) => fetchImpl(`${base}/rest/v1/rpc/${encodeURIComponent(name)}`, {
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/api/clinical/rpc/${encodeURIComponent(name)}`, {
       method: 'POST',
       headers: jsonHeaders(config, session),
       body: JSON.stringify(body || {})
@@ -199,7 +199,7 @@ export function createSupabaseClient(config, {
         method: 'POST', body, headers, raw: true
       });
     }
-    const res = await authenticatedFetch((session) => fetchImpl(`${base}/storage/v1/${normalized}`, {
+    const res = await authenticatedFetch((session) => fetchImpl(`${base}/api/files/${normalized}`, {
       method,
       headers: {
         apikey: config.CLIENT_RUNTIME_KEY,

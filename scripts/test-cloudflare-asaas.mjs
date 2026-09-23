@@ -14,11 +14,12 @@ assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 
-// Commercial billing is intercepted by the D1 runtime and Block 7 terminates
-// unknown API routes locally. The retired worker/index.js is no longer reachable.
+// Commercial billing is intercepted by the D1 runtime and Block 7/8 terminates
+// public API routes locally even after same-process compatibility translation.
 assert.match(domain, /handleCloudflareBillingRuntime/);
+assert.match(domain, /normalizeOwnedApiRequest/);
 assert.doesNotMatch(domain, /coreWorker\.fetch|import\s+coreWorker\s+from\s+['"]\.\/index\.js['"]/);
-assert.match(domain, /if \(url\.pathname\.startsWith\('\/api\/'\)\) return apiNotFound\(\)/);
+assert.match(domain, /if \(publicApiRequest \|\| url\.pathname\.startsWith\('\/api\/'\)\) return apiNotFound\(\)/);
 assert.match(runtime, /if \(!env\.CLINICAL_DB \|\| !ROUTES\.has\(url\.pathname\)\) return null/);
 assert.match(runtime, /\/api\/asaas\/checkout/);
 assert.match(runtime, /\/api\/webhooks\/asaas/);
