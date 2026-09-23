@@ -123,6 +123,7 @@ overlay('config.js');
 overlay('core/lib/supabase-client.js');
 overlay('core/lib/repositories.js');
 overlay('core/lib/app-data.js');
+overlay('core/lib/backup-service.js');
 
 const oldConfigured = `export function configured() {
   return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
