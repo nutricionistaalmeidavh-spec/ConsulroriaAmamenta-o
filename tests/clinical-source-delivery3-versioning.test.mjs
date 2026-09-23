@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
 
 const noteSource = readFileSync('public/clinical-source/features/clinical-note-feature.js', 'utf8');
+const appDataSource = readFileSync('patch-source/cloudflare-license-authority/core/lib/app-data.js', 'utf8');
 
 async function seed(db, table, id, ownerId, record) {
   const now = new Date().toISOString();
@@ -156,4 +157,10 @@ test('R09 clinical note autosave tracks edit revisions, serializes writes and se
   assert.match(noteSource, /record_version/);
   assert.doesNotMatch(noteSource, /if\(cnState\.saving&&!force\)return enc/,
     'an in-flight save must not silently discard a newer edit');
+});
+
+test('R09 wizard encounter autosave participates in optimistic record versioning', () => {
+  assert.match(appDataSource, /encounterVersions/);
+  assert.match(appDataSource, /_expected_version/);
+  assert.match(appDataSource, /record_version/);
 });
