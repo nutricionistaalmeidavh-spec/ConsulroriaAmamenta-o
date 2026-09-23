@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.mjs';
 import { credentials } from '../helpers/cloudflare-local.mjs';
 
 test('login migrado, cadastro e edição sobrevivem ao reload no D1 local', async ({ page }) => {
@@ -15,12 +15,15 @@ test('login migrado, cadastro e edição sobrevivem ao reload no D1 local', asyn
   await page.locator('[name=consentData]').check();
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   await expect(page.locator('[data-patient-title]')).toHaveText('Paciente E2E + Bebê E2E');
+  await expect(page).toHaveURL(/#\/patient\/(?!form)[^/]+/);
+  const patientUrl = page.url();
   await page.reload();
   await expect(page.locator('[data-patient-title]')).toHaveText('Paciente E2E + Bebê E2E');
   await page.locator('[data-action=edit-patient]:visible').first().click();
   await page.locator('[name=motherName]').fill('Paciente E2E editada');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   await expect(page.locator('[data-patient-title]')).toHaveText('Paciente E2E editada + Bebê E2E');
+  await expect(page).toHaveURL(patientUrl);
   await page.reload();
   await expect(page.locator('[data-patient-title]')).toHaveText('Paciente E2E editada + Bebê E2E');
   await page.locator('[data-nav-target=settings]:visible').first().click();
