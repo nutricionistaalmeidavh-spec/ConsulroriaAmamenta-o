@@ -154,13 +154,18 @@ const oldPatientSubmit = `patientForm?.addEventListener('submit', async (event) 
 });`;
 const newPatientSubmit = `let patientSaveBusy = false;
 let patientSaveAttempt = null;
+let patientConsentsReady = true;
 patientForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const status = document.querySelector('[data-patient-form-status]');
+  if (editingPatientId && !patientConsentsReady) {
+    if (status) { status.textContent = 'Não foi possível carregar as autorizações. Reabra a edição e tente novamente.'; status.classList.add('error'); }
+    return;
+  }
   if (patientSaveBusy) return;
   patientSaveBusy = true;
   const submitButtons = [...patientForm.querySelectorAll('[type="submit"]')];
   submitButtons.forEach(button => { button.disabled = true; });
-  const status = document.querySelector('[data-patient-form-status]');
   try {
     const payload = patientFormPayload();
     const consents = patientConsentPayload();
@@ -191,8 +196,62 @@ replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-pat
 
 replaceText('core/app-shell.js',
   '  editingPatientId = motherId || null;\n  patientForm.reset();',
-  '  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientForm.reset();',
+  '  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientConsentsReady = !motherId;\n  patientForm.reset();',
   'patient-save-attempt-lifecycle');
+
+replaceText('core/app-shell.js',
+  '  currentBabyId = selectedBaby?.id || null;\n  setText(\'[data-patient-avatar]\', patientInitials(patient));',
+  '  currentBabyId = selectedBaby?.id || null;\n  renderPatientWeights([], selectedBaby);\n  renderPatientTimeline([]);\n  setText(\'[data-patient-avatar]\', patientInitials(patient));',
+  'patient-projection-reset-before-read');
+
+const oldConsentLoad = `  setText('[data-patient-form-title]', patient ? 'Editar paciente' : 'Nova paciente');
+  if (patient) {
+    try {
+      const consents = await appData.listConsents(patient.mother.id);
+      const map = Object.fromEntries(consents.map((c) => [c.consent_type, c.granted && !c.revoked_at]));
+      const pairs = { consentData: 'data_processing', consentWhatsapp: 'whatsapp', consentClinicalMedia: 'clinical_media', consentPublicMedia: 'public_media' };
+      for (const [name, type] of Object.entries(pairs)) { const el = patientForm.elements.namedItem(name); if (el) el.checked = Boolean(map[type]); }
+    } catch (error) { reportError(error); }
+  }
+  if (navigateRoute) navigate('patient-form', motherId); else showScreen('patient-form');`;
+const newConsentLoad = `  setText('[data-patient-form-title]', patient ? 'Editar paciente' : 'Nova paciente');
+  const editSubmitButtons = [...patientForm.querySelectorAll('[type="submit"]')];
+  const formStatus = document.querySelector('[data-patient-form-status]');
+  if (formStatus) { formStatus.textContent = ''; formStatus.classList.remove('error'); }
+  editSubmitButtons.forEach(button => { button.disabled = Boolean(patient); });
+  if (patient) {
+    try {
+      const consents = await appData.listConsents(patient.mother.id);
+      const map = Object.fromEntries(consents.map((c) => [c.consent_type, c.granted && !c.revoked_at]));
+      const pairs = { consentData: 'data_processing', consentWhatsapp: 'whatsapp', consentClinicalMedia: 'clinical_media', consentPublicMedia: 'public_media' };
+      for (const [name, type] of Object.entries(pairs)) { const el = patientForm.elements.namedItem(name); if (el) el.checked = Boolean(map[type]); }
+      patientConsentsReady = true;
+      editSubmitButtons.forEach(button => { button.disabled = false; });
+    } catch (error) {
+      patientConsentsReady = false;
+      if (formStatus) { formStatus.textContent = 'Não foi possível carregar as autorizações. Reabra a edição e tente novamente.'; formStatus.classList.add('error'); }
+      reportError(error);
+    }
+  }
+  if (navigateRoute) navigate('patient-form', motherId); else showScreen('patient-form');`;
+replaceText('core/app-shell.js', oldConsentLoad, newConsentLoad, 'consent-read-must-complete-before-edit');
+
+replaceText('features/clinical-note-feature.js',
+  'async function cnFlush(){clearTimeout(cnState.saveTimer);const ta=document.querySelector(\'#cn-note\');if(ta)await cnSave(ta.value,{force:true}).catch(()=>{})}',
+  'async function cnFlush(){clearTimeout(cnState.saveTimer);const ta=document.querySelector(\'#cn-note\');if(ta)await cnSave(ta.value,{force:true})}',
+  'clinical-note-flush-propagates');
+replaceText('features/clinical-note-feature.js',
+  "o.querySelector('[data-cn-close]').onclick=async()=>{await cnFlush();cnClose()}",
+  "o.querySelector('[data-cn-close]').onclick=async()=>{try{await cnFlush();cnClose()}catch{}}",
+  'clinical-note-close-on-save-only');
+replaceText('features/clinical-note-feature.js',
+  "o.querySelector('[data-cn-back]').onclick=async()=>{await cnFlush();if(cnState.direction==='backward')cnInvoke(cnState.pendingButton);else cnClose()}",
+  "o.querySelector('[data-cn-back]').onclick=async()=>{try{await cnFlush();if(cnState.direction==='backward')cnInvoke(cnState.pendingButton);else cnClose()}catch{}}",
+  'clinical-note-back-on-save-only');
+replaceText('features/clinical-note-feature.js',
+  "o.querySelector('[data-cn-continue]').onclick=async()=>{await cnFlush();if(cnState.direction==='forward')cnInvoke(cnState.pendingButton);else cnClose()}",
+  "o.querySelector('[data-cn-continue]').onclick=async()=>{try{await cnFlush();if(cnState.direction==='forward')cnInvoke(cnState.pendingButton);else cnClose()}catch{}}",
+  'clinical-note-continue-on-save-only');
 
 const oldStartApp = `async function startApp() {
   if (appStarted) return;
