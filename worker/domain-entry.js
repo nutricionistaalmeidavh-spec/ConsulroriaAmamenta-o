@@ -13,6 +13,9 @@ import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js'
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
+const DYNAMIC_DOCUMENT_CACHE_CONTROL = 'no-store, no-cache, must-revalidate';
+const REVALIDATE_ASSET_CACHE_CONTROL = 'no-cache, must-revalidate';
+const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -40,6 +43,38 @@ function rewriteAssetRequest(request, pathname) {
 
 function isPrivateRobotsPath(pathname) {
   return PRIVATE_ROBOTS_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isImmutableVersionedAsset(url) {
+  if (/^\/who\/v\d{4}-\d{2}-\d{2}\//.test(url.pathname)) return true;
+  return (url.pathname === '/icon-192.png' || url.pathname === '/icon-512.png') && url.searchParams.has('v');
+}
+
+function withAssetCachePolicy(request, url, response) {
+  const headers = new Headers(response.headers);
+  const contentType = headers.get('content-type') || '';
+  const isDocument = request.mode === 'navigate'
+    || contentType.includes('text/html')
+    || url.pathname.endsWith('.html');
+  const isCriticalBootstrap = url.pathname === '/sw.js' || url.pathname === '/manifest.webmanifest';
+
+  if (isDocument || isCriticalBootstrap) {
+    headers.set('cache-control', DYNAMIC_DOCUMENT_CACHE_CONTROL);
+    headers.set('pragma', 'no-cache');
+    headers.set('expires', '0');
+  } else if (isImmutableVersionedAsset(url)) {
+    headers.set('cache-control', IMMUTABLE_ASSET_CACHE_CONTROL);
+  } else {
+    headers.set('cache-control', REVALIDATE_ASSET_CACHE_CONTROL);
+  }
+
+  if (url.pathname === '/sw.js') headers.set('service-worker-allowed', '/');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function requiresCloudflareIdentity(request, url) {
@@ -172,11 +207,13 @@ export default {
     }
 
     if (route.type === 'rewrite') {
-      const response = await env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      const assetResponse = await env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      const response = withAssetCachePolicy(request, url, assetResponse);
       return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
     }
 
-    const response = await env.ASSETS.fetch(request);
+    const assetResponse = await env.ASSETS.fetch(request);
+    const response = withAssetCachePolicy(request, url, assetResponse);
     if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },
