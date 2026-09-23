@@ -144,6 +144,15 @@ async function validatePatchFinalState(env, url, patch, userId) {
   if (!table) return json(400, { error: 'invalid_table' });
   for (const entry of await scopedRows(env, table, userId)) {
     if (!queryMatches(entry.record, url)) continue;
+    if (table === 'clinical_encounters'
+      && String(entry.record?.status || '').toLowerCase() === 'finalized'
+      && patch.status != null
+      && String(patch.status).toLowerCase() !== 'finalized') {
+      return json(409, {
+        error: 'encounter_state_regression',
+        message: 'Um prontuário finalizado não pode voltar para rascunho.',
+      });
+    }
     const rejected = await validateRelationalRow(env, { ...entry.record, ...patch }, userId);
     if (rejected) return rejected;
   }
