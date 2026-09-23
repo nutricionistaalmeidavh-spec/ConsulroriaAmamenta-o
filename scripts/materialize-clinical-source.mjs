@@ -122,9 +122,10 @@ if (release['features/patient-fixes.css']) add('features/patient-fixes.css', rel
 overlay('config.js');
 overlay('core/lib/supabase-client.js');
 overlay('core/lib/repositories.js');
+overlay('core/lib/app-data.js');
 
 const oldConfigured = `export function configured() {
-  return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
+  return /^https:\/\/.+\.supabase\.co$/.test(config.SUPABASE_URL || '') &&
     /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
     !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
 }`;
