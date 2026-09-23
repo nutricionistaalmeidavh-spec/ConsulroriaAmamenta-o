@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { hardenDelivery1AppShell } from '../scripts/harden-delivery1-integrity.mjs';
 import { transformDelivery4Billing } from '../scripts/harden-delivery4-package-billing.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -51,5 +52,14 @@ test('billing v2 materialization schedules an initial mount so early appointment
     materialized,
     /bvSchedule\(\);\s*$/,
     'materialized billing v2 must schedule one initial mount after its listeners are installed',
+  );
+});
+
+test('Stage 12 note handoff cancels a pending wizard autosave before flushing the shared encounter', () => {
+  const materialized = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
+  assert.match(
+    materialized,
+    /flush:\(\)=>\{clearTimeout\(encounterAutosaveTimer\);encounterAutosaveTimer=null;return currentDraftEncounterId\?saveDraft\(\{silent:true\}\):Promise\.resolve\(null\)\}/,
+    'opening the SQL note must cancel the delayed wizard autosave before its explicit flush',
   );
 });
