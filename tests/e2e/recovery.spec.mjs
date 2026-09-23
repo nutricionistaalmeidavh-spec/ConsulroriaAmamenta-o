@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {credentials} from '../helpers/cloudflare-local.mjs';
 test('commercial recovery resets the D1 password with a backend-generated link',async({page,request})=>{
   const email='recovery-e2e@example.test';
