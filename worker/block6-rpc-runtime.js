@@ -200,8 +200,8 @@ export async function handleBlock6RpcRuntime(request, env, url = new URL(request
   if (!env.CLINICAL_DB) return null;
   const authenticate = deps.authenticate || authenticateClinicalRequest;
 
-  if (request.method === 'POST' && url.pathname.startsWith('/rest/v1/rpc/')) {
-    const name = decodeURIComponent(url.pathname.slice('/rest/v1/rpc/'.length));
+  if (request.method === 'POST' && url.pathname.startsWith('/api/clinical/rpc/')) {
+    const name = decodeURIComponent(url.pathname.slice('/api/clinical/rpc/'.length));
     if (RETIRED_RPCS.has(name)) {
       const retired = RETIRED_RPCS.get(name);
       return json(410, { error: 'rpc_retired', rpc: name, reason: retired.reason, replacement: retired.replacement });
@@ -214,8 +214,8 @@ export async function handleBlock6RpcRuntime(request, env, url = new URL(request
     return null;
   }
 
-  if (!url.pathname.startsWith('/rest/v1/')) return null;
-  const table = decodeURIComponent(url.pathname.slice('/rest/v1/'.length).split('/')[0] || '');
+  if (!url.pathname.startsWith('/api/clinical/records/')) return null;
+  const table = decodeURIComponent(url.pathname.slice('/api/clinical/records/'.length).split('/')[0] || '');
   if (!MEMBER_PORTAL_TABLES.has(table)) return null;
   const user = await authenticate(request, env);
   if (!user?.id) return json(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada. Entre novamente.' });
