@@ -89,37 +89,36 @@ test('canonical browser client emits owned auth, clinical RPC/record and file ro
   ]);
 });
 
-test('worker entry translates owned API families only inside the Cloudflare process', () => {
+test('auth, clinical and files stay native while billing alone keeps an internal compatibility map', () => {
   const domain = source('worker/domain-entry.js');
   assert.match(domain, /normalizeOwnedApiRequest/);
 
-  assert.equal(ownedApiInternalPath('/api/auth/token'), '/auth/v1/token');
-  assert.equal(ownedApiInternalPath('/api/auth/signup'), '/auth/v1/signup');
-  assert.equal(ownedApiInternalPath('/api/clinical/records/mothers'), '/rest/v1/mothers');
-  assert.equal(ownedApiInternalPath('/api/clinical/rpc/claim_member_portal'), '/rest/v1/rpc/claim_member_portal');
-  assert.equal(ownedApiInternalPath('/api/files/object/clinical-media/u/file.pdf'), '/storage/v1/object/clinical-media/u/file.pdf');
+  assert.equal(ownedApiInternalPath('/api/auth/token'), '/api/auth/token');
+  assert.equal(ownedApiInternalPath('/api/auth/signup'), '/api/auth/signup');
+  assert.equal(ownedApiInternalPath('/api/clinical/records/mothers'), '/api/clinical/records/mothers');
+  assert.equal(ownedApiInternalPath('/api/clinical/rpc/claim_member_portal'), '/api/clinical/rpc/claim_member_portal');
+  assert.equal(ownedApiInternalPath('/api/files/object/clinical-media/u/file.pdf'), '/api/files/object/clinical-media/u/file.pdf');
   assert.equal(ownedApiInternalPath('/api/billing/checkout'), '/api/asaas/checkout');
   assert.equal(ownedApiInternalPath('/api/billing/pending-status'), '/api/asaas/pending-status');
   assert.equal(ownedApiInternalPath('/api/billing/webhooks/asaas'), '/api/webhooks/asaas');
   assert.equal(ownedApiInternalPath('/api/billing/sandbox/checkout'), '/api/sandbox/asaas/checkout');
 
-  // Existing special endpoints are already owned and must not be rewritten.
   assert.equal(ownedApiInternalPath('/api/auth/recovery'), '/api/auth/recovery');
   assert.equal(ownedApiInternalPath('/api/clinical/patients'), '/api/clinical/patients');
 });
 
-test('owned API translation preserves method, query, headers and body', async () => {
+test('native clinical API preserves method, query, headers and body without route translation', async () => {
   const request = new Request('https://app.test/api/clinical/records/mothers?select=id&limit=1', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-contract': 'block-8' },
+    headers: { 'content-type': 'application/json', 'x-contract': 'block-10' },
     body: JSON.stringify({ name: 'Teste' }),
   });
   const normalized = normalizeOwnedApiRequest(request);
 
-  assert.equal(normalized.normalized, true);
-  assert.equal(normalized.url.toString(), 'https://app.test/rest/v1/mothers?select=id&limit=1');
+  assert.equal(normalized.normalized, false);
+  assert.equal(normalized.url.toString(), 'https://app.test/api/clinical/records/mothers?select=id&limit=1');
   assert.equal(normalized.request.method, 'POST');
-  assert.equal(normalized.request.headers.get('x-contract'), 'block-8');
+  assert.equal(normalized.request.headers.get('x-contract'), 'block-10');
   assert.deepEqual(await normalized.request.json(), { name: 'Teste' });
 });
 
