@@ -27,11 +27,7 @@ function database(env) {
   return env.CLINICAL_DB;
 }
 
-async function tableRows(env, table) {
-  const result = await database(env)
-    .prepare('SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = ?')
-    .bind(table)
-    .all();
+function parseRows(result) {
   return (result.results || []).map((row) => {
     try {
       return { key: row.record_key, ownerId: row.owner_id || null, record: JSON.parse(row.record_json) };
@@ -39,6 +35,36 @@ async function tableRows(env, table) {
       return null;
     }
   }).filter(Boolean);
+}
+
+async function tableRows(env, table, ownerId) {
+  if (!ownerId) return [];
+  const result = await database(env)
+    .prepare(`SELECT record_key,owner_id,record_json FROM supabase_records
+      WHERE table_name = ? AND (owner_id = ? OR (owner_id IS NULL AND json_extract(record_json,'$.owner_id') = ?))`)
+    .bind(table, ownerId, ownerId)
+    .all();
+  return parseRows(result);
+}
+
+async function accessRowsByMember(env, userId) {
+  if (!userId) return [];
+  const result = await database(env)
+    .prepare(`SELECT record_key,owner_id,record_json FROM supabase_records
+      WHERE table_name = 'member_portal_access' AND json_extract(record_json,'$.member_user_id') = ?`)
+    .bind(String(userId))
+    .all();
+  return parseRows(result);
+}
+
+async function accessRowsByEmail(env, email) {
+  if (!email) return [];
+  const result = await database(env)
+    .prepare(`SELECT record_key,owner_id,record_json FROM supabase_records
+      WHERE table_name = 'member_portal_access' AND lower(trim(json_extract(record_json,'$.email'))) = ?`)
+    .bind(String(email))
+    .all();
+  return parseRows(result);
 }
 
 function saveStatement(env, table, entry, record) {
@@ -78,28 +104,21 @@ function tierRank(value, fallback = -1) {
   return Object.hasOwn(TIER_RANK, key) ? TIER_RANK[key] : fallback;
 }
 
-function recordId(entry) {
-  return String(entry?.record?.id || entry?.key || '');
-}
-
-async function memberAccessRows(env) {
-  return tableRows(env, 'member_portal_access');
-}
-
 async function claimedAccess(env, user) {
   if (!user?.id) return null;
-  const rows = await memberAccessRows(env);
+  const rows = await accessRowsByMember(env, user.id);
   return rows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id)) || null;
 }
 
 async function claimMemberPortal(env, user) {
   const email = normalizedEmail(user?.email);
   if (!user?.id || !email) return json(401, { error: 'member_identity_required', message: 'Entre com o e-mail convidado para acessar a Área da Mãe.' });
-  const rows = await memberAccessRows(env);
-  const already = rows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id));
+  const alreadyRows = await accessRowsByMember(env, user.id);
+  const already = alreadyRows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id));
   if (already) return json(200, already.record);
 
-  const matchingInvites = rows.filter((entry) => isActive(entry.record?.active) && normalizedEmail(entry.record?.email) === email);
+  const matchingInvites = (await accessRowsByEmail(env, email))
+    .filter((entry) => isActive(entry.record?.active) && normalizedEmail(entry.record?.email) === email);
   const available = matchingInvites.filter((entry) => !String(entry.record?.member_user_id || '').trim());
   if (!matchingInvites.length) return json(404, { error: 'member_access_not_found', message: 'Convite ativo não encontrado para este e-mail.' });
   if (!available.length) return json(403, { error: 'member_access_already_claimed', message: 'Este convite já está vinculado a outra conta.' });
@@ -167,9 +186,10 @@ function portalRowsForAccess(table, entries, access, url, unlockEntries = []) {
 async function readMemberPortalTable(env, user, table, url) {
   const accessEntry = await claimedAccess(env, user);
   if (!accessEntry) return json(403, { error: 'member_access_claim_required', message: 'Vincule primeiro o convite da Área da Mãe.' });
+  const ownerId = String(accessEntry.record?.owner_id || '');
   const [entries, unlockEntries] = await Promise.all([
-    tableRows(env, table),
-    table === 'portal_content' ? tableRows(env, 'member_content_unlocks') : Promise.resolve([]),
+    tableRows(env, table, ownerId),
+    table === 'portal_content' ? tableRows(env, 'member_content_unlocks', ownerId) : Promise.resolve([]),
   ]);
   const rows = portalRowsForAccess(table, entries, accessEntry.record, url, unlockEntries);
   return json(200, rows);
