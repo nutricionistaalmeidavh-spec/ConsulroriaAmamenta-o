@@ -8,7 +8,7 @@ const storageSource=readFileSync(new URL('../worker/storage-consistency-runtime.
 const storageDeleteSource=readFileSync(new URL('../worker/storage-delete-claim-runtime.js', import.meta.url),'utf8');
 const documentsSource=readFileSync(new URL('../public/documents-feature.js', import.meta.url),'utf8');
 const patientSource=readFileSync(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url),'utf8');
-const albumSource=readFileSync(new URL('../public/clinical-source/features/album-feature.js', import.meta.url),'utf8');
+const albumSource=readFileSync(new URL('../public/album-feature.js', import.meta.url),'utf8');
 
 async function putRecord(db,table,key,record,owner=userId){
   const now='2026-09-01T10:00:00.000Z';
