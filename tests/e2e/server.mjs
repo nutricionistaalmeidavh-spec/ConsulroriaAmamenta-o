@@ -10,11 +10,25 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+async function resetClinicalState() {
+  await runtime.db.prepare('DROP TRIGGER IF EXISTS fail_patient_consent_e2e').run();
+  await runtime.db.prepare('DELETE FROM clinical_idempotency_keys').run();
+  await runtime.db.prepare('DELETE FROM supabase_records').run();
+  runtime.recoveryMessages.length = 0;
+}
+
 const ready = createServer(async (request, response) => {
   try {
     if (request.url === '/recovery-inbox') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify(runtime.recoveryMessages));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/control/reset-clinical') {
+      await resetClinicalState();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true }));
       return;
     }
 
