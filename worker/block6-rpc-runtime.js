@@ -13,6 +13,8 @@ const MEMBER_PORTAL_TABLES = new Set([
   'member_perks',
 ]);
 
+const TIER_RANK = Object.freeze({ free: 0, essential: 1, premium: 2 });
+
 function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -71,6 +73,11 @@ function isActive(value) {
   return !['false', '0', 'inactive', 'disabled', 'cancelled', 'canceled'].includes(normalized);
 }
 
+function tierRank(value, fallback = -1) {
+  const key = String(value || '').trim().toLowerCase();
+  return Object.hasOwn(TIER_RANK, key) ? TIER_RANK[key] : fallback;
+}
+
 function recordId(entry) {
   return String(entry?.record?.id || entry?.key || '');
 }
@@ -92,13 +99,13 @@ async function claimMemberPortal(env, user) {
   const already = rows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id));
   if (already) return json(200, already.record);
 
-  const invited = rows.find((entry) => isActive(entry.record?.active) && normalizedEmail(entry.record?.email) === email);
-  if (!invited) return json(404, { error: 'member_access_not_found', message: 'Convite ativo não encontrado para este e-mail.' });
-  const claimedBy = String(invited.record?.member_user_id || '').trim();
-  if (claimedBy && claimedBy !== String(user.id)) {
-    return json(403, { error: 'member_access_already_claimed', message: 'Este convite já está vinculado a outra conta.' });
-  }
+  const matchingInvites = rows.filter((entry) => isActive(entry.record?.active) && normalizedEmail(entry.record?.email) === email);
+  const available = matchingInvites.filter((entry) => !String(entry.record?.member_user_id || '').trim());
+  if (!matchingInvites.length) return json(404, { error: 'member_access_not_found', message: 'Convite ativo não encontrado para este e-mail.' });
+  if (!available.length) return json(403, { error: 'member_access_already_claimed', message: 'Este convite já está vinculado a outra conta.' });
+  if (available.length > 1) return json(409, { error: 'member_access_ambiguous', message: 'Há mais de um convite ativo para este e-mail. A profissional precisa manter apenas o acesso correto.' });
 
+  const invited = available[0];
   const now = new Date().toISOString();
   const next = { ...invited.record, member_user_id: user.id, claimed_at: invited.record?.claimed_at || now, updated_at: now };
   await saveEntry(env, 'member_portal_access', invited, next);
@@ -125,7 +132,7 @@ function sortAndLimit(rows, url) {
   return Number.isInteger(limit) && limit > 0 ? rows.slice(0, limit) : rows;
 }
 
-function portalRowsForAccess(table, entries, access, url) {
+function portalRowsForAccess(table, entries, access, url, unlockEntries = []) {
   const ownerId = String(access.owner_id || '');
   const motherId = String(access.mother_id || '');
   const requested = requestedOwner(url);
@@ -141,7 +148,18 @@ function portalRowsForAccess(table, entries, access, url) {
   } else if (table === 'member_perks') {
     rows = rows.filter((row) => (!row.mother_id || String(row.mother_id) === motherId) && isActive(row.active ?? true));
   } else if (table === 'portal_content') {
-    rows = rows.filter((row) => isActive(row.active ?? row.published ?? true));
+    const accessTier = tierRank(access.tier, 0);
+    const unlockedIds = new Set(unlockEntries
+      .filter((entry) => String(entry.ownerId || entry.record?.owner_id || '') === ownerId)
+      .map((entry) => entry.record)
+      .filter((unlock) => String(unlock.mother_id || '') === motherId && isActive(unlock.active ?? true))
+      .map((unlock) => String(unlock.content_id || ''))
+      .filter(Boolean));
+    rows = rows.filter((row) => {
+      if (!isActive(row.active ?? row.published ?? true)) return false;
+      const minTier = row.min_tier ? tierRank(row.min_tier, Number.POSITIVE_INFINITY) : TIER_RANK.free;
+      return accessTier >= minTier || unlockedIds.has(String(row.id || ''));
+    });
   }
   return sortAndLimit(rows, url);
 }
@@ -149,7 +167,11 @@ function portalRowsForAccess(table, entries, access, url) {
 async function readMemberPortalTable(env, user, table, url) {
   const accessEntry = await claimedAccess(env, user);
   if (!accessEntry) return json(403, { error: 'member_access_claim_required', message: 'Vincule primeiro o convite da Área da Mãe.' });
-  const rows = portalRowsForAccess(table, await tableRows(env, table), accessEntry.record, url);
+  const [entries, unlockEntries] = await Promise.all([
+    tableRows(env, table),
+    table === 'portal_content' ? tableRows(env, 'member_content_unlocks') : Promise.resolve([]),
+  ]);
+  const rows = portalRowsForAccess(table, entries, accessEntry.record, url, unlockEntries);
   return json(200, rows);
 }
 
