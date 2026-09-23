@@ -3,6 +3,8 @@ import { test, expect } from '@playwright/test';
 const CACHE_NAME = 'debora-lactacao-v1.14.2-cache-reset';
 const STALE_MARKER = 'STALE_ROOT_MARKER';
 
+test.use({ serviceWorkers: 'allow' });
+
 async function installServiceWorkerAndSeedStaleRoot(page) {
   await page.goto('/app/');
   await page.waitForFunction(() => 'serviceWorker' in navigator && Boolean(navigator.serviceWorker.controller));
