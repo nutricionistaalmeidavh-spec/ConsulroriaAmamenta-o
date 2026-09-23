@@ -31,7 +31,7 @@ test('concurrent protected requests share one refresh and retry once with the ne
 
   const fetchImpl = async (input, options = {}) => {
     const url = String(input);
-    if (url === 'https://app.test/auth/v1/token?grant_type=refresh_token') {
+    if (url === 'https://app.test/api/auth/token?grant_type=refresh_token') {
       refreshCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 15));
       return jsonResponse(200, {
@@ -78,7 +78,7 @@ test('a failed refresh clears the local session and does not replay the protecte
 
   const fetchImpl = async (input, options = {}) => {
     const url = String(input);
-    if (url === 'https://app.test/auth/v1/token?grant_type=refresh_token') {
+    if (url === 'https://app.test/api/auth/token?grant_type=refresh_token') {
       refreshCalls += 1;
       return jsonResponse(401, { error: 'invalid_refresh_token' });
     }
@@ -102,7 +102,7 @@ test('a retried 401 is terminal and cannot start a second refresh loop', async (
 
   const fetchImpl = async (input) => {
     const url = String(input);
-    if (url === 'https://app.test/auth/v1/token?grant_type=refresh_token') {
+    if (url === 'https://app.test/api/auth/token?grant_type=refresh_token') {
       refreshCalls += 1;
       return jsonResponse(200, { access_token: 'still-rejected', refresh_token: 'refresh-2' });
     }
