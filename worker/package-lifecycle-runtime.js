@@ -2,8 +2,11 @@ import {authenticateClinicalRequest} from './cloudflare-auth-runtime.js';
 import {runtimeJson} from './cloudflare-clinical-runtime.js';
 
 function db(env){if(!env.CLINICAL_DB)throw new Error('clinical_db_not_configured');return env.CLINICAL_DB}
-async function tableRows(env,table){
-  const result=await db(env).prepare('SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = ?').bind(table).all();
+async function tableRows(env,table,userId){
+  if(!userId)return[];
+  const result=await db(env).prepare(`SELECT record_key,owner_id,record_json FROM supabase_records
+    WHERE table_name = ? AND (owner_id = ? OR (owner_id IS NULL AND json_extract(record_json,'$.owner_id') = ?))`)
+    .bind(table,userId,userId).all();
   return(result.results||[]).map(row=>{try{return{key:row.record_key,ownerId:row.owner_id||null,record:JSON.parse(row.record_json)}}catch{return null}}).filter(Boolean);
 }
 function owned(entry,userId){return Boolean(entry)&&(String(entry.ownerId||entry.record?.owner_id||'')===String(userId));}
@@ -41,7 +44,7 @@ function packagePayload(pkg,{idempotent=false,billingMode=null}={}){
 }
 function requestKey(input){return String(input?.p_request_key||'').trim()}
 function recordId(entry){return String(entry?.record?.id||entry?.key||'')}
-async function ownedRecord(env,table,id,userId){return(await tableRows(env,table)).find(entry=>recordId(entry)===String(id)&&owned(entry,userId))||null}
+async function ownedRecord(env,table,id,userId){return(await tableRows(env,table,userId)).find(entry=>recordId(entry)===String(id)&&owned(entry,userId))||null}
 async function ownedAppointment(env,id,userId){return ownedRecord(env,'appointments',id,userId)}
 async function ownedPackage(env,id,userId){return ownedRecord(env,'care_packages',id,userId)}
 async function runAtomic(env,statements){
@@ -50,7 +53,7 @@ async function runAtomic(env,statements){
   const out=[];for(const statement of statements)out.push(await statement.run());return out;
 }
 async function packageSessions(env,userId,packageId){
-  return(await tableRows(env,'care_package_sessions')).filter(session=>
+  return(await tableRows(env,'care_package_sessions',userId)).filter(session=>
     owned(session,userId)&&String(session.record?.package_id||session.record?.care_package_id||'')===String(packageId)
   );
 }
@@ -67,7 +70,7 @@ async function reconcileBeforeNewPackage(request,env,user,input){
   const appointment=await ownedAppointment(env,input.p_appointment_id,user.id);
   if(!appointment)return null;
   const motherId=appointment.record.mother_id;
-  const packageEntries=(await tableRows(env,'care_packages')).filter(entry=>owned(entry,user.id)&&String(entry.record?.mother_id||'')===String(motherId)&&entry.record?.status==='active');
+  const packageEntries=(await tableRows(env,'care_packages',user.id)).filter(entry=>owned(entry,user.id)&&String(entry.record?.mother_id||'')===String(motherId)&&entry.record?.status==='active');
   let blocking=null;
   for(const entry of packageEntries){
     const pkg=entry.record;
@@ -236,7 +239,7 @@ async function addPackageItemV2(env,user,input){
 
   const packageEntry=await ownedPackage(env,packageId,user.id);
   if(!packageEntry||packageEntry.record?.status==='cancelled')return runtimeJson(404,{message:'Plano não encontrado, cancelado ou sem permissão.'});
-  const existingByKey=(await tableRows(env,'care_package_items')).find(entry=>String(entry.record?.request_key||'')===key||String(entry.key)===key);
+  const existingByKey=(await tableRows(env,'care_package_items',user.id)).find(entry=>String(entry.record?.request_key||'')===key||String(entry.key)===key);
   if(existingByKey){
     if(!owned(existingByKey,user.id)||String(existingByKey.record?.package_id||'')!==packageId)return runtimeJson(409,{message:'Identificador da operação já utilizado.',error:'request_key_conflict'});
     const currentPackage=(await ownedPackage(env,packageId,user.id))?.record||packageEntry.record;
@@ -263,7 +266,7 @@ async function addPackageItemV2(env,user,input){
       statements.push(saveStatement(env,'financial_entries',linked,financial));
     }else{
       const financialId=key;
-      const collision=(await tableRows(env,'financial_entries')).find(entry=>String(entry.key)===financialId);
+      const collision=(await tableRows(env,'financial_entries',user.id)).find(entry=>String(entry.key)===financialId);
       if(collision&&!owned(collision,user.id))return runtimeJson(409,{message:'Identificador da operação já utilizado.',error:'request_key_conflict'});
       const financial={
         id:financialId,owner_id:user.id,mother_id:item.mother_id,package_id:packageId,package_item_id:item.id,
@@ -289,7 +292,7 @@ async function consumePackageItemV2(env,user,input){
   const packageEntry=await ownedPackage(env,item.package_id,user.id);
   if(!packageEntry||packageEntry.record?.status==='cancelled')return runtimeJson(404,{message:'Plano não encontrado, cancelado ou sem permissão.'});
 
-  const usages=await tableRows(env,'care_package_item_usages');
+  const usages=await tableRows(env,'care_package_item_usages',user.id);
   const sameKey=usages.find(entry=>String(entry.record?.request_key||'')===key||String(entry.key)===key);
   if(sameKey){
     if(!owned(sameKey,user.id)||String(sameKey.record?.package_item_id||'')!==itemId)return runtimeJson(409,{message:'Identificador da operação já utilizado.',error:'request_key_conflict'});
@@ -317,7 +320,7 @@ async function consumePackageItemV2(env,user,input){
     appointment_id:appointmentId||null,encounter_id:encounterId||null,notes:String(input?.p_notes||''),request_key:key,
     consumed_at:now,used_at:now,created_at:now,updated_at:now
   };
-  const allItems=(await tableRows(env,'care_package_items')).filter(entry=>owned(entry,user.id)&&String(entry.record?.package_id||'')===String(item.package_id));
+  const allItems=(await tableRows(env,'care_package_items',user.id)).filter(entry=>owned(entry,user.id)&&String(entry.record?.package_id||'')===String(item.package_id));
   const openItems=allItems.some(entry=>{
     const candidate=recordId(entry)===itemId?nextItem:entry.record;
     return candidate?.status!=='cancelled'&&Number(candidate?.quantity_used||0)<Number(candidate?.quantity_total||0);
