@@ -28,11 +28,11 @@ function followupDue(label, baseValue) {
   return due.toISOString();
 }
 
-function finalizationWeights(encounter = {}) {
+function finalizationWeights(encounter = {}, measuredAtOverride = null) {
   const ids = Array.isArray(encounter.identification?.babyIds)
     ? encounter.identification.babyIds.filter(Boolean)
     : encounter.baby_id ? [encounter.baby_id] : [];
-  const measuredAt = encounter.identification?.startsAt || encounter.occurred_at || new Date().toISOString();
+  const measuredAt = measuredAtOverride || encounter.occurred_at || encounter.identification?.startsAt || new Date().toISOString();
   return ids.map((babyId) => {
     const assessment = encounter.baby_assessment?.byBaby?.[babyId]
       || (ids.length === 1 ? encounter.baby_assessment : {})
@@ -94,24 +94,21 @@ export function createAppData(repos) {
     if (!startAttempt || startAttempt.signature !== signature) {
       startAttempt = { signature, key: payload.p_request_key || requestKey() };
     }
-    try {
-      const result = await repos.client.rpc('start_clinical_encounter', {
-        ...unsigned,
-        p_request_key: payload.p_request_key || startAttempt.key,
-      });
-      startAttempt = null;
-      return result;
-    } catch (error) {
-      throw error;
-    }
+    const result = await repos.client.rpc('start_clinical_encounter', {
+      ...unsigned,
+      p_request_key: payload.p_request_key || startAttempt.key,
+    });
+    startAttempt = null;
+    return result;
   }
 
   function queueEncounterWrite(id, work) {
     const previous = encounterWriteChains.get(id) || Promise.resolve();
     const next = previous.catch(() => null).then(work);
-    encounterWriteChains.set(id, next.finally(() => {
+    encounterWriteChains.set(id, next);
+    next.finally(() => {
       if (encounterWriteChains.get(id) === next) encounterWriteChains.delete(id);
-    }));
+    }).catch(() => null);
     return next;
   }
 
@@ -131,7 +128,7 @@ export function createAppData(repos) {
         throw new Error('Agendamento do prontuário não encontrado para finalizar.');
       }
       const appointmentPatch = pendingAppointmentFinalization.get(appointmentId) || {};
-      const startsAt = payload.identification?.startsAt || appointmentPatch.starts_at || new Date().toISOString();
+      const startsAt = appointmentPatch.starts_at || payload.occurred_at || payload.identification?.startsAt || new Date().toISOString();
       const followupAt = followupDue(payload.care_plan?.followup, startsAt);
       const amountCents = Math.max(0, Math.round(Number(payload.identification?.value || 0) * 100));
       const result = await repos.client.rpc('finalize_clinical_encounter_atomic', {
@@ -140,7 +137,7 @@ export function createAppData(repos) {
         p_encounter_id: id,
         p_appointment_patch: appointmentPatch,
         p_encounter_patch: payload,
-        p_weights: finalizationWeights(payload),
+        p_weights: finalizationWeights(payload, startsAt),
         p_followup: followupAt ? {
           baby_id: payload.baby_id || null,
           due_at: followupAt,
@@ -178,6 +175,22 @@ export function createAppData(repos) {
     return repos.weights.create(payload);
   }
 
+  async function createOrSupersedeFollowup(payload = {}) {
+    if (payload.encounter_id) {
+      const existing = await repos.followups.list({
+        query: `select=*&encounter_id=eq.${encodeURIComponent(payload.encounter_id)}&status=eq.Pendente&limit=1`
+      });
+      if (existing[0]?.id) return existing[0];
+    }
+    return repos.client.rpc('create_or_supersede_followup', {
+      p_mother_id: payload.mother_id,
+      p_baby_id: payload.baby_id || null,
+      p_encounter_id: payload.encounter_id,
+      p_due_at: payload.due_at,
+      p_notes: payload.notes || ''
+    });
+  }
+
   return {
     repos,
     listPatients,
@@ -195,13 +208,7 @@ export function createAppData(repos) {
     addWeight,
     listWeights: (babyId) => repos.weights.list({ query: `select=*&baby_id=eq.${encodeURIComponent(babyId)}&order=measured_at.asc` }),
     createFollowup: (payload) => repos.followups.create(payload),
-    createOrSupersedeFollowup: (payload) => repos.client.rpc('create_or_supersede_followup', {
-      p_mother_id: payload.mother_id,
-      p_baby_id: payload.baby_id || null,
-      p_encounter_id: payload.encounter_id,
-      p_due_at: payload.due_at,
-      p_notes: payload.notes || ''
-    }),
+    createOrSupersedeFollowup,
     listFollowups: ({ status } = {}) => repos.followups.list({ query: `select=*&order=due_at.asc${status ? `&status=eq.${encodeURIComponent(status)}` : ''}` }),
     completeFollowup: (id, completedAt = new Date().toISOString()) => repos.followups.update(id, { status: 'Concluído', completed_at: completedAt }),
     createFinancialEntry: (payload) => repos.financial.create(payload),
