@@ -1,11 +1,12 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import {
+  guardedRecordStatement,
+  idempotencyInsertStatement,
+  idempotencyResponse,
+  isIdempotencyConflict,
+} from './d1-record-store.js';
 
 const PRODUCT_CODE = 'debora-lactacao';
-const INSERT_RECORD_SQL = `INSERT INTO supabase_records(
-  table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
-) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET
-  owner_id=excluded.owner_id,record_json=excluded.record_json,source_created_at=excluded.source_created_at,
-  source_updated_at=excluded.source_updated_at,migrated_at=excluded.migrated_at`;
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -34,17 +35,8 @@ function normalizedConsents(input) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-function recordStatement(db, table, row, key, ownerIndex) {
-  const now = new Date().toISOString();
-  return db.prepare(INSERT_RECORD_SQL).bind(
-    table,
-    key,
-    ownerIndex || null,
-    JSON.stringify(row),
-    row.created_at || now,
-    row.updated_at || now,
-    now,
-  );
+function recordStatement(db, table, row, key, ownerIndex, now) {
+  return guardedRecordStatement(db, table, key, row, ownerIndex, now);
 }
 
 async function resolveAccess(env, email) {
@@ -66,6 +58,11 @@ async function ownedMotherCount(db, userId) {
     .bind(userId)
     .first();
   return Number(row?.n || 0);
+}
+
+function requestIdempotencyKey(request) {
+  const value = String(request.headers.get('idempotency-key') || '').trim();
+  return value && value.length <= 200 ? value : '';
 }
 
 export function buildNewPatientRecords(input, user, {
@@ -119,9 +116,15 @@ export async function persistNewPatient(env, user, input, {
   resolveProductAccess = resolveAccess,
   now = new Date().toISOString(),
   uuid = () => crypto.randomUUID(),
+  idempotencyKey = '',
 } = {}) {
   const db = env.CLINICAL_DB;
   if (!db) throw writeError('clinical_db_not_configured', 'Banco clínico indisponível.', 503);
+
+  if (idempotencyKey) {
+    const replay = await idempotencyResponse(db, user.id, 'create_patient', idempotencyKey, now);
+    if (replay) return replay;
+  }
 
   const access = await resolveProductAccess(env, user?.email || '');
   if (access?.commercial && Number.isInteger(access.patientLimit)) {
@@ -138,13 +141,24 @@ export async function persistNewPatient(env, user, input, {
 
   const records = buildNewPatientRecords(input, user, { now, uuid });
   const statements = [
-    recordStatement(db, 'mothers', records.mother, records.mother.id, user.id),
-    ...records.babies.map((baby) => recordStatement(db, 'babies', baby, baby.id, user.id)),
-    ...records.consents.map((consent) => recordStatement(db, 'consents', consent, consent.id, user.id)),
+    recordStatement(db, 'mothers', records.mother, records.mother.id, user.id, now),
+    ...records.babies.map((baby) => recordStatement(db, 'babies', baby, baby.id, user.id, now)),
+    ...records.consents.map((consent) => recordStatement(db, 'consents', consent, consent.id, user.id, now)),
   ];
+  if (idempotencyKey) {
+    statements.push(idempotencyInsertStatement(db, user.id, 'create_patient', idempotencyKey, records, now));
+  }
 
-  // D1 batch is transactional: a failed statement rolls the whole patient creation back.
-  await db.batch(statements);
+  // D1 batch is transactional: patient graph and idempotency claim commit together.
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    if (idempotencyKey && isIdempotencyConflict(error)) {
+      const replay = await idempotencyResponse(db, user.id, 'create_patient', idempotencyKey, now);
+      if (replay) return replay;
+    }
+    throw error;
+  }
   return records;
 }
 
@@ -162,7 +176,10 @@ export async function handleCloudflarePatientWrite(request, env, url = new URL(r
   }
 
   try {
-    const saved = await persistNewPatient(env, user, input, deps);
+    const saved = await persistNewPatient(env, user, input, {
+      ...deps,
+      idempotencyKey: deps.idempotencyKey ?? requestIdempotencyKey(request),
+    });
     return json(201, saved);
   } catch (error) {
     console.error('patient write failed', error);
