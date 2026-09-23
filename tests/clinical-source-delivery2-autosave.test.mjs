@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAppData } from '../public/clinical-source/core/lib/app-data.js';
+import { createAppData } from '../patch-source/delivery2/core/lib/app-data.js';
 
 test('C01 finalization drains the active autosave and rejects any newer draft', async () => {
   const calls = [];
