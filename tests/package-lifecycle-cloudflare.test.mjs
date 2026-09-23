@@ -34,9 +34,13 @@ class FakeD1{
     throw new Error(`unexpected first SQL: ${sql}`);
   }
   async all(sql,args){
-    if(/SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?/i.test(sql)){
+    if(/SELECT record_key,owner_id,record_json FROM supabase_records[\s\S]+WHERE table_name = \?/i.test(sql)){
       const table=String(args[0]);
-      return{results:[...this.records.values()].filter(x=>x.table===table).map(x=>({record_key:x.key,owner_id:x.ownerId,record_json:JSON.stringify(x.record)}))};
+      const ownerId=args.length>=3?String(args[1]||''):'';
+      const rows=[...this.records.values()].filter(x=>x.table===table&&(
+        !ownerId||String(x.ownerId||'')===ownerId||(!x.ownerId&&String(x.record?.owner_id||'')===ownerId)
+      ));
+      return{results:rows.map(x=>({record_key:x.key,owner_id:x.ownerId,record_json:JSON.stringify(x.record)}))};
     }
     throw new Error(`unexpected all SQL: ${sql}`);
   }
