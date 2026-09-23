@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -21,6 +22,29 @@ function writeTarget(relativePath, transform) {
   if (MODE === 'check' && next !== source) throw new Error(`${relativePath}: P1 hardening ainda não materializado`);
   if (MODE === 'write' && next !== source) writeFileSync(path, next, 'utf8');
   return next !== source;
+}
+
+function sha256(text) {
+  return createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex');
+}
+
+function syncClinicalManifest() {
+  const notePath = resolve(ROOT, 'public/clinical-source/features/clinical-note-feature.js');
+  const manifestPath = resolve(ROOT, 'public/clinical-source/manifest.json');
+  const note = readFileSync(notePath, 'utf8');
+  const source = readFileSync(manifestPath, 'utf8');
+  const manifest = JSON.parse(source);
+  const entry = manifest?.modules?.['features/clinical-note-feature.js'];
+  if (!entry) throw new Error('clinical manifest: módulo de prontuário ausente');
+  const hash = sha256(note);
+  if (entry.sha256 === hash) return false;
+  if (MODE === 'check') throw new Error('clinical manifest: hash do prontuário está desatualizado');
+  entry.sha256 = hash;
+  if (!String(entry.source || '').includes('+p1-session-read-hardening')) {
+    entry.source = `${entry.source || 'clinical-note'}+p1-session-read-hardening`;
+  }
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  return true;
 }
 
 const docsRest = `function documentsRuntimeClient(){const client=window.DeboraRuntimeClient;if(!client?.rest)throw new Error('Cliente de sessão indisponível.');return client}\nasync function rest(path,{method='GET',body=null,headers={}}={}){\n  const [table,...queryParts]=String(path).split('?');\n  return documentsRuntimeClient().rest(table,{method,query:queryParts.join('?'),body:body==null?undefined:body,headers});\n}\n`;
@@ -60,6 +84,8 @@ if (writeTarget('public/clinical-source/features/clinical-note-feature.js', (sou
   next = next.replaceAll('.catch(()=>[])', '');
   return next;
 })) changed.push('clinical-note');
+
+if (syncClinicalManifest()) changed.push('clinical-manifest');
 
 if (writeTarget('public/patient-records-hub.js', (source) => source
   .replace('DOC.consents(motherId).catch(()=>[])', 'DOC.consents(motherId)')
