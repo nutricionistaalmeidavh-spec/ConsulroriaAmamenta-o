@@ -16,6 +16,11 @@ on:
       - 'scripts/normalize-growth-runtime.mjs'
       - 'tests/e2e/**'
       - 'tests/helpers/**'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/block-6-rpc-closure.test.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.js'
@@ -34,6 +39,11 @@ on:
       - 'scripts/normalize-growth-runtime.mjs'
       - 'tests/e2e/**'
       - 'tests/helpers/**'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/block-6-rpc-closure.test.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.js'
@@ -65,6 +75,8 @@ jobs:
           fi
       - name: Run stability contracts
         run: npm run test:stability
+      - name: Run P1 resilience contracts
+        run: npm run test:p1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser E2E suite
