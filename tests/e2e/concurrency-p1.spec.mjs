@@ -12,7 +12,10 @@ async function createPatient(page) {
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   const response = await created;
   expect(response.status()).toBe(201);
-  return { patient: await response.json(), mother, baby };
+  const patient = await response.json();
+  await expect(page.locator('[data-patient-title]')).toContainText(baby);
+  await expect(page).toHaveURL(new RegExp(`#\\/patient\\/${patient.mother.id}$`));
+  return { patient, mother, baby };
 }
 
 test('two tabs may be last-write-wins for distinct edits but never partially corrupt the patient aggregate', async ({ page }) => {
