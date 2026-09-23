@@ -8,6 +8,8 @@ const STALE_MARKER = 'STALE_VERSION_N';
 const LEGACY_WORKER = '/legacy-sw-test.js';
 const currentServiceWorker = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
 
+test.use({ serviceWorkers: 'allow' });
+
 test('client on version N upgrades to N+1 and never resurrects stale HTML after reload', async ({ page }) => {
   expect(RELEASE_N).toBe('e2e-N');
   expect(RELEASE_N_PLUS_1).toBe('e2e-N+1');
