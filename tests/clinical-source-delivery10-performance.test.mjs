@@ -66,7 +66,9 @@ test('C12 representative volume returns a bounded owner-scoped page with an exac
 });
 
 test('C12 package and member portal readers are owner-scoped in SQL instead of table-wide scans', () => {
-  const packageSource = readFileSync(new URL('../worker/package-lifecycle-runtime.js', import.meta.url), 'utf8');
+  const packageSessionSource = readFileSync(new URL('../worker/package-session-atomic-runtime.js', import.meta.url), 'utf8');
+  const packageIntegritySource = readFileSync(new URL('../worker/package-integrity-atomic-runtime.js', import.meta.url), 'utf8');
+  const packageSource = `${packageSessionSource}\n${packageIntegritySource}`;
   const portalSource = readFileSync(new URL('../worker/block6-rpc-runtime.js', import.meta.url), 'utf8');
   assert.match(packageSource, /owner_id\s*=\s*\?/i);
   assert.doesNotMatch(packageSource, /SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?'\)\.bind\(table\)\.all\(\)/i);
