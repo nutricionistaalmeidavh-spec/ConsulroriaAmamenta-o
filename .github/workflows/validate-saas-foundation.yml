@@ -144,6 +144,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install test runtime
+        run: npm install --no-audit --no-fund
       - name: Validate additive SaaS contract
         run: node scripts/test-saas-foundation.mjs
       - name: Validate commercial funnel and onboarding
@@ -188,8 +190,6 @@ jobs:
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate Block 1 and 2 Cloudflare regressions
         run: npm run test:cloudflare-regressions
-      - name: Install Block 5 test runtime
-        run: npm install --no-audit --no-fund
       - name: Validate native recovery and bootstrap
         run: npm run test:block5
       - name: Validate post-migration failure recovery
@@ -209,7 +209,8 @@ jobs:
           node --check worker/cloudflare-clinical-legacy-runtime.js
           if [ -f worker/cloudflare-data-runtime.js ]; then node --check worker/cloudflare-data-runtime.js; fi
           node --check worker/cloudflare-billing-runtime.js
-          node --check worker/package-lifecycle-runtime.js
+          node --check worker/package-session-atomic-runtime.js
+          node --check worker/package-integrity-atomic-runtime.js
           node --check worker/block6-rpc-runtime.js
           node --check worker/patient-write-runtime.js
           node --check worker/d1-record-store.js
