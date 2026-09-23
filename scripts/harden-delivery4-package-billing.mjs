@@ -6,6 +6,7 @@ const ROOT=resolve(import.meta.dirname,'..');
 const BILLING_PATH=resolve(ROOT,'public/billing-v2.js');
 const MODE=process.argv.includes('--write')?'write':'check';
 const REQUEST_KEY_MARKER="p_request_key:s.mode==='package_new'?'package-new:'+appointmentId:null";
+const PACKAGE_NEW_REMOUNT_MARKER="!packages.length||selection.mode==='package_new'";
 
 export function transformDelivery4Billing(source){
   let next=String(source);
@@ -15,6 +16,12 @@ export function transformDelivery4Billing(source){
     if(!next.includes(needle))throw new Error('delivery 4 billing bind target not found');
     next=next.replace(needle,replacement);
   }
+  if(!next.includes(PACKAGE_NEW_REMOUNT_MARKER)){
+    const oldOptions=`      '<option value="individual">Atendimento individual</option>'+\n      (packages.length?'<option value="package_active">Usar plano ativo</option>':'<option value="package_new">Novo plano / pacote</option>')+\n`;
+    const newOptions=`      '<option value="individual">Atendimento individual</option>'+\n      (packages.length?'<option value="package_active">Usar plano ativo</option>':'')+\n      (!packages.length||selection.mode==='package_new'?'<option value="package_new">Novo plano / pacote</option>':'')+\n`;
+    if(!next.includes(oldOptions))throw new Error('delivery 4 package-new remount target not found');
+    next=next.replace(oldOptions,newOptions);
+  }
   if(!/bvSchedule\(\);\s*$/.test(next))next=next.replace(/\s*$/,'\nbvSchedule();\n');
   return next;
 }
@@ -23,6 +30,7 @@ export function runDelivery4BillingHardening(){
   const source=readFileSync(BILLING_PATH,'utf8');
   const next=transformDelivery4Billing(source);
   if(!next.includes(REQUEST_KEY_MARKER))throw new Error('delivery 4 stable package-new request key missing');
+  if(!next.includes(PACKAGE_NEW_REMOUNT_MARKER))throw new Error('delivery 4 package-new remount preservation missing');
   if(!/bvSchedule\(\);\s*$/.test(next))throw new Error('delivery 4 initial billing mount schedule missing');
   if(MODE==='check'&&next!==source)throw new Error('delivery 4 package billing hardening ainda não materializado');
   if(MODE==='write'&&next!==source)writeFileSync(BILLING_PATH,next,'utf8');
