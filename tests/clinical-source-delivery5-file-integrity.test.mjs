@@ -3,18 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 
-const clinicalSource=readFileSync(new URL('../worker/cloudflare-clinical-runtime.js', import.meta.url),'utf8');
 const storageSource=readFileSync(new URL('../worker/storage-consistency-runtime.js', import.meta.url),'utf8');
 const storageDeleteSource=readFileSync(new URL('../worker/storage-delete-claim-runtime.js', import.meta.url),'utf8');
 const documentsSource=readFileSync(new URL('../public/documents-feature.js', import.meta.url),'utf8');
 const patientSource=readFileSync(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url),'utf8');
 const albumSource=readFileSync(new URL('../public/album-feature.js', import.meta.url),'utf8');
 
-async function putRecord(db,table,key,record,owner=userId){
-  const now='2026-09-01T10:00:00.000Z';
-  await db.prepare(`INSERT INTO supabase_records(table_name,record_key,owner_id,record_json,source_created_at,source_updated_at) VALUES(?,?,?,?,?,?)`)
-    .bind(table,key,owner,JSON.stringify(record),now,now).run();
-}
 async function login(runtime){return runtime.login()}
 function auth(session){return {authorization:`Bearer ${session.access_token}`,'content-type':'application/json'}}
 
@@ -26,6 +20,14 @@ async function createPatient(runtime,session){
   return response.json();
 }
 
+async function uploadPending(runtime,session,path,operation,bytes=new Uint8Array([1,2])){
+  return runtime.mf.dispatchFetch(`http://localhost/api/clinical/media/upload?path=${encodeURIComponent(path)}`,{
+    method:'POST',
+    headers:{...auth(session),'content-type':'image/jpeg','x-clinical-media-operation':operation},
+    body:bytes
+  });
+}
+
 test('R17 signed URL route is not intercepted as a storage mutation bucket named sign',async()=>{
   const runtime=await createLocalRuntime();
   try{
@@ -33,13 +35,15 @@ test('R17 signed URL route is not intercepted as a storage mutation bucket named
     const uploaded=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
       method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':'op-r17'},body:new Uint8Array([1,2,3,4])
     });
-    assert.equal(uploaded.status,201);
+    assert.equal(uploaded.status,200);
+    const uploadedBody=await uploaded.json();
+    assert.equal(uploadedBody.idempotent,false);
     const signed=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/sign/clinical-media/${path}`,{
       method:'POST',headers:auth(session),body:JSON.stringify({expiresIn:900})
     });
     assert.equal(signed.status,200);
     const payload=await signed.json();
-    assert.match(payload.signedURL,/^\/api\/files\/signed\//);
+    assert.match(payload.signedURL,/^\/api\/files\/object\/clinical-media\//);
     assert.doesNotMatch(payload.signedURL,/\/api\/files\/api\/files\//);
   }finally{await runtime.close()}
 });
@@ -53,28 +57,32 @@ test('C03 clinical media upload has a retry-safe pending operation and confirm i
     });
     assert.equal(start.status,200);const encounter=await start.json();
     const path=`${userId}/${mid}/${encounter.id}/retry-safe.jpg`,operation='media-op-stable';
-    const first=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
-      method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':operation},body:new Uint8Array([9,8,7])
-    });
-    assert.equal(first.status,201);const firstBody=await first.json();
-    assert.equal(firstBody.status,'pending');
-    const retry=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
-      method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':operation},body:new Uint8Array([9,8,7])
-    });
+    const first=await uploadPending(runtime,session,path,operation,new Uint8Array([9,8,7]));
+    assert.equal(first.status,200);const firstBody=await first.json();
+    assert.equal(firstBody.pending,true);
+    assert.equal(firstBody.idempotent,false);
+    assert.equal(firstBody.operation_id,operation);
+    const retry=await uploadPending(runtime,session,path,operation,new Uint8Array([9,8,7]));
     assert.equal(retry.status,200);const retryBody=await retry.json();
+    assert.equal(retryBody.pending,true);
+    assert.equal(retryBody.idempotent,true);
     assert.equal(retryBody.operation_id,operation);
-    assert.equal(retryBody.r2_key,firstBody.r2_key);
-    const confirmBody={p_operation_key:operation,p_mother_id:mid,p_baby_id:baby,p_encounter_id:encounter.id,p_type:'photo',p_label:'Foto clínica'};
+    assert.equal(retryBody.Key,firstBody.Key);
+    const confirmBody={operation_key:operation,storage_path:path,mother_id:mid,baby_id:baby,encounter_id:encounter.id,mime_type:'image/jpeg',file_name:'retry-safe.jpg',file_size:3,category:'Foto clínica',caption:'',taken_at:'2026-09-23T12:05:00.000Z'};
     for(let i=0;i<2;i++){
-      const confirmed=await runtime.mf.dispatchFetch('http://localhost/api/clinical/rpc/confirm_clinical_media',{
+      const confirmed=await runtime.mf.dispatchFetch('http://localhost/api/clinical/media/confirm',{
         method:'POST',headers:auth(session),body:JSON.stringify(confirmBody)
       });
       assert.equal(confirmed.status,200);
-      assert.equal((await confirmed.json()).operation_id,operation);
+      const confirmedBody=await confirmed.json();
+      assert.equal(confirmedBody.media.id,operation);
+      assert.equal(confirmedBody.idempotent,i===1);
     }
-    const rows=await runtime.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='clinical_media' AND owner_id=?").bind(userId).all();
-    assert.equal(rows.results.length,1);
-    assert.equal(JSON.parse(rows.results[0].record_json).status,'confirmed');
+    const row=await runtime.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='clinical_media' AND owner_id=? AND record_key=?").bind(userId,operation).first();
+    assert.ok(row);
+    assert.equal(JSON.parse(row.record_json).storage_path,path);
+    const storage=await runtime.db.prepare("SELECT metadata_json FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(path).first();
+    assert.equal(JSON.parse(storage.metadata_json).state,'confirmed');
   }finally{await runtime.close()}
 });
 
@@ -84,23 +92,28 @@ test('C03 stale pending clinical upload can be reconciled without touching confi
     const session=await login(runtime),patient=await createPatient(runtime,session),mid=patient.mother.id;
     const stalePath=`${userId}/${mid}/stale/pending.jpg`,keepPath=`${userId}/${mid}/keep/confirmed.jpg`;
     for(const [path,op] of [[stalePath,'stale-op'],[keepPath,'keep-op']]){
-      const upload=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
-        method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':op},body:new Uint8Array([1,2])
-      });
-      assert.equal(upload.status,201);
+      const upload=await uploadPending(runtime,session,path,op);
+      assert.equal(upload.status,200);
+      assert.equal((await upload.json()).pending,true);
     }
-    const stale=await runtime.db.prepare("SELECT record_key,record_json FROM supabase_records WHERE table_name='storage_objects' AND record_key='stale-op'").first();
-    const staleRecord=JSON.parse(stale.record_json);staleRecord.updated_at='2026-01-01T00:00:00.000Z';
-    await runtime.db.prepare("UPDATE supabase_records SET record_json=?,source_updated_at=? WHERE table_name='storage_objects' AND record_key='stale-op'").bind(JSON.stringify(staleRecord),staleRecord.updated_at).run();
-    const keep=await runtime.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='storage_objects' AND record_key='keep-op'").first();
-    const keepRecord=JSON.parse(keep.record_json);keepRecord.status='confirmed';keepRecord.updated_at='2026-01-01T00:00:00.000Z';
-    await runtime.db.prepare("UPDATE supabase_records SET record_json=?,source_updated_at=? WHERE table_name='storage_objects' AND record_key='keep-op'").bind(JSON.stringify(keepRecord),keepRecord.updated_at).run();
-    const reconcile=await runtime.mf.dispatchFetch('http://localhost/api/clinical/rpc/reconcile_pending_clinical_media',{
-      method:'POST',headers:auth(session),body:JSON.stringify({p_older_than:'2026-06-01T00:00:00.000Z'})
+    const stale=await runtime.db.prepare("SELECT r2_key,metadata_json FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(stalePath).first();
+    const keep=await runtime.db.prepare("SELECT r2_key,metadata_json FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(keepPath).first();
+    assert.ok(stale?.r2_key);assert.ok(keep?.r2_key);
+    const old='2026-01-01T00:00:00.000Z';
+    const staleMeta={...JSON.parse(stale.metadata_json),state:'pending',pending_at:old};
+    const keepMeta={...JSON.parse(keep.metadata_json),state:'confirmed',confirmed_at:old};
+    await runtime.db.prepare("UPDATE storage_objects SET metadata_json=?,source_updated_at=? WHERE source_bucket='clinical-media' AND source_path=?").bind(JSON.stringify(staleMeta),old,stalePath).run();
+    await runtime.db.prepare("UPDATE storage_objects SET metadata_json=?,source_updated_at=? WHERE source_bucket='clinical-media' AND source_path=?").bind(JSON.stringify(keepMeta),old,keepPath).run();
+    const reconcile=await runtime.mf.dispatchFetch('http://localhost/api/clinical/media/reconcile',{
+      method:'POST',headers:auth(session),body:JSON.stringify({max_age_seconds:60})
     });
-    assert.equal(reconcile.status,200);const body=await reconcile.json();assert.equal(body.removed,1);
-    assert.equal(await runtime.env.CLINICAL_FILES.get(stalePath),null);
-    assert.ok(await runtime.env.CLINICAL_FILES.get(keepPath));
+    assert.equal(reconcile.status,200);
+    const staleAfter=await runtime.db.prepare("SELECT r2_key FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(stalePath).first();
+    const keepAfter=await runtime.db.prepare("SELECT r2_key FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(keepPath).first();
+    assert.equal(staleAfter,null);
+    assert.equal(await runtime.env.CLINICAL_FILES.get(stale.r2_key),null);
+    assert.equal(keepAfter.r2_key,keep.r2_key);
+    assert.ok(await runtime.env.CLINICAL_FILES.get(keep.r2_key));
   }finally{await runtime.close()}
 });
 
