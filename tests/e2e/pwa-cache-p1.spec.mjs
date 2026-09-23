@@ -3,7 +3,7 @@ import { login, session } from './helpers.mjs';
 
 test.use({ serviceWorkers: 'allow' });
 
-test('service worker evicts obsolete app caches, never caches private APIs and preserves session on reload', async ({ page }) => {
+test('service worker evicts obsolete app caches, never caches private APIs and preserves session on reload', async ({ page, context }) => {
   await page.goto('/manifest.webmanifest');
   await page.evaluate(async () => {
     const stale = await caches.open('debora-lactacao-v0-p1-obsolete');
@@ -48,8 +48,14 @@ test('service worker evicts obsolete app caches, never caches private APIs and p
   const cacheNames = await page.evaluate(() => caches.keys());
   expect(cacheNames.filter(key => key.startsWith('debora-lactacao-v'))).toHaveLength(1);
 
-  await page.reload();
-  await expect(page.locator('[data-app-root]')).toBeVisible();
-  const after = await session(page);
+  // The service-worker update may replace the controller and reload the page that
+  // initiated it. Verify persistence from a fresh page in the same browser context,
+  // then perform an explicit document reload under the settled current controller.
+  const verifyPage = await context.newPage();
+  await verifyPage.goto('/app/#/home', { waitUntil: 'domcontentloaded' });
+  await expect(verifyPage.locator('[data-app-root]')).toBeVisible();
+  await verifyPage.reload({ waitUntil: 'domcontentloaded' });
+  await expect(verifyPage.locator('[data-app-root]')).toBeVisible();
+  const after = await session(verifyPage);
   expect(after.access_token).toBe(before.access_token);
 });
