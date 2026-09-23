@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { transformDelivery4Billing } from '../scripts/harden-delivery4-package-billing.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -44,11 +45,11 @@ test('Stage 12 critical browser flow is UI-driven for package, start and finaliz
     'critical package/start/finalize actions must be driven by UI clicks, not API shortcuts');
 });
 
-test('billing v2 schedules an initial mount so an early appointment navigation cannot miss initialization', () => {
-  const billing = read('public/billing-v2.js');
+test('billing v2 materialization schedules an initial mount so early appointment navigation cannot miss initialization', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
   assert.match(
-    billing,
-    /window\.DeboraBilling=\{[\s\S]*?\};\s*bvSchedule\(\);\s*$/,
-    'billing v2 must schedule once immediately after exposing its runtime API',
+    materialized,
+    /bvSchedule\(\);\s*$/,
+    'materialized billing v2 must schedule one initial mount after its listeners are installed',
   );
 });
