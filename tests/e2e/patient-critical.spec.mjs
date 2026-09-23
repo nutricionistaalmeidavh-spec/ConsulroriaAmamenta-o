@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.mjs';
 import { login, authHeaders, uniqueLabel } from './helpers.mjs';
 
 async function createPatient(page, motherName, babyName) {
@@ -12,6 +12,7 @@ async function createPatient(page, motherName, babyName) {
   expect(response.status()).toBe(201);
   const patient = await response.json();
   await expect(page.locator('[data-patient-title]')).toHaveText(`${motherName} + ${babyName}`);
+  await expect(page).toHaveURL(new RegExp(patient.mother.id));
   return patient;
 }
 
@@ -38,6 +39,7 @@ test('successful aggregate edit persists mother and baby across reload', async (
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   expect((await saved).status()).toBe(200);
   await expect(page.locator('[data-patient-title]')).toHaveText(`${changedMother} + ${changedBaby}`);
+  await expect(page).toHaveURL(new RegExp(patient.mother.id));
   const detailUrl = page.url();
 
   await page.reload();
