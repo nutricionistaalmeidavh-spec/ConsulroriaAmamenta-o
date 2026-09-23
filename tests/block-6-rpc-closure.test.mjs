@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { handleBlock6RpcRuntime } from '../worker/block6-rpc-runtime.js';
 
 const demoSource = readFileSync(new URL('../public/demo-feature.js', import.meta.url), 'utf8');
 const bootstrapSource = readFileSync(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
 const clinicalNoteSource = readFileSync(new URL('../public/clinical-source/features/clinical-note-feature.js', import.meta.url), 'utf8');
+const clinicalManifest = JSON.parse(readFileSync(new URL('../public/clinical-source/manifest.json', import.meta.url), 'utf8'));
 const packageSource = readFileSync(new URL('../worker/package-lifecycle-runtime.js', import.meta.url), 'utf8');
+const billingSource = readFileSync(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
 const appDataSource = readFileSync(new URL('../public/clinical-source/core/lib/app-data.js', import.meta.url), 'utf8');
 
 class FakeStatement {
@@ -133,8 +136,18 @@ test('legacy consumers for retired Block 6 RPCs are gone', () => {
   assert.match(appDataSource, /delete_scheduled_appointment/);
 });
 
-test('package v2 RPCs are owned by the D1 package lifecycle runtime', () => {
+test('materialized clinical note hash stays in sync with the canonical manifest', () => {
+  const digest = createHash('sha256').update(clinicalNoteSource).digest('hex');
+  assert.equal(clinicalManifest.modules['features/clinical-note-feature.js'].sha256, digest);
+});
+
+test('package v2 RPCs are owned by the D1 package lifecycle runtime and accept the live frontend payload', () => {
   assert.match(packageSource, /add_care_package_item_v2/);
   assert.match(packageSource, /consume_care_package_item_v2/);
   assert.match(packageSource, /p_request_key/);
+  assert.match(packageSource, /p_quantity_total\?\?input\?\.p_quantity/);
+  assert.match(packageSource, /p_item_type\|\|input\?\.p_category/);
+  assert.match(billingSource, /add_care_package_item_v2/);
+  assert.match(billingSource, /p_quantity:qty/);
+  assert.match(billingSource, /p_category:'service'/);
 });
