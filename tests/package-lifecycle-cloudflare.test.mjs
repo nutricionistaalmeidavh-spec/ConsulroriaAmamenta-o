@@ -21,6 +21,16 @@ class FakeD1{
   table(table){return [...this.records.values()].filter(x=>x.table===table).map(x=>x.record)}
   async first(sql,args){
     if(/SELECT \* FROM auth_users WHERE user_id = \? LIMIT 1/i.test(sql))return this.authUsers.get(String(args[0]))||null;
+    if(/FROM supabase_records[\s\S]+WHERE table_name = \? AND owner_id = \? AND \(record_key = \? OR json_extract\(record_json,'\$\.id'\) = \?\) LIMIT 1/i.test(sql)){
+      const[table,ownerId,key,jsonId]=args;
+      const row=[...this.records.values()].find(x=>x.table===String(table)&&String(x.ownerId||'')===String(ownerId)&&(String(x.key)===String(key)||String(x.record?.id||'')===String(jsonId)));
+      return row?{record_key:row.key,owner_id:row.ownerId,record_json:JSON.stringify(row.record)}:null;
+    }
+    if(/WHERE table_name = \? AND record_key = \? LIMIT 1/i.test(sql)){
+      const[table,key]=args;
+      const row=this.records.get(`${table}:${key}`);
+      return row?{record_key:row.key,owner_id:row.ownerId,record_json:JSON.stringify(row.record)}:null;
+    }
     throw new Error(`unexpected first SQL: ${sql}`);
   }
   async all(sql,args){
