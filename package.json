@@ -24,6 +24,7 @@
     "test:block9": "node --test tests/block-9-d1-hardening.test.mjs",
     "test:block10": "node --test tests/block-10-zero-supabase-runtime.test.mjs",
     "test:e2e": "npm run build && playwright test",
+    "test:e2e:mobile": "npm run build && playwright test --config=playwright.mobile.config.mjs",
     "test:e2e:smoke": "playwright test --config=playwright.smoke.config.mjs",
     "test:stability": "node scripts/materialize-clinical-source.mjs --write && node --test tests/session-stability.test.mjs tests/frontend-stability.test.mjs tests/patient-edit-atomic.test.mjs tests/cloudflare-recovery-d1.test.mjs",
     "test:p1": "node --test tests/package-lifecycle-cloudflare.test.mjs tests/service-worker-update.test.mjs tests/cloudflare-password-recovery.test.mjs tests/cloudflare-recovery-d1.test.mjs tests/block-6-rpc-closure.test.mjs"
