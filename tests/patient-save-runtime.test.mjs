@@ -28,26 +28,56 @@ class FakeD1 {
     if (/SELECT \* FROM auth_users WHERE user_id = \? LIMIT 1/i.test(sql)) {
       return this.authUsers.get(String(args[0])) || null;
     }
+    if (/SELECT 1 AS found FROM supabase_records WHERE table_name = \? AND owner_id IS NULL LIMIT 1/i.test(sql)) {
+      const table = String(args[0]);
+      return [...this.records.values()].some((entry) => entry.table === table && entry.ownerId == null) ? { found: 1 } : null;
+    }
     if (/SELECT COUNT\(\*\) AS n FROM supabase_records WHERE table_name = 'mothers' AND owner_id = \?/i.test(sql)) {
       const userId = String(args[0]);
       let n = 0;
       for (const entry of this.records.values()) if (entry.table === 'mothers' && String(entry.ownerId || '') === userId) n++;
       return { n };
     }
+    if (/SELECT COUNT\(\*\) AS n FROM supabase_records WHERE table_name = \? AND owner_id = \?/i.test(sql)) {
+      const table = String(args[0]);
+      const userId = String(args[1]);
+      let n = 0;
+      for (const entry of this.records.values()) if (entry.table === table && String(entry.ownerId || '') === userId) n++;
+      return { n };
+    }
     throw new Error(`unexpected first SQL: ${sql}`);
   }
   async all(sql, args) {
-    if (/SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?/i.test(sql)) {
+    if (/SELECT record_key,owner_id,record_json(?:,COUNT\(\*\) OVER\(\) AS __total)? FROM supabase_records WHERE table_name = \?/i.test(sql)) {
       const table = String(args[0]);
       const ownerEq = /AND owner_id = \?/i.test(sql);
       const ownerNull = /AND owner_id IS NULL/i.test(sql);
       const ownerId = ownerEq ? String(args[1]) : null;
+      let rows = [...this.records.values()]
+        .filter((entry) => entry.table === table)
+        .filter((entry) => !ownerEq || String(entry.ownerId || '') === ownerId)
+        .filter((entry) => !ownerNull || entry.ownerId == null);
+      const order = sql.match(/ORDER BY json_extract\(record_json,'\$\.([A-Za-z0-9_]+)'\)\s+(ASC|DESC)/i);
+      if (order) {
+        const [, field, direction] = order;
+        rows.sort((a, b) => {
+          const cmp = String(a.record?.[field] ?? '').localeCompare(String(b.record?.[field] ?? ''));
+          return direction.toUpperCase() === 'DESC' ? -cmp : cmp;
+        });
+      }
+      const total = rows.length;
+      if (/LIMIT \? OFFSET \?/i.test(sql)) {
+        const limit = Number(args.at(-2));
+        const offset = Number(args.at(-1));
+        rows = rows.slice(offset, offset + limit);
+      }
       return {
-        results: [...this.records.values()]
-          .filter((entry) => entry.table === table)
-          .filter((entry) => !ownerEq || String(entry.ownerId || '') === ownerId)
-          .filter((entry) => !ownerNull || entry.ownerId == null)
-          .map((entry) => ({ record_key: entry.key, owner_id: entry.ownerId, record_json: JSON.stringify(entry.record) })),
+        results: rows.map((entry) => ({
+          record_key: entry.key,
+          owner_id: entry.ownerId,
+          record_json: JSON.stringify(entry.record),
+          __total: total,
+        })),
       };
     }
     throw new Error(`unexpected all SQL: ${sql}`);
