@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.mjs';
 import { login, authHeaders, uniqueLabel } from './helpers.mjs';
 
 async function createPatient(page) {
