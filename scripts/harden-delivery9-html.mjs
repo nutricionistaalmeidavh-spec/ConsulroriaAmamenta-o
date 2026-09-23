@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BILLING = resolve(ROOT, 'public', 'billing-v2.js');
+const PACKAGE = resolve(ROOT, 'package.json');
+const FRONTEND_CUTOVER = "node scripts/materialize-clinical-source.mjs --write && node scripts/materialize-cloudflare-frontend.mjs --write && node scripts/harden-delivery1-integrity.mjs --write && node scripts/harden-delivery3-versioning.mjs --write && node scripts/harden-delivery4-package-billing.mjs --write && node scripts/harden-p1-frontend.mjs --write && node scripts/harden-delivery5-file-integrity.mjs --write && node scripts/harden-delivery6-data-trust.mjs --write && node scripts/harden-delivery9-html.mjs --write && node scripts/harden-delivery1-integrity.mjs && node scripts/harden-delivery3-versioning.mjs && node scripts/harden-delivery4-package-billing.mjs && node scripts/harden-delivery5-file-integrity.mjs && node scripts/harden-delivery6-data-trust.mjs && node scripts/harden-delivery9-html.mjs && node --test tests/frontend-cloudflare-cutover.test.mjs";
 
 const ESCAPE_HELPER = `function bvEscapeHtml(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}`;
 
@@ -45,19 +47,30 @@ export function validateBillingHtml(source) {
   }
 }
 
+function ensurePackageScripts(write) {
+  const source = readFileSync(PACKAGE, 'utf8');
+  const pkg = JSON.parse(source);
+  if (pkg.scripts?.['test:frontend-cutover'] === FRONTEND_CUTOVER) return false;
+  if (!pkg.scripts) pkg.scripts = {};
+  pkg.scripts['test:frontend-cutover'] = FRONTEND_CUTOVER;
+  if (write) writeFileSync(PACKAGE, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
+  return true;
+}
+
 function run() {
   if (!existsSync(BILLING)) throw new Error('public/billing-v2.js não encontrado.');
   const source = readFileSync(BILLING, 'utf8');
   const hardened = hardenBillingHtml(source);
   validateBillingHtml(hardened);
   const write = process.argv.includes('--write');
+  const packageChanged = ensurePackageScripts(write);
   if (write) {
     if (hardened !== source) writeFileSync(BILLING, hardened, 'utf8');
-    console.log(`Delivery 9 HTML hardening write: ${hardened === source ? 'verified' : 'updated'}`);
+    console.log(`Delivery 9 HTML hardening write: ${hardened === source ? 'verified' : 'updated'}${packageChanged ? ', package scripts restored' : ''}`);
     return;
   }
-  if (hardened !== source) {
-    console.error('Delivery 9 HTML hardening check failed: public/billing-v2.js needs regeneration.');
+  if (hardened !== source || packageChanged) {
+    console.error('Delivery 9 HTML hardening check failed: regeneration required.');
     process.exit(1);
   }
   console.log('Delivery 9 HTML hardening check: verified');
