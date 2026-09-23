@@ -111,6 +111,7 @@ export function buildOwnedRecordPageQuery(table, ownerId, url) {
   const rawLimit = limitParam === null ? Number.NaN : Number(limitParam);
   const limit = Number.isFinite(rawLimit) && rawLimit >= 0 ? Math.trunc(rawLimit) : null;
   const whereSql = where.join(' AND ');
+  const countBindings = [...bindings];
   let sql = `SELECT record_key,owner_id,record_json,COUNT(*) OVER() AS __total FROM supabase_records WHERE ${whereSql}`;
   if (orderClauses.length) sql += ` ORDER BY ${orderClauses.join(', ')}`;
   if (limit !== null) {
@@ -125,7 +126,7 @@ export function buildOwnedRecordPageQuery(table, ownerId, url) {
     sql,
     bindings,
     countSql: `SELECT COUNT(*) AS n FROM supabase_records WHERE ${whereSql}`,
-    countBindings: bindings.slice(0, where.length === 2 ? 2 : bindings.length - (limit !== null ? 2 : offset > 0 ? 1 : 0)),
+    countBindings,
     offset,
     limit,
   };
