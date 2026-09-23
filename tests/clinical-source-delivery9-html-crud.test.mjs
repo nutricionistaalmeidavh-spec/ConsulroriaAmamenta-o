@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { hardenBillingHtml, validateBillingHtml } from '../scripts/harden-delivery9-html.mjs';
 import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 
 function authHeaders(session) {
@@ -15,7 +16,9 @@ async function putRecord(db, table, key, record) {
 }
 
 test('C08 billing markup escapes persisted plan and service labels before assigning innerHTML', () => {
-  const source = readFileSync(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
+  const rawSource = readFileSync(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
+  const source = hardenBillingHtml(rawSource);
+  validateBillingHtml(source);
   const helper = source.match(/function bvEscapeHtml\(value\)\{[^\n]+\}/)?.[0];
   assert.ok(helper, 'billing runtime must define one HTML escaping helper');
   const escapeHtml = Function(`${helper}; return bvEscapeHtml;`)();
@@ -32,6 +35,11 @@ test('C08 billing markup escapes persisted plan and service labels before assign
   assert.match(source, /data-bv-add-item="'\+bvEscapeHtml\(pkg\.id\)/);
   assert.doesNotMatch(source, /<strong>'\+String\(item\.label/);
   assert.doesNotMatch(source, /<h2>'\+String\(pkg\.service_label/);
+
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  for (const script of ['dev', 'build', 'test:frontend-cutover', 'test:stability']) {
+    assert.match(pkg.scripts[script], /harden-delivery9-html\.mjs --write/, `${script} must materialize C08 hardening`);
+  }
 });
 
 test('generic records API rejects unknown table names instead of creating a fake rpc table', async () => {
