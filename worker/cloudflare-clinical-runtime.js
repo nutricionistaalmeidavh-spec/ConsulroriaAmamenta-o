@@ -9,6 +9,7 @@ import {
   hasOwnedRecord,
   runtimeJson,
 } from './cloudflare-data-runtime.js';
+import { GIT_SHA } from './deploy-version.js';
 
 function requiresCloudflareIdentity(request, url) {
   if (url.pathname.startsWith('/api/clinical/')) return true;
@@ -16,6 +17,23 @@ function requiresCloudflareIdentity(request, url) {
     return !(request.method === 'GET' && url.searchParams.has('token'));
   }
   return false;
+}
+
+async function withDeploymentGitSha(response) {
+  if (!response) return response;
+  try {
+    const payload = await response.json();
+    const headers = new Headers(response.headers);
+    headers.set('content-type', 'application/json; charset=utf-8');
+    headers.set('cache-control', 'no-store');
+    return new Response(JSON.stringify({ ...payload, gitSha: String(GIT_SHA || '') }), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return response;
+  }
 }
 
 export async function handleCloudflareClinicalRuntime(request, env) {
@@ -37,7 +55,11 @@ export async function handleCloudflareClinicalRuntime(request, env) {
     if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required' });
   }
 
-  return handleCloudflareDataRuntime(request, env, url);
+  const response = await handleCloudflareDataRuntime(request, env, url);
+  if (url.pathname === '/api/cloudflare/health' && request.method === 'GET') {
+    return withDeploymentGitSha(response);
+  }
+  return response;
 }
 
 export {
