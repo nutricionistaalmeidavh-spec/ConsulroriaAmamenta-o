@@ -78,6 +78,7 @@ test('generic CRUD cannot mutate domain-managed records while canonical reads re
 
     for (const [method, url, body] of [
       ['POST', 'http://localhost/api/clinical/records/care_packages', { mother_id: 'm1', service_label: 'Bypass', sessions_total: 99 }],
+      ['POST', 'http://localhost/api/clinical/records/care_packages?on_conflict=mother_id,service_label', { mother_id: 'm1', service_label: 'Plano seguro', sessions_total: 99 }],
       ['PATCH', 'http://localhost/api/clinical/records/care_packages?id=eq.p1', { sessions_used: 99 }],
       ['DELETE', 'http://localhost/api/clinical/records/care_packages?id=eq.p1', null],
       ['POST', 'http://localhost/api/clinical/records/growth_measurements', { baby_id: 'b1', weight_g: -1 }],
