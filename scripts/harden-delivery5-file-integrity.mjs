@@ -40,9 +40,13 @@ if(target('public/clinical-source/features/patient-fixes.js',source=>{
 
 if(target('public/clinical-source/index.html',source=>{
   const patientAt=source.indexOf('data-screen="patient"');if(patientAt<0)throw new Error('patient screen ausente');
-  const avatarAt=source.indexOf('<div class="patient-avatar">',patientAt);
-  if(avatarAt<0){if(source.includes('class="patient-avatar" data-patient-avatar'))return source;throw new Error('patient avatar ausente')}
-  return source.slice(0,avatarAt)+source.slice(avatarAt).replace('<div class="patient-avatar">','<div class="patient-avatar" data-patient-avatar>',1);
+  const before=source.slice(0,patientAt),patient=source.slice(patientAt);
+  const markerWindow=patient.slice(0,2400);
+  if(/\bdata-patient-avatar\b/.test(markerWindow))return source;
+  const match=markerWindow.match(/<div\b[^>]*class="[^"]*\bpatient-avatar\b[^"]*"[^>]*>/i);
+  if(!match)return source;
+  const tagged=match[0].replace(/>$/,' data-patient-avatar>');
+  return before+patient.replace(match[0],tagged);
 }))changed.push('patient-avatar');
 
 const docs=readFileSync(resolve(ROOT,'public/documents-feature.js'),'utf8');
