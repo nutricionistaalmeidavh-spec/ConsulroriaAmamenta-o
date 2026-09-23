@@ -34,6 +34,14 @@ const DOMAIN_MANAGED_WRITE_TABLES = new Set([
   'clinical_encounter_babies',
 ]);
 
+// Encounter PATCH/DELETE and revision PATCH/DELETE use the records-shaped URL,
+// but are intercepted by the dedicated versioning/retention runtime before the
+// generic fallback. Let only those methods continue to that specialized handler.
+const SPECIALIZED_RECORD_METHODS = new Map([
+  ['clinical_encounters', new Set(['PATCH', 'DELETE'])],
+  ['clinical_note_revisions', new Set(['PATCH', 'DELETE'])],
+]);
+
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
@@ -54,6 +62,7 @@ export function handleGenericCrudPolicy(request, url = new URL(request.url)) {
   }
 
   if (request.method === 'GET' || request.method === 'HEAD') return null;
+  if (SPECIALIZED_RECORD_METHODS.get(table)?.has(request.method)) return null;
 
   if (GLOBAL_READ_TABLES.has(table) || DOMAIN_MANAGED_WRITE_TABLES.has(table)) {
     return json(405, {
