@@ -5,13 +5,12 @@ import {execFileSync} from 'node:child_process';
 
 const read=(path)=>readFileSync(path,'utf8');
 
-test('/app installs Cloudflare bridge and EventBus before bootstrap so legacy growth reads stay on D1',()=>{
+test('/app installs EventBus before native bootstrap',()=>{
   const app=read('app/index.html');
-  const bridge=app.indexOf('/src/cloudflare-fetch-bridge.js');
   const eventBus=app.indexOf('/eventbus-runtime.js');
   const bootstrap=app.indexOf('/src/bootstrap.js');
-  assert.ok(bridge>=0);
-  assert.ok(eventBus>bridge);
+  assert.doesNotMatch(app,/cloudflare-fetch-bridge/);
+  assert.ok(eventBus>=0);
   assert.ok(bootstrap>eventBus);
   assert.match(read('src/bootstrap.js'),/growth-feature\.js/);
 });

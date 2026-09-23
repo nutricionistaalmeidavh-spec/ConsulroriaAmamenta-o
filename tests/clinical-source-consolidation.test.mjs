@@ -7,7 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const bootstrapPath = resolve(root, 'src/bootstrap.js');
 const manifestPath = resolve(root, 'public/clinical-source/manifest.json');
 
-test('canonical clinical source is declared and preferred with legacy fallback', () => {
+test('canonical clinical source is declared and required without legacy fallback', () => {
   assert.equal(existsSync(manifestPath), true, 'canonical clinical source manifest must exist');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   assert.equal(manifest.version, 3);
@@ -17,11 +17,9 @@ test('canonical clinical source is declared and preferred with legacy fallback',
 
   const bootstrap = readFileSync(bootstrapPath, 'utf8');
   assert.match(bootstrap, /CLINICAL_SOURCE_ROOT/);
+  assert.doesNotMatch(bootstrap, /loadLegacyRuntime|loadBaseArchive|loadReleasePatch|loadAgendaPatch/);
   assert.match(bootstrap, /loadCanonicalText/);
   assert.match(bootstrap, /canonicalText\s*\?\?/);
-  assert.match(bootstrap, /loadBaseArchive\(\)/, 'legacy base archive fallback must remain during migration');
-  assert.match(bootstrap, /loadReleasePatch\(\)/, 'legacy release patch fallback must remain during migration');
-  assert.match(bootstrap, /loadAgendaPatch\(\)/, 'legacy agenda patch fallback must remain during migration');
 });
 
 test('first slice does not couple clinical migration to commercial SaaS or billing worker', () => {

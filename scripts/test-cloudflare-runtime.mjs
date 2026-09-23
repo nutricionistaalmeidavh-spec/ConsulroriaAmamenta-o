@@ -15,7 +15,6 @@ const materializer = readFileSync(resolve(root, 'scripts', 'materialize-clinical
 const configOverlay = readFileSync(resolve(root, 'patch-source', 'cloudflare-license-authority', 'config.js'), 'utf8');
 const clientOverlay = readFileSync(resolve(root, 'patch-source', 'cloudflare-license-authority', 'core', 'lib', 'supabase-client.js'), 'utf8');
 const schema = readFileSync(resolve(root, 'cloudflare', 'runtime-schema.sql'), 'utf8');
-const bridge = readFileSync(resolve(root, 'src', 'cloudflare-fetch-bridge.js'), 'utf8');
 const index = readFileSync(resolve(root, 'index.html'), 'utf8');
 const commercialConfig = readFileSync(resolve(root, 'public', 'comercial', 'config.js'), 'utf8');
 const serviceWorker = readFileSync(resolve(root, 'public', 'sw.js'), 'utf8');
@@ -56,15 +55,8 @@ assert.match(commercialConfig, /backend:\s*'cloudflare-d1'/);
 assert.match(commercialConfig, /clientRuntimeKey:\s*'cloudflare-runtime'/);
 assert.doesNotMatch(commercialConfig, /supabase/i);
 
-// The bridge remains transitional until Block 4, but active auth is no longer
-// provided by the bridge or by the quarantined compatibility runtime.
-assert.match(bridge, /LEGACY_SUPABASE_ORIGIN/);
-assert.match(bridge, /\/auth\/v1\//);
-assert.match(bridge, /\/rest\/v1\//);
-assert.match(bridge, /\/storage\/v1\//);
-const bridgePos = index.indexOf('/src/cloudflare-fetch-bridge.js');
-const bootstrapPos = index.indexOf('/src/bootstrap.js');
-assert.ok(bridgePos >= 0 && bootstrapPos >= 0 && bridgePos < bootstrapPos, 'fetch bridge must load before bootstrap until Block 4 removes it');
+assert.doesNotMatch(index, /cloudflare-fetch-bridge/);
+assert.match(index, /src\/bootstrap\.js/);
 
 // Same-origin clinical APIs carry sensitive health data and must never enter the PWA cache.
 for (const prefix of ['/api/','/auth/','/rest/','/storage/']) assert.ok(serviceWorker.includes(`'${prefix}'`), `service worker missing private prefix ${prefix}`);

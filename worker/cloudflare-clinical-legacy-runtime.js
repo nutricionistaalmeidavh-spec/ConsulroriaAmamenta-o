@@ -796,10 +796,10 @@ export async function handleCloudflareClinicalRuntime(request, env) {
   if (!env.CLINICAL_DB) return null;
   const url = new URL(request.url);
   try {
-    if (url.pathname.startsWith('/auth/v1/')) return handleAuth(request, env, url);
-    if (url.pathname.startsWith('/rest/v1/')) return handleRest(request, env, url);
-    if (url.pathname.startsWith('/storage/v1/')) return handleStorage(request, env, url);
-    if (url.pathname.startsWith('/api/clinical/') || url.pathname.startsWith('/api/license/') || url.pathname === '/api/cloudflare/health') return handleSpecialApi(request, env, url);
+    if (url.pathname.startsWith('/auth/v1/')) return await handleAuth(request, env, url);
+    if (url.pathname.startsWith('/rest/v1/')) return await handleRest(request, env, url);
+    if (url.pathname.startsWith('/storage/v1/')) return await handleStorage(request, env, url);
+    if (url.pathname.startsWith('/api/clinical/') || url.pathname.startsWith('/api/license/') || url.pathname === '/api/cloudflare/health') return await handleSpecialApi(request, env, url);
     return null;
   } catch (error) {
     console.error('cloudflare clinical runtime error', error);

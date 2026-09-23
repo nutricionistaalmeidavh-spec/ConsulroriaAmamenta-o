@@ -55,10 +55,7 @@ const CLINIC_OFFSET = '-03:00';
 let agendaSelectedDay = null;
 
 export function configured() {
-  if (config.BACKEND_MODE === 'cloudflare') return Boolean(config.API_BASE_URL && config.CLIENT_RUNTIME_KEY);
-  return /^https:\/\/.+\.supabase\.co$/.test(config.API_BASE_URL || '') &&
-    /^(sb_publishable_|eyJ)/.test(config.CLIENT_RUNTIME_KEY || '') &&
-    !String(config.API_BASE_URL).includes('YOUR_PROJECT');
+  return config.BACKEND_MODE === 'cloudflare' && Boolean(config.API_BASE_URL && config.CLIENT_RUNTIME_KEY);
 }
 
 function escapeHTML(value = '') {

@@ -1,8 +1,8 @@
 import './app-entry-bridge.js';
 
-const runtime = window.SAAS_RUNTIME_CONFIG || {};
-const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
-const publishableKey = String(runtime.supabasePublishableKey || '');
+const apiBaseUrl = window.location.origin;
+const recoveryToken = new URLSearchParams(window.location.hash.slice(1)).get('recovery_token') || '';
+if (recoveryToken) history.replaceState(null, '', window.location.pathname + window.location.search);
 
 const SESSION_KEY = 'commercial.saas.session.v1';
 const PLAN_KEY = 'commercial.saas.plan-intent.v1';
@@ -19,35 +19,21 @@ function setMessage(text = '', tone = '') {
   message.className = `form-message${tone ? ` ${tone}` : ''}`;
 }
 
-function recoveryRedirectUrl() {
-  const url = new URL('./index.html', window.location.href);
-  url.searchParams.set('recovery', '1');
-  return url.href;
-}
-
-function readSession() {
-  try {
-    return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-  } catch {
-    return null;
-  }
-}
-
 async function requestRecovery(email) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(recoveryRedirectUrl())}`, {
+  const response = await fetch(`${apiBaseUrl}/api/auth/recovery`, {
     method: 'POST',
     headers: {
-      apikey: publishableKey,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
     body: JSON.stringify({ email }),
   });
 
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
     throw new Error(payload?.msg || payload?.message || 'Não foi possível enviar a recuperação agora.');
   }
+  return payload;
 }
 
 recoverButton?.addEventListener('click', async () => {
@@ -65,10 +51,10 @@ recoverButton?.addEventListener('click', async () => {
   }
 
   recoverButton.disabled = true;
-  setMessage('Enviando link para redefinir sua senha…');
+  setMessage('Solicitando recuperação de senha…');
   try {
-    await requestRecovery(email);
-    setMessage('Se este e-mail estiver cadastrado, enviaremos um link para redefinir a senha. Depois disso, o fluxo continua para o pagamento.', 'success');
+    const result = await requestRecovery(email);
+    setMessage(result.message, 'success');
   } catch (error) {
     setMessage(error?.message || 'Não foi possível enviar a recuperação agora.', 'error');
   } finally {
@@ -78,8 +64,7 @@ recoverButton?.addEventListener('click', async () => {
 
 function showResetPasswordView() {
   if (!modal || !message) return;
-  const session = readSession();
-  const token = String(session?.access_token || '');
+  const token = recoveryToken;
 
   modal.hidden = false;
   document.body.style.overflow = 'hidden';
@@ -126,22 +111,24 @@ function showResetPasswordView() {
     submit.disabled = true;
     setMessage('Atualizando sua senha…');
     try {
-      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-        method: 'PUT',
+      const response = await fetch(`${apiBaseUrl}/api/auth/reset-password`, {
+        method: 'POST',
         headers: {
-          apikey: publishableKey,
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ token, password }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.msg || payload?.message || 'Não foi possível atualizar a senha.');
 
-      setMessage('Senha atualizada. Retomando sua compra…', 'success');
+      for (const key of [SESSION_KEY, 'debora-lactacao-session', 'amamentacao-session', 'debora-runtime-access-token']) {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      }
+      setMessage('Senha atualizada. Entre com a nova senha para continuar.', 'success');
       const destination = new URL('./index.html', window.location.href);
-      destination.searchParams.set('auto', '1');
+      destination.searchParams.set('login', '1');
       window.setTimeout(() => window.location.assign(destination.href), 250);
     } catch (error) {
       setMessage(error?.message || 'Não foi possível atualizar a senha.', 'error');
@@ -152,4 +139,8 @@ function showResetPasswordView() {
 
 if (new URL(window.location.href).searchParams.get('recovery') === '1') {
   window.setTimeout(showResetPasswordView, 0);
+}
+
+if (new URL(window.location.href).searchParams.get('login') === '1') {
+  document.querySelector('[data-open=login]')?.click();
 }

@@ -7,9 +7,10 @@ const recovery = fs.readFileSync('public/comercial/auth-recovery.js', 'utf8');
 assert.match(html, /data-recover-password/);
 assert.match(html, /auth-recovery\.js\?v=/);
 assert.match(html, /app\.js\?v=/);
-assert.match(recovery, /\/auth\/v1\/recover/);
-assert.match(recovery, /searchParams\.set\('recovery', '1'\)/);
-assert.match(recovery, /\/auth\/v1\/user/);
+assert.match(recovery, /\/api\/auth\/recovery/);
+assert.match(recovery, /recovery_token/);
+assert.match(recovery, /history.replaceState/);
+assert.match(recovery, /\/api\/auth\/reset-password/);
 assert.match(recovery, /commercial\.saas\.session\.v1/);
 assert.match(recovery, /Nova senha/);
 
