@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const MODE = process.argv.includes('--write') ? 'write' : 'check';
+const DELIVERY2_APP_DATA = resolve(ROOT, 'patch-source', 'delivery2', 'core', 'lib', 'app-data.js');
 
 function ensureReplace(source, search, replacement, label) {
   if (source.includes(replacement)) return source;
@@ -84,11 +85,15 @@ export function hardenDelivery1PatientFixes(source) {
   return next;
 }
 
+export function hardenDelivery2AppData() {
+  return readFileSync(DELIVERY2_APP_DATA, 'utf8');
+}
+
 function writeTarget(relativePath, transform) {
   const path = resolve(ROOT, relativePath);
   const source = readFileSync(path, 'utf8');
   const next = transform(source);
-  if (MODE === 'check' && next !== source) throw new Error(`${relativePath}: Entrega 1 ainda não materializada`);
+  if (MODE === 'check' && next !== source) throw new Error(`${relativePath}: hardening clínico ainda não materializado`);
   if (MODE === 'write' && next !== source) writeFileSync(path, next, 'utf8');
   return next !== source;
 }
@@ -113,9 +118,12 @@ function syncClinicalManifest(modulePaths) {
       entry.sha256 = hash;
       changed = true;
     }
-    if (!String(entry.source || '').includes('+delivery1-integrity-hardening')) {
-      if (MODE === 'check') throw new Error(`clinical manifest: origem sem Entrega 1 ${modulePath}`);
-      entry.source = `${entry.source || modulePath}+delivery1-integrity-hardening`;
+    const hardeningTag = modulePath === 'core/lib/app-data.js'
+      ? '+delivery2-lifecycle-hardening'
+      : '+delivery1-integrity-hardening';
+    if (!String(entry.source || '').includes(hardeningTag)) {
+      if (MODE === 'check') throw new Error(`clinical manifest: origem sem hardening ${modulePath}`);
+      entry.source = `${entry.source || modulePath}${hardeningTag}`;
       changed = true;
     }
   }
@@ -128,12 +136,13 @@ export function runDelivery1FrontendHardening() {
   const changed = [];
   if (writeTarget('public/clinical-source/core/app-shell.js', hardenDelivery1AppShell)) changed.push('app-shell');
   if (writeTarget('public/clinical-source/features/patient-fixes.js', hardenDelivery1PatientFixes)) changed.push('patient-fixes');
-  if (syncClinicalManifest(['core/app-shell.js', 'features/patient-fixes.js'])) changed.push('clinical-manifest');
+  if (writeTarget('public/clinical-source/core/lib/app-data.js', hardenDelivery2AppData)) changed.push('app-data-delivery2');
+  if (syncClinicalManifest(['core/app-shell.js', 'features/patient-fixes.js', 'core/lib/app-data.js'])) changed.push('clinical-manifest');
   return changed;
 }
 
 const executedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (executedDirectly) {
   const changed = runDelivery1FrontendHardening();
-  console.log(`Delivery 1 frontend ${MODE}: ${changed.length ? changed.join(', ') : 'already hardened'}`);
+  console.log(`Clinical frontend hardening ${MODE}: ${changed.length ? changed.join(', ') : 'already hardened'}`);
 }
