@@ -21,8 +21,8 @@ async function records(page, headers, table, query = '') {
   return response.json();
 }
 
-async function createPackage(page, headers, patient, sessionsTotal, label = 'Pacote P1') {
-  const appointmentResponse = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
+async function scheduleAppointment(page, headers, patient, label) {
+  const response = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
     headers,
     data: {
       p_mother_id: patient.mother.id,
@@ -35,8 +35,12 @@ async function createPackage(page, headers, patient, sessionsTotal, label = 'Pac
       p_payment_status: 'Pendente',
     },
   });
-  expect(appointmentResponse.ok()).toBeTruthy();
-  const appointment = await appointmentResponse.json();
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+async function createPackage(page, headers, patient, sessionsTotal, label = 'Pacote P1') {
+  const appointment = await scheduleAppointment(page, headers, patient, label);
   const billingResponse = await page.request.post('/api/clinical/rpc/set_appointment_billing', {
     headers,
     data: {
@@ -62,6 +66,32 @@ function consume(page, headers, packageId, requestKey) {
     headers,
     data: { p_package_id: packageId, p_notes: 'P1 concurrent consumption', p_request_key: requestKey },
   });
+}
+
+async function bindAppointmentToPackage(page, headers, appointmentId, packageId) {
+  const response = await page.request.post('/api/clinical/rpc/set_appointment_billing', {
+    headers,
+    data: {
+      p_appointment_id: appointmentId,
+      p_billing_mode: 'package_active',
+      p_service_label: 'Pacote concorrente P1',
+      p_value_cents: 0,
+      p_payment_method: 'Pix',
+      p_package_total_cents: null,
+      p_package_sessions_total: null,
+      p_package_id: packageId,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
+async function createEncounterForAppointment(page, headers, appointmentId) {
+  const response = await page.request.post('/api/clinical/rpc/start_clinical_encounter_from_appointment', {
+    headers,
+    data: { p_appointment_id: appointmentId },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
 }
 
 test('package creation and same-key concurrent retries never double-consume and a fresh package can follow exhaustion', async ({ page }) => {
@@ -135,5 +165,37 @@ test('two distinct requests racing for one remaining package session cannot both
   expect(refreshed.sessions_used).toBe(1);
   expect(refreshed.status).toBe('completed');
   const sessions = await records(page, headers, 'care_package_sessions', `package_id=eq.${encodeURIComponent(pkg.id)}`);
+  expect(sessions).toHaveLength(1);
+});
+
+test('two encounter finalizations racing for the last package session cannot both consume it', async ({ page }) => {
+  await login(page);
+  const patient = await createPatient(page);
+  const headers = { ...(await authHeaders(page)), 'content-type': 'application/json' };
+  const pkg = await createPackage(page, headers, patient, 1, 'Pacote finalize P1');
+
+  const appointmentA = await scheduleAppointment(page, headers, patient, 'Finalize A');
+  const appointmentB = await scheduleAppointment(page, headers, patient, 'Finalize B');
+  await bindAppointmentToPackage(page, headers, appointmentA.id, pkg.id);
+  await bindAppointmentToPackage(page, headers, appointmentB.id, pkg.id);
+  const encounterA = await createEncounterForAppointment(page, headers, appointmentA.id);
+  const encounterB = await createEncounterForAppointment(page, headers, appointmentB.id);
+
+  const [a, b] = await Promise.all([
+    page.request.post('/api/clinical/rpc/finalize_encounter_billing', {
+      headers,
+      data: { p_appointment_id: appointmentA.id, p_encounter_id: encounterA.encounter_id },
+    }),
+    page.request.post('/api/clinical/rpc/finalize_encounter_billing', {
+      headers,
+      data: { p_appointment_id: appointmentB.id, p_encounter_id: encounterB.encounter_id },
+    }),
+  ]);
+  expect([a.status(), b.status()].sort((x,y) => x-y)).toEqual([200, 409]);
+
+  const refreshed = (await records(page, headers, 'care_packages', `id=eq.${encodeURIComponent(pkg.id)}&limit=1`))[0];
+  expect(refreshed.sessions_used).toBe(1);
+  expect(refreshed.status).toBe('completed');
+  const sessions = await records(page, headers, 'care_package_sessions', `care_package_id=eq.${encodeURIComponent(pkg.id)}`);
   expect(sessions).toHaveLength(1);
 });
