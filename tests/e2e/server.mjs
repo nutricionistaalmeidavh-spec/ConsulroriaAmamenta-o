@@ -28,6 +28,7 @@ async function readJson(request) {
 async function resetClinicalState() {
   await runtime.db.prepare('DROP TRIGGER IF EXISTS fail_patient_consent_e2e').run();
   await runtime.db.prepare('DROP TRIGGER IF EXISTS fail_recovery_password_e2e').run();
+  await runtime.db.prepare('DROP TRIGGER IF EXISTS fail_encounter_start_e2e').run();
   await runtime.db.prepare('DELETE FROM clinical_idempotency_keys').run();
   await runtime.db.prepare('DELETE FROM supabase_records').run();
   runtime.recoveryMessages.length = 0;
@@ -56,6 +57,25 @@ const ready = createServer(async (request, response) => {
       }
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ ok: true, enabled: Boolean(enabled) }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/control/fail-encounter-start') {
+      const { enabled } = await readJson(request);
+      await runtime.db.prepare('DROP TRIGGER IF EXISTS fail_encounter_start_e2e').run();
+      if (enabled) {
+        await runtime.db.prepare(`CREATE TRIGGER fail_encounter_start_e2e BEFORE UPDATE ON supabase_records WHEN NEW.table_name='appointments' AND json_extract(NEW.record_json,'$.status')='Em atendimento' BEGIN SELECT RAISE(ABORT, 'forced_encounter_start_failure_e2e'); END`).run();
+      }
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, enabled: Boolean(enabled) }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/control/auth-refresh-stats') {
+      const { email } = await readJson(request);
+      const row = await runtime.db.prepare(`SELECT COUNT(*) AS active FROM auth_refresh_sessions s JOIN auth_users u ON u.user_id=s.user_id WHERE lower(u.email)=lower(?) AND s.revoked_at IS NULL AND s.expires_at > ?`).bind(String(email || ''), new Date().toISOString()).first();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, active: Number(row?.active || 0) }));
       return;
     }
 
