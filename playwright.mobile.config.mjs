@@ -19,8 +19,8 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'artifacts/playwright-mobile-report', open: 'never' }]],
   outputDir: 'artifacts/e2e-mobile-results',
   projects: [
-    { name: 'mobile-iphone', use: { ...devices['iPhone 13'] } },
-    { name: 'mobile-android', use: { ...devices['Pixel 7'] } },
+    { name: 'mobile-iphone', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'mobile-android', use: { ...devices['Pixel 7'], browserName: 'chromium' } },
   ],
   webServer: {
     command: 'node tests/e2e/server.mjs',
