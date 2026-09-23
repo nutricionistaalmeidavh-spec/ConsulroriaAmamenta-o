@@ -3,6 +3,7 @@ import {
   runtimeUserById,
 } from './cloudflare-auth-runtime.js';
 import { handleAtomicAppointmentEncounterStart } from './appointment-encounter-atomic-runtime.js';
+import { handleAtomicClinicalEncounterFinalization } from './encounter-finalization-atomic-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
@@ -71,6 +72,9 @@ export async function handleCloudflareClinicalRuntime(request, env) {
     const user = await authenticateClinicalRequest(request, env);
     if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required' });
   }
+
+  const finalizationResponse = await handleAtomicClinicalEncounterFinalization(request, env, url);
+  if (finalizationResponse) return finalizationResponse;
 
   const atomicStartResponse = await handleAtomicAppointmentEncounterStart(request, env, url);
   if (atomicStartResponse) return atomicStartResponse;
