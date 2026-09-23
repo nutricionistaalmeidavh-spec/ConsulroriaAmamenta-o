@@ -116,6 +116,7 @@ for (const scenario of [
     await login(page);
     await createPatient(page, `Read failure ${scenario.name}`);
     await waitForFeatureModules(page);
+    await expect(page.locator('[data-prh-card]')).toBeVisible();
     await page.route(scenario.pattern, route => route.fulfill({
       status: 500,
       contentType: 'application/json',
