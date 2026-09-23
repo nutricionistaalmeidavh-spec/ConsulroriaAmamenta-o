@@ -1,0 +1,50 @@
+import { test, expect } from '@playwright/test';
+import { login, authHeaders, uniqueLabel } from './helpers.mjs';
+
+async function createPatient(page, motherName, babyName) {
+  await page.locator('[data-action="new-patient"]:visible').first().click();
+  await page.locator('[name=motherName]').fill(motherName);
+  await page.locator('[data-baby-field="name"]').first().fill(babyName);
+  await page.locator('[name=consentData]').check();
+  const created = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'POST');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  const response = await created;
+  expect(response.status()).toBe(201);
+  return response.json();
+}
+
+async function logout(page) {
+  await page.locator('[data-nav-target=settings]:visible').first().click();
+  await page.locator('[data-action=logout]:visible').first().click();
+  await expect(page.locator('[data-login-form]')).toBeVisible();
+}
+
+test('a second professional cannot list, read or edit another professional patient', async ({ page }) => {
+  const originalName = uniqueLabel('Owner A mother');
+  await login(page);
+  const patient = await createPatient(page, originalName, uniqueLabel('Owner A baby'));
+  const motherId = patient.mother.id;
+  await logout(page);
+
+  await login(page, 'other@example.test');
+  const otherHeaders = await authHeaders(page);
+
+  const list = await page.request.get(`/api/clinical/records/mothers?id=eq.${encodeURIComponent(motherId)}&limit=1`, { headers: otherHeaders });
+  expect(list.ok()).toBeTruthy();
+  expect(await list.json()).toEqual([]);
+
+  const edit = await page.request.patch('/api/clinical/patients', {
+    headers: { ...otherHeaders, 'content-type': 'application/json' },
+    data: { mother: { id: motherId, name: 'Cross-user hijack must fail' } },
+  });
+  expect([403, 404]).toContain(edit.status());
+
+  await logout(page);
+  await login(page);
+  const ownerHeaders = await authHeaders(page);
+  const ownerRead = await page.request.get(`/api/clinical/records/mothers?id=eq.${encodeURIComponent(motherId)}&limit=1`, { headers: ownerHeaders });
+  expect(ownerRead.ok()).toBeTruthy();
+  const rows = await ownerRead.json();
+  expect(rows).toHaveLength(1);
+  expect(rows[0].name).toBe(originalName);
+});
