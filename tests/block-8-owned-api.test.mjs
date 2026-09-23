@@ -8,7 +8,8 @@ import {
   createMemorySessionStorage,
   createSupabaseClient,
 } from '../patch-source/cloudflare-license-authority/core/lib/supabase-client.js';
-import { ownedApiInternalPath } from '../worker/owned-api-paths.js';
+import domainWorker from '../worker/domain-entry.js';
+import { normalizeOwnedApiRequest, ownedApiInternalPath } from '../worker/owned-api-paths.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -105,4 +106,38 @@ test('worker entry translates owned API families only inside the Cloudflare proc
   // Existing special endpoints are already owned and must not be rewritten.
   assert.equal(ownedApiInternalPath('/api/auth/recovery'), '/api/auth/recovery');
   assert.equal(ownedApiInternalPath('/api/clinical/patients'), '/api/clinical/patients');
+});
+
+test('owned API translation preserves method, query, headers and body', async () => {
+  const request = new Request('https://app.test/api/clinical/records/mothers?select=id&limit=1', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-contract': 'block-8' },
+    body: JSON.stringify({ name: 'Teste' }),
+  });
+  const normalized = normalizeOwnedApiRequest(request);
+
+  assert.equal(normalized.normalized, true);
+  assert.equal(normalized.url.toString(), 'https://app.test/rest/v1/mothers?select=id&limit=1');
+  assert.equal(normalized.request.method, 'POST');
+  assert.equal(normalized.request.headers.get('x-contract'), 'block-8');
+  assert.deepEqual(await normalized.request.json(), { name: 'Teste' });
+});
+
+test('owned files API never falls through to static assets when D1 runtime is unavailable', async () => {
+  let assetCalls = 0;
+  const response = await domainWorker.fetch(
+    new Request('https://app.test/api/files/object/clinical-media/user-1/file.pdf?token=signed'),
+    {
+      ASSETS: {
+        async fetch() {
+          assetCalls += 1;
+          return new Response('asset');
+        },
+      },
+    },
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'cloudflare_d1_required' });
+  assert.equal(assetCalls, 0);
 });
