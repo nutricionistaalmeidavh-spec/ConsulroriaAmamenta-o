@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.mjs';
 import { login, authHeaders, uniqueLabel } from './helpers.mjs';
 
 async function createPatient(page, motherName, babyName) {
@@ -13,10 +13,11 @@ async function createPatient(page, motherName, babyName) {
   return response.json();
 }
 
-async function logout(page) {
-  await page.locator('[data-nav-target=settings]:visible').first().click();
-  await page.locator('[data-action=logout]:visible').first().click();
-  await expect(page.locator('[data-login-form]')).toBeVisible();
+async function clearBrowserSession(page) {
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
 }
 
 test('a second professional cannot list, read or edit another professional patient', async ({ page }) => {
@@ -24,8 +25,8 @@ test('a second professional cannot list, read or edit another professional patie
   await login(page);
   const patient = await createPatient(page, originalName, uniqueLabel('Owner A baby'));
   const motherId = patient.mother.id;
-  await logout(page);
 
+  await clearBrowserSession(page);
   await login(page, 'other@example.test');
   const otherHeaders = await authHeaders(page);
 
@@ -39,7 +40,7 @@ test('a second professional cannot list, read or edit another professional patie
   });
   expect([403, 404]).toContain(edit.status());
 
-  await logout(page);
+  await clearBrowserSession(page);
   await login(page);
   const ownerHeaders = await authHeaders(page);
   const ownerRead = await page.request.get(`/api/clinical/records/mothers?id=eq.${encodeURIComponent(motherId)}&limit=1`, { headers: ownerHeaders });
