@@ -17,6 +17,14 @@ function saveStatement(env,table,entry,row){
       table,entry.key,entry.ownerId||next.owner_id||null,JSON.stringify(next),next.created_at||now,next.updated_at||now,now
     );
 }
+function insertStatement(env,table,entry,row){
+  const now=new Date().toISOString();
+  const next={...row,updated_at:row.updated_at||now};
+  return db(env).prepare(`INSERT INTO supabase_records(table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at)
+    VALUES(?,?,?,?,?,?,?)`).bind(
+      table,entry.key,entry.ownerId||next.owner_id||null,JSON.stringify(next),next.created_at||now,next.updated_at||now,now
+    );
+}
 async function saveEntry(env,table,entry,row){await saveStatement(env,table,entry,row).run();return row}
 function remaining(pkg){return Math.max(0,Number(pkg.sessions_total||0)-Number(pkg.sessions_used||0))}
 function packagePayload(pkg,{idempotent=false}={}){
@@ -40,6 +48,10 @@ async function runAtomic(env,statements){
   if(typeof database.batch==='function')return database.batch(statements);
   const out=[];for(const statement of statements)out.push(await statement.run());return out;
 }
+async function existingManualSession(env,userId,packageId,key){
+  const sessions=(await tableRows(env,'care_package_sessions')).filter(session=>owned(session,userId));
+  return sessions.find(session=>String(session.record?.request_key||'')===key&&String(session.record?.package_id||session.record?.care_package_id||'')===packageId)||null;
+}
 
 async function reconcileBeforeNewPackage(request,env,user,input){
   const appointment=await ownedAppointment(env,input.p_appointment_id,user.id);
@@ -62,33 +74,62 @@ async function consumeManualPackageSession(request,env,user,input){
   const key=requestKey(input);
   if(!packageId)return runtimeJson(400,{message:'Plano obrigatório.'});
   if(!key)return runtimeJson(400,{message:'Identificador da operação obrigatório.'});
-  const entry=await ownedPackage(env,packageId,user.id);
+
+  let entry=await ownedPackage(env,packageId,user.id);
   if(!entry)return runtimeJson(404,{message:'Plano não encontrado ou sem permissão.'});
+  const maxAttempts=Math.max(2,Number(entry.record?.sessions_total||0)+2);
 
-  const sessions=(await tableRows(env,'care_package_sessions')).filter(session=>owned(session,user.id));
-  const existing=sessions.find(session=>String(session.record?.request_key||'')===key&&String(session.record?.package_id||session.record?.care_package_id||'')===packageId);
-  if(existing)return runtimeJson(200,packagePayload(entry.record,{idempotent:true}));
+  for(let attempt=0;attempt<maxAttempts;attempt+=1){
+    const existing=await existingManualSession(env,user.id,packageId,key);
+    if(existing){
+      const current=(await ownedPackage(env,packageId,user.id))?.record||entry.record;
+      return runtimeJson(200,packagePayload(current,{idempotent:true}));
+    }
 
-  const pkg=entry.record;
-  if(pkg.status!=='active'||remaining(pkg)<=0){
-    if(pkg.status==='active'&&remaining(pkg)<=0)await saveEntry(env,'care_packages',entry,{...pkg,status:'completed',updated_at:new Date().toISOString()});
-    return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
+    entry=await ownedPackage(env,packageId,user.id);
+    if(!entry)return runtimeJson(404,{message:'Plano não encontrado ou sem permissão.'});
+    const pkg=entry.record;
+    if(pkg.status!=='active'||remaining(pkg)<=0){
+      if(pkg.status==='active'&&remaining(pkg)<=0)await saveEntry(env,'care_packages',entry,{...pkg,status:'completed',updated_at:new Date().toISOString()});
+      return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
+    }
+
+    const now=new Date().toISOString();
+    const used=Number(pkg.sessions_used||0)+1;
+    const slotKey=`${packageId}:session:${used}`;
+    const nextPackage={...pkg,sessions_used:used,status:used>=Number(pkg.sessions_total||0)?'completed':'active',updated_at:now};
+    const claim={
+      id:slotKey,owner_id:user.id,package_id:packageId,slot:used,request_key:key,
+      created_at:now,updated_at:now
+    };
+    const session={
+      id:crypto.randomUUID(),owner_id:user.id,package_id:pkg.id,care_package_id:pkg.id,mother_id:pkg.mother_id||null,
+      appointment_id:null,encounter_id:null,source:'manual',request_key:key,notes:String(input?.p_notes||''),
+      consumed_at:now,used_at:now,created_at:now,updated_at:now
+    };
+    try{
+      await runAtomic(env,[
+        insertStatement(env,'care_package_session_claims',{key:slotKey,ownerId:user.id,record:claim},claim),
+        saveStatement(env,'care_package_sessions',{key:session.id,ownerId:user.id,record:session},session),
+        saveStatement(env,'care_packages',entry,nextPackage)
+      ]);
+      return runtimeJson(200,packagePayload(nextPackage,{idempotent:false}));
+    }catch(error){
+      const replay=await existingManualSession(env,user.id,packageId,key);
+      if(replay){
+        const current=(await ownedPackage(env,packageId,user.id))?.record||nextPackage;
+        return runtimeJson(200,packagePayload(current,{idempotent:true}));
+      }
+      const current=await ownedPackage(env,packageId,user.id);
+      if(!current)return runtimeJson(404,{message:'Plano não encontrado ou sem permissão.'});
+      if(current.record?.status!=='active'||remaining(current.record)<=0){
+        return runtimeJson(409,{message:'Plano sem consultas disponíveis.'});
+      }
+      if(Number(current.record?.sessions_used||0)>Number(pkg.sessions_used||0))continue;
+      throw error;
+    }
   }
-
-  const now=new Date().toISOString();
-  const used=Math.min(Number(pkg.sessions_total||0),Number(pkg.sessions_used||0)+1);
-  const nextPackage={...pkg,sessions_used:used,status:used>=Number(pkg.sessions_total||0)?'completed':'active',updated_at:now};
-  const session={
-    id:crypto.randomUUID(),owner_id:user.id,package_id:pkg.id,care_package_id:pkg.id,mother_id:pkg.mother_id||null,
-    appointment_id:null,encounter_id:null,source:'manual',request_key:key,notes:String(input?.p_notes||''),
-    consumed_at:now,used_at:now,created_at:now,updated_at:now
-  };
-  const sessionEntry={key:session.id,ownerId:user.id,record:session};
-  await runAtomic(env,[
-    saveStatement(env,'care_package_sessions',sessionEntry,session),
-    saveStatement(env,'care_packages',entry,nextPackage)
-  ]);
-  return runtimeJson(200,packagePayload(nextPackage,{idempotent:false}));
+  return runtimeJson(409,{message:'Plano alterado por outra operação. Tente novamente.',error:'package_concurrency_conflict'});
 }
 
 async function addPackageItemV2(env,user,input){
