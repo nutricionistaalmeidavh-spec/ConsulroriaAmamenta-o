@@ -4,6 +4,7 @@ import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js'
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
+import { handleClinicalBackupRuntime } from './clinical-backup-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
@@ -203,6 +204,9 @@ export default {
       const user = await authenticateClinicalRequest(request, env);
       if (!user?.id) return cloudflareIdentityRequired(401, 'cloudflare_auth_required');
     }
+
+    const clinicalBackupResponse = await handleClinicalBackupRuntime(request, env, url);
+    if (clinicalBackupResponse) return withNoIndex(clinicalBackupResponse);
 
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
