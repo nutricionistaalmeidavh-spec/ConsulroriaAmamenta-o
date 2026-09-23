@@ -74,6 +74,13 @@ export function hardenDelivery1AppShell(source) {
     'Stage 12 wizard-to-note autosave handoff',
   );
 
+  next = ensureReplace(
+    next,
+    '  flush:()=>{clearTimeout(encounterAutosaveTimer);encounterAutosaveTimer=null;return currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null)}\n};',
+    '  flush:()=>{clearTimeout(encounterAutosaveTimer);encounterAutosaveTimer=null;return currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null)},\n  syncVersion:(id)=>appData?.getEncounter?.(id)\n};',
+    'Stage 12 SQL-note optimistic version refresh bridge',
+  );
+
   return next;
 }
 
