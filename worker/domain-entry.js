@@ -3,6 +3,7 @@ import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.j
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
+import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
@@ -190,6 +191,9 @@ export default {
         headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
       }));
     }
+
+    const atomicAuthRefreshResponse = await handleAtomicAuthRefresh(request, env, url);
+    if (atomicAuthRefreshResponse) return withNoIndex(atomicAuthRefreshResponse);
 
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
