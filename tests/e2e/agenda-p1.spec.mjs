@@ -15,25 +15,26 @@ async function createPatient(page) {
   return response.json();
 }
 
+function clinicTodayAt(hour) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).map(part => [part.type, part.value]));
+  return new Date(`${parts.year}-${parts.month}-${parts.day}T${String(hour).padStart(2,'0')}:00:00-03:00`).toISOString();
+}
+
 async function appointmentById(page, headers, id) {
   const response = await page.request.get(`/api/clinical/records/appointments?id=eq.${encodeURIComponent(id)}&limit=1`, { headers });
   expect(response.ok()).toBeTruthy();
   return (await response.json())[0] ?? null;
 }
 
-test('agenda schedule, reschedule and encounter start survive reload without duplicate encounter', async ({ page }) => {
-  await login(page);
-  const patient = await createPatient(page);
-  const headers = { ...(await authHeaders(page)), 'content-type': 'application/json' };
-  const label = uniqueLabel('Agenda P1');
-  const firstStart = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-  const scheduled = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
+async function schedule(page, headers, patient, label, startsAt) {
+  const response = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
     headers,
     data: {
       p_mother_id: patient.mother.id,
       p_baby_ids: [patient.babies[0].id],
-      p_starts_at: firstStart,
+      p_starts_at: startsAt,
       p_duration_min: 60,
       p_appointment_type: label,
       p_format: 'Domiciliar',
@@ -41,8 +42,16 @@ test('agenda schedule, reschedule and encounter start survive reload without dup
       p_payment_status: 'Pendente',
     },
   });
-  expect(scheduled.ok()).toBeTruthy();
-  const appointment = await scheduled.json();
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+test('agenda schedule, reschedule and encounter start survive reload without duplicate encounter', async ({ page }) => {
+  await login(page);
+  const patient = await createPatient(page);
+  const headers = { ...(await authHeaders(page)), 'content-type': 'application/json' };
+  const label = uniqueLabel('Agenda P1');
+  const appointment = await schedule(page, headers, patient, label, clinicTodayAt(15));
   expect(appointment.status).toBe('Agendado');
 
   await page.reload();
@@ -50,7 +59,7 @@ test('agenda schedule, reschedule and encounter start survive reload without dup
   await page.locator('[data-nav-target=agenda]:visible').first().click();
   await expect(page.locator('[data-agenda-live]')).toContainText(label);
 
-  const secondStart = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const secondStart = clinicTodayAt(16);
   const rescheduled = await page.request.patch(`/api/clinical/records/appointments?id=eq.${encodeURIComponent(appointment.id)}`, {
     headers,
     data: { starts_at: secondStart, status: 'Confirmado' },
@@ -89,4 +98,27 @@ test('agenda schedule, reschedule and encounter start survive reload without dup
   const persisted = await appointmentById(page, await authHeaders(page), appointment.id);
   expect(persisted.starts_at).toBe(secondStart);
   expect(persisted.status).toBe('Em atendimento');
+});
+
+test('cancelled appointment remains auditable but disappears from the home upcoming list', async ({ page }) => {
+  await login(page);
+  const patient = await createPatient(page);
+  const headers = { ...(await authHeaders(page)), 'content-type': 'application/json' };
+  const label = uniqueLabel('Cancelled agenda P1');
+  const appointment = await schedule(page, headers, patient, label, clinicTodayAt(17));
+
+  const cancelled = await page.request.patch(`/api/clinical/records/appointments?id=eq.${encodeURIComponent(appointment.id)}`, {
+    headers,
+    data: { status: 'Cancelado' },
+  });
+  expect(cancelled.ok()).toBeTruthy();
+  expect((await appointmentById(page, headers, appointment.id)).status).toBe('Cancelado');
+
+  await page.reload();
+  await expect(page.locator('[data-app-root]')).toBeVisible();
+  await page.locator('[data-nav-target=home]:visible').first().click();
+  await expect(page.locator('[data-home-agenda-live]')).not.toContainText(label);
+  await page.locator('[data-nav-target=agenda]:visible').first().click();
+  await expect(page.locator('[data-agenda-live]')).toContainText(label);
+  await expect(page.locator('[data-agenda-live]')).toContainText('Cancelado');
 });
