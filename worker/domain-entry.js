@@ -1,4 +1,3 @@
-import coreWorker from './index.js';
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
@@ -13,7 +12,6 @@ import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js'
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source', '/auth', '/rest', '/storage'];
-const COMMERCIAL_GATED_PATHS = new Set(['/api/license/me', '/api/clinical/mothers', '/api/clinical/media/upload']);
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -70,6 +68,13 @@ function cloudflareIdentityRequired(status, error) {
   }));
 }
 
+function apiNotFound() {
+  return withNoIndex(new Response(JSON.stringify({ error: 'api_not_found' }), {
+    status: 404,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  }));
+}
+
 export function withNoIndex(response) {
   try {
     response.headers.set('x-robots-tag', 'noindex, nofollow');
@@ -87,7 +92,7 @@ export function withNoIndex(response) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/seo/login' && request.method === 'POST') {
@@ -106,8 +111,8 @@ export default {
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
 
-    // Once the D1 migration is complete, protected requests fail closed here. A missing
-    // or invalid Cloudflare identity must never fall through to a legacy backend.
+    // Protected clinical, licensing and partner routes are D1-only. Missing D1 or
+    // identity terminates here and can never escape to another backend.
     if (requiresCloudflareIdentity(request, url)) {
       if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
       const user = await authenticateClinicalRequest(request, env);
@@ -115,7 +120,7 @@ export default {
     }
 
     // Billing and partner attribution are Cloudflare D1-only. These routes are never
-    // allowed to fall through to the legacy commercial worker.
+    // allowed to fall through to a retired commercial worker.
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
@@ -144,10 +149,9 @@ export default {
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
     if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
 
-    if (url.pathname.startsWith('/api/')) {
-      if (COMMERCIAL_GATED_PATHS.has(url.pathname)) await ensureExplicitCommercialMarker(request, env);
-      return withNoIndex(await coreWorker.fetch(request, env, ctx));
-    }
+    // Block 7: API routing terminates inside the Cloudflare-native entrypoint. There
+    // is deliberately no fallback to worker/index.js or any other backend.
+    if (url.pathname.startsWith('/api/')) return apiNotFound();
 
     const route = resolvePublicHostRoute(url);
     if (route.type === 'redirect') {
@@ -165,7 +169,7 @@ export default {
       return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
     }
 
-    const response = await coreWorker.fetch(request, env, ctx);
+    const response = await env.ASSETS.fetch(request);
     if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },
