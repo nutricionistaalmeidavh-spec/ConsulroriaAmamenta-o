@@ -74,14 +74,15 @@ test('C12 package and member portal readers are owner-scoped in SQL instead of t
   assert.doesNotMatch(portalSource, /prepare\('SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?'\)/i);
 });
 
-test('C12 runtime schemas index the chronological fields used by large clinical lists', () => {
-  for (const path of ['../cloudflare/runtime-schema.sql', '../cloudflare/full-migration-schema.sql']) {
-    const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
-    for (const name of [
-      'supabase_records_owner_occurred_at_idx',
-      'supabase_records_owner_starts_at_idx',
-      'supabase_records_owner_measured_at_idx',
-      'supabase_records_owner_created_at_idx',
-    ]) assert.match(sql, new RegExp(name, 'i'), `${path} missing ${name}`);
-  }
+test('C12 ships additive D1 indexes for chronological clinical lists and local verification applies them', () => {
+  const migrationPath = '../cloudflare/migrations/0007-clinical-query-performance.sql';
+  const sql = readFileSync(new URL(migrationPath, import.meta.url), 'utf8');
+  for (const name of [
+    'supabase_records_owner_occurred_at_idx',
+    'supabase_records_owner_starts_at_idx',
+    'supabase_records_owner_measured_at_idx',
+    'supabase_records_owner_created_at_idx',
+  ]) assert.match(sql, new RegExp(name, 'i'), `${migrationPath} missing ${name}`);
+  const helper = readFileSync(new URL('./helpers/cloudflare-local.mjs', import.meta.url), 'utf8');
+  assert.match(helper, /0007-clinical-query-performance\.sql/);
 });
