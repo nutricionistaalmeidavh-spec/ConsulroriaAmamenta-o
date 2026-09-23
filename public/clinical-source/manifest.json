@@ -60,8 +60,8 @@
     },
     "features/clinical-note-feature.js": {
       "promoted": true,
-      "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover",
-      "sha256": "734c56adc0e326b3089a44b762928ea085fc566805c1e04d738677748825b8ec"
+      "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover+delivery3-versioning",
+      "sha256": "9400de2e91d560bf8c2500074146f08e109141ccc3fc8c7dfb2da254b0e44f66"
     },
     "features/patient-fixes.css": {
       "promoted": true,
