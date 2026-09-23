@@ -47,6 +47,7 @@ export function createAppData(repos) {
 
   const encounterWriteChains = new Map();
   const encounterLifecycle = new Map();
+  const encounterVersions = new Map();
   const pendingAppointmentFinalization = new Map();
   let startAttempt = null;
 
@@ -112,6 +113,16 @@ export function createAppData(repos) {
     return next;
   }
 
+  async function encounterVersion(id) {
+    if (encounterVersions.has(id)) return encounterVersions.get(id);
+    const current = await repos.encounters.get(id);
+    if (!current?.id) throw new Error('Prontuário não encontrado para salvar.');
+    const raw = Number(current.record_version ?? 0);
+    const version = Number.isInteger(raw) && raw >= 0 ? raw : 0;
+    encounterVersions.set(id, version);
+    return version;
+  }
+
   async function updateEncounter(id, payload = {}) {
     const wantsFinalize = String(payload.status || '').toLowerCase() === 'finalized';
     const lifecycle = encounterLifecycle.get(id);
@@ -121,7 +132,13 @@ export function createAppData(repos) {
     if (wantsFinalize) encounterLifecycle.set(id, 'finalizing');
 
     return queueEncounterWrite(id, async () => {
-      if (!wantsFinalize) return repos.encounters.update(id, payload);
+      if (!wantsFinalize) {
+        const version = await encounterVersion(id);
+        const saved = await repos.encounters.update(id, { ...payload, _expected_version: version });
+        const nextVersion = Number(saved?.record_version);
+        encounterVersions.set(id, Number.isInteger(nextVersion) && nextVersion >= 0 ? nextVersion : version + 1);
+        return saved;
+      }
       const appointmentId = String(payload.appointment_id || '');
       if (!appointmentId) {
         encounterLifecycle.delete(id);
@@ -151,6 +168,7 @@ export function createAppData(repos) {
       });
       pendingAppointmentFinalization.delete(appointmentId);
       encounterLifecycle.set(id, 'finalized');
+      encounterVersions.delete(id);
       return { id, ...payload, ...(result || {}) };
     }).catch((error) => {
       if (wantsFinalize && encounterLifecycle.get(id) === 'finalizing') encounterLifecycle.delete(id);
@@ -203,7 +221,14 @@ export function createAppData(repos) {
     startClinicalEncounterFromAppointment: (appointmentId) => repos.client.rpc('start_clinical_encounter_from_appointment', { p_appointment_id: appointmentId }),
     deleteScheduledAppointment: (appointmentId, confirmation = 'EXCLUIR') => repos.client.rpc('delete_scheduled_appointment', { p_appointment_id: appointmentId, p_confirmation: confirmation }),
     createEncounter: (payload) => repos.encounters.create(payload),
-    getEncounter: (id) => repos.encounters.get(id),
+    getEncounter: async (id) => {
+      const encounter = await repos.encounters.get(id);
+      if (encounter?.id) {
+        const raw = Number(encounter.record_version ?? 0);
+        encounterVersions.set(id, Number.isInteger(raw) && raw >= 0 ? raw : 0);
+      }
+      return encounter;
+    },
     updateEncounter,
     addWeight,
     listWeights: (babyId) => repos.weights.list({ query: `select=*&baby_id=eq.${encodeURIComponent(babyId)}&order=measured_at.asc` }),
