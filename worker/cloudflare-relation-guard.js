@@ -33,7 +33,7 @@ async function entryOwnedByUser(db, table, entry, userId, depth = 0) {
   return false;
 }
 
-async function validateRow(db, row, userId) {
+async function validateRow(db, row, userId, { allowNoReferences = false } = {}) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
   if (row.owner_id && String(row.owner_id) !== String(userId)) return false;
   if (row.user_id && String(row.user_id) !== String(userId)) return false;
@@ -47,7 +47,9 @@ async function validateRow(db, row, userId) {
     if (!parent || !await entryOwnedByUser(db, table, parent, userId)) return false;
     parents.set(field, parent.record || {});
   }
-  if (!sawReference) return Boolean(row.owner_id && String(row.owner_id) === String(userId));
+  if (!sawReference) {
+    return allowNoReferences || Boolean(row.owner_id && String(row.owner_id) === String(userId));
+  }
 
   const motherId = row.mother_id ? String(row.mother_id) : '';
   const babyMotherId = parents.get('baby_id')?.mother_id ? String(parents.get('baby_id').mother_id) : '';
@@ -74,7 +76,7 @@ export async function handleCloudflareRelationGuard(request, env, url = new URL(
   if (!input || typeof input !== 'object') return json(400, { error: 'invalid_payload' });
   const rows = Array.isArray(input) ? input : [input];
   for (const row of rows) {
-    if (!await validateRow(env.CLINICAL_DB, row, user.id)) {
+    if (!await validateRow(env.CLINICAL_DB, row, user.id, { allowNoReferences: request.method === 'PATCH' })) {
       return json(403, { error: 'record_outside_account' });
     }
   }
