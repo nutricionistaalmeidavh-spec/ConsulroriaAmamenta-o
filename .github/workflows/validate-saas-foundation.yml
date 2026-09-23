@@ -36,6 +36,15 @@ on:
       - 'tests/cloudflare-client-refresh.test.mjs'
       - 'tests/cloudflare-functional-regressions.test.mjs'
       - 'tests/frontend-cloudflare-cutover.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/helpers/**'
+      - 'tests/cloudflare-native-bootstrap.test.mjs'
+      - 'tests/cloudflare-async-errors.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'src/bootstrap.js'
+      - 'app/index.html'
+      - 'index.html'
       - 'tests/patient-save-runtime.test.mjs'
       - 'patch-source/base/config.js'
       - 'patch-source/cloudflare-license-authority/**'
@@ -81,6 +90,15 @@ on:
       - 'tests/cloudflare-client-refresh.test.mjs'
       - 'tests/cloudflare-functional-regressions.test.mjs'
       - 'tests/frontend-cloudflare-cutover.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/helpers/**'
+      - 'tests/cloudflare-native-bootstrap.test.mjs'
+      - 'tests/cloudflare-async-errors.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'src/bootstrap.js'
+      - 'app/index.html'
+      - 'index.html'
       - 'tests/patient-save-runtime.test.mjs'
       - 'patch-source/base/config.js'
       - 'patch-source/cloudflare-license-authority/**'
@@ -148,6 +166,8 @@ jobs:
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate Block 1 and 2 Cloudflare regressions
         run: npm run test:cloudflare-regressions
+      - name: Validate native recovery and bootstrap
+        run: npm run test:block5
       - name: Validate frontend Cloudflare cutover
         run: node --test tests/frontend-cloudflare-cutover.test.mjs
       - name: Validate SEO API contract

@@ -20,7 +20,7 @@ test('generic clinical facade intercepts corrected upserts before quarantined co
 test('versioned growth entrypoint contains no retired backend material', () => {
   const growth = read('public/growth-feature.js');
   assert.doesNotMatch(growth, /zxowxdfhtksevhnjmeyu|supabase\.co|sb_publishable_/i);
-  assert.match(growth, /served before Cloudflare runtime materialization/);
+  assert.match(growth, /served before Cloudflare runtime materialization|const SB_URL=window\.location\.origin/);
 });
 
 test('development materializes canonical clinical source before Vite starts', () => {

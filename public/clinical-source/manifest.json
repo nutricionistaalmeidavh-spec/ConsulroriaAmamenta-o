@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "strategy": "cloudflare-d1-r2-runtime-with-legacy-auth-bridge",
+  "strategy": "cloudflare-d1-r2-native-runtime",
   "generatedFromLegacyArtifacts": true,
   "modules": {
     "config.js": {
@@ -10,8 +10,8 @@
     },
     "core/app-shell.js": {
       "promoted": true,
-      "source": "agenda:core/app-shell.js+cloudflare-runtime-config+atomic-patient-create+frontend-cloudflare-cutover",
-      "sha256": "82d380e9a81d5695fd06867985809329ab7b1d97a2e177fd319ed2fe0207ef13"
+      "source": "agenda:core/app-shell.js+cloudflare-runtime-config+atomic-patient-create",
+      "sha256": "44e81d916ca72d6abf4508691253f91047c2f9d6fbcb4b7604d5403de757a662"
     },
     "core/lib/app-data.js": {
       "promoted": true,

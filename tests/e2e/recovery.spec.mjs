@@ -1,0 +1,27 @@
+import {test,expect} from '@playwright/test';
+import {credentials} from '../helpers/cloudflare-local.mjs';
+test('commercial recovery resets the D1 password with a backend-generated link',async({page,request})=>{
+  const email='recovery-e2e@example.test';
+  expect((await request.post('/auth/v1/signup',{data:{email,password:credentials.password}})).ok()).toBeTruthy();
+  await page.goto('/comercial/index.html');
+  await page.getByRole('button',{name:'Entrar',exact:true}).first().click();
+  await page.locator('#login-form [name=email]').fill(email);
+  await page.locator('[data-recover-password]').click();
+  await expect(page.locator('#form-message')).toContainText('Solicitação processada');
+  const inbox=await (await request.get('http://127.0.0.1:4174/recovery-inbox')).json();
+  const link=new URL(inbox.find(m=>m.to===email).recoveryUrl);
+  await page.goto(link.pathname+link.search+link.hash);
+  await expect(page.locator('#reset-password-form')).toBeVisible();
+  expect(page.url()).not.toContain('recovery_token');
+  await page.locator('#reset-password-form [name=password]').fill('New-local-password-2026!');
+  await page.locator('#reset-password-form [name=confirmPassword]').fill('New-local-password-2026!');
+  await page.locator('#reset-password-form button').click();
+  await expect(page.locator('#login-form')).toBeVisible();
+  await page.locator('#login-form [name=email]').fill(email);
+  await page.locator('#login-form [name=password]').fill('New-local-password-2026!');
+  const loggedIn=page.waitForResponse(r=>r.url().includes('grant_type=password'));
+  await page.locator('#login-form button[type=submit]').click();
+  expect((await loggedIn).status()).toBe(200);
+  expect((await request.post('/auth/v1/token?grant_type=password',{data:{email,password:credentials.password}})).status()).toBe(400);
+  expect((await request.post('/api/auth/reset-password',{data:{token:link.hash.slice('#recovery_token='.length),password:'another-password'}})).status()).toBe(400);
+});

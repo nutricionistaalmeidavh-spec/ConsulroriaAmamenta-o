@@ -23,12 +23,8 @@ assert.ok(existsSync('worker/domain-entry.js'), 'custom-domain worker entry must
 assert.match(root, /src\/bootstrap\.js/, 'root compatibility entry must keep the canonical bootstrap');
 assert.match(appEntry, /src\/bootstrap\.js/, '/app must use the exact same canonical bootstrap');
 
-const appBridgePos = appEntry.indexOf('/src/cloudflare-fetch-bridge.js');
-const appEventBusPos = appEntry.indexOf('/eventbus-runtime.js');
-const appBootstrapPos = appEntry.indexOf('/src/bootstrap.js');
-assert.ok(appBridgePos >= 0, '/app must install the Cloudflare fetch bridge before legacy clinical modules');
-assert.ok(appEventBusPos > appBridgePos, '/app must install EventBus after the fetch bridge');
-assert.ok(appBootstrapPos > appEventBusPos, '/app bootstrap must start only after bridge and EventBus are installed');
+assert.doesNotMatch(appEntry, /cloudflare-fetch-bridge/);
+assert.ok(appEntry.indexOf('/src/bootstrap.js') > appEntry.indexOf('/eventbus-runtime.js'));
 assert.match(bootstrap, /growth-feature\.js/, 'canonical bootstrap must continue loading the growth feature');
 
 for (const [label, source, assets] of [

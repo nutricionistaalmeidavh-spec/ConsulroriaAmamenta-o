@@ -129,10 +129,7 @@ const oldConfigured = `export function configured() {
     !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
 }`;
 const newConfigured = `export function configured() {
-  if (config.BACKEND_MODE === 'cloudflare') return Boolean(config.SUPABASE_URL && config.SUPABASE_PUBLISHABLE_KEY);
-  return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
-    /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
-    !String(config.SUPABASE_URL).includes('YOUR_PROJECT');
+  return config.BACKEND_MODE === 'cloudflare' && Boolean(config.API_BASE_URL && config.CLIENT_RUNTIME_KEY);
 }`;
 replaceText('core/app-shell.js', oldConfigured, newConfigured, 'cloudflare-runtime-config');
 
@@ -203,7 +200,7 @@ for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.l
 
 const manifest = Buffer.from(`${JSON.stringify({
   version: 3,
-  strategy: 'cloudflare-d1-r2-runtime-with-legacy-auth-bridge',
+  strategy: 'cloudflare-d1-r2-native-runtime',
   generatedFromLegacyArtifacts: true,
   modules
 }, null, 2)}\n`, 'utf8');

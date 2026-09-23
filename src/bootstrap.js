@@ -1,9 +1,8 @@
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 
 window.__deboraUnzipSync = unzipSync;
 
-const AUTH_ORIGIN = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
 const APP_CONTEXT = resolveAppIdentity(window.location);
 window.CANONICAL_APP_CONTEXT = APP_CONTEXT;
 const APP_URL = `${window.location.origin}${APP_CONTEXT.basePath}`;
@@ -64,8 +63,13 @@ function bridgeCompatibleSession() {
     // commercial session is authoritative and may safely seed the existing clinical key.
     if (APP_CONTEXT.entryMode === 'app' && commercial) {
       sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, commercialRaw);
+      localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, commercialRaw);
       sessionStorage.setItem(CANONICAL_SESSION_KEY, commercialRaw);
       return;
+    }
+
+    if (!localStorage.getItem(LEGACY_CLINICAL_SESSION_KEY) && (legacyRaw || canonicalRaw)) {
+      localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, legacyRaw || canonicalRaw);
     }
 
     // Root compatibility keeps Débora's already established clinical session untouched.
@@ -78,79 +82,11 @@ function bridgeCompatibleSession() {
 
 bridgeCompatibleSession();
 
-function installAuthRedirectGuard() {
-  if (window.__deboraAuthRedirectGuard) return;
-  window.__deboraAuthRedirectGuard = true;
-
-  const nativeFetch = window.fetch.bind(window);
-  const remember = (token) => {
-    if (!token || token.split('.').length !== 3) return;
-    window.__deboraAccessToken = token;
-    try {
-      sessionStorage.setItem('debora-runtime-access-token', token);
-    } catch {
-      // Session storage can be unavailable in restricted browser contexts.
-    }
-  };
-
-  window.fetch = (input, init) => {
-    let nextInput = input;
-    let nextInit = init;
-
-    try {
-      const raw = typeof input === 'string' || input instanceof URL
-        ? String(input)
-        : input instanceof Request
-          ? input.url
-          : null;
-      const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
-      const auth = headers.get('Authorization') || '';
-
-      if (/^Bearer\s+\S+/i.test(auth)) remember(auth.replace(/^Bearer\s+/i, '').trim());
-
-      if (raw && raw.startsWith(`${AUTH_ORIGIN}/auth/v1/`)) {
-        const url = new URL(raw);
-        if (
-          ['/auth/v1/signup', '/auth/v1/recover', '/auth/v1/otp'].includes(url.pathname)
-          && !url.searchParams.has('redirect_to')
-        ) {
-          url.searchParams.set('redirect_to', APP_URL);
-          nextInput = input instanceof Request ? new Request(url.toString(), input) : url.toString();
-        }
-      }
-
-      if (
-        raw
-        && raw.startsWith(`${AUTH_ORIGIN}/rest/v1/babies`)
-        && init?.body
-        && ['POST', 'PATCH'].includes(String(init.method || 'POST').toUpperCase())
-      ) {
-        const sex = document.querySelector('select[name="growthBabySex"]')?.value;
-        if (['female', 'male'].includes(sex)) {
-          try {
-            const body = JSON.parse(init.body);
-            const addSex = (value) => value && typeof value === 'object' ? { ...value, sex } : value;
-            const nextBody = Array.isArray(body) ? body.map(addSex) : addSex(body);
-            nextInit = { ...init, body: JSON.stringify(nextBody) };
-          } catch {
-            // Preserve the original request if the body is not JSON.
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('Supabase request guard fallback', error);
-    }
-
-    return nativeFetch(nextInput, nextInit);
-  };
-}
-
-installAuthRedirectGuard();
-
 if ('serviceWorker' in navigator) {
   let reloading = false;
+  const hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return;
+    if (!hadController || reloading) return;
     reloading = true;
     location.reload();
   });
@@ -176,55 +112,6 @@ async function loadCanonicalRuntime() {
   return Object.fromEntries(entries);
 }
 
-const ZIP_URLS = [
-  '/debora-app-1.bin',
-  '/debora-app-2.bin',
-  '/debora-app-3.bin',
-  '/debora-app-4.bin',
-];
-
-const RELEASE_PATCH_URLS = [
-  '/release-1.11.0-patch-1.txt',
-  '/release-1.11.0-patch-2.txt',
-  '/release-1.11.0-patch-3.txt',
-  '/release-1.11.0-patch-4.txt',
-  '/release-1.11.0-patch-5.txt',
-  '/release-1.11.0-patch-6.txt',
-  '/release-1.11.0-patch-7.txt',
-  '/release-1.11.0-patch-8.txt',
-];
-
-const AGENDA_PATCH_URLS = [
-  '/release-1.12.0-agenda-1.txt',
-  '/release-1.12.0-agenda-2.txt',
-  '/release-1.12.0-agenda-3.txt',
-  '/release-1.12.0-agenda-4.txt',
-];
-
-function decodeMaybeBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  if (!bytes.length || bytes.length % 4 !== 0) return bytes;
-
-  const text = new TextDecoder('ascii').decode(bytes);
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(text)) return bytes;
-
-  try {
-    const binary = atob(text);
-    const output = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) output[index] = binary.charCodeAt(index);
-    return output;
-  } catch {
-    return bytes;
-  }
-}
-
-function decodeB64Text(text) {
-  const binary = atob(text.trim());
-  const output = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) output[index] = binary.charCodeAt(index);
-  return output;
-}
-
 function memberOnly() {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
@@ -240,85 +127,6 @@ function memberOnly() {
 
 function moduleUrl(source) {
   return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-}
-
-async function loadBaseArchive() {
-  const responses = await Promise.all(ZIP_URLS.map((url) => fetch(url, { cache: 'no-store' })));
-  const failed = responses.find((response) => !response.ok);
-  if (failed) throw new Error(`Falha ao carregar aplicativo base (${failed.status}).`);
-
-  const fetched = await Promise.all(responses.map((response) => response.arrayBuffer()));
-  const parts = fetched.map(decodeMaybeBase64);
-  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
-  const merged = new Uint8Array(total);
-  let cursor = 0;
-
-  for (const part of parts) {
-    merged.set(part, cursor);
-    cursor += part.byteLength;
-  }
-
-  if (merged[0] !== 80 || merged[1] !== 75) throw new Error('Pacote base inválido.');
-  return unzipSync(merged);
-}
-
-async function loadReleasePatch() {
-  const responses = await Promise.all(RELEASE_PATCH_URLS.map((url) => fetch(url, { cache: 'no-store' })));
-  const failed = responses.find((response) => !response.ok);
-  if (failed) throw new Error(`Falha ao carregar release clínica (${failed.status}).`);
-
-  const encoded = (await Promise.all(responses.map((response) => response.text()))).join('');
-  return unzipSync(decodeB64Text(encoded));
-}
-
-async function loadAgendaPatch() {
-  const responses = await Promise.all(AGENDA_PATCH_URLS.map((url) => fetch(url, { cache: 'no-store' })));
-  const failed = responses.find((response) => !response.ok);
-  if (failed) throw new Error(`Falha ao carregar fluxo da Agenda (${failed.status}).`);
-
-  const encoded = (await Promise.all(responses.map((response) => response.text()))).join('');
-  return unzipSync(decodeB64Text(encoded));
-}
-
-function archiveText(entries, path) {
-  const bytes = entries[path];
-  if (!bytes) throw new Error(`Arquivo ausente: ${path}`);
-  return strFromU8(bytes);
-}
-
-async function loadLegacyRuntime() {
-  const [base, patch, agendaPatch] = await Promise.all([
-    loadBaseArchive(),
-    loadReleasePatch(),
-    loadAgendaPatch(),
-  ]);
-
-  const runtime = {
-    'index.html': archiveText(base, 'index.html'),
-    'styles.css': archiveText(base, 'styles.css'),
-    'config.js': archiveText(base, 'config.js'),
-    'core/app-shell.js': agendaPatch['core/app-shell.js']
-      ? archiveText(agendaPatch, 'core/app-shell.js')
-      : archiveText(patch, 'core/app-shell.js'),
-    'features/clinical-note-feature.js': archiveText(patch, 'features/clinical-note-feature.js'),
-    'features/clinical-note-feature.css': archiveText(patch, 'features/clinical-note-feature.css'),
-    'features/patient-fixes.css': archiveText(patch, 'features/patient-fixes.css'),
-  };
-
-  for (const path of MODULE_PATHS) {
-    const agendaPath = `core/${path}`;
-    if (agendaPatch[agendaPath]) {
-      runtime[agendaPath] = archiveText(agendaPatch, agendaPath);
-      continue;
-    }
-
-    const patched = path === 'lib/supabase-client.js' || path === 'lib/app-data.js';
-    runtime[agendaPath] = patched
-      ? archiveText(patch, agendaPath)
-      : archiveText(base, path);
-  }
-
-  return runtime;
 }
 
 function genericizeClinicalConfig(source) {
@@ -369,7 +177,8 @@ async function boot() {
   }
 
   const canonicalRuntime = await loadCanonicalRuntime();
-  const runtime = canonicalRuntime ?? await loadLegacyRuntime();
+  if (!canonicalRuntime) throw new Error('Aplicativo indisponível. Verifique sua conexão e tente novamente.');
+  const runtime = canonicalRuntime;
   const moduleUrls = {};
 
   for (const path of MODULE_PATHS) {

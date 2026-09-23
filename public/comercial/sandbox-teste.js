@@ -1,6 +1,6 @@
 const runtime = window.SAAS_RUNTIME_CONFIG || {};
-const supabaseUrl = String(runtime.supabaseUrl || '').replace(/\/$/, '');
-const publishableKey = String(runtime.supabasePublishableKey || '');
+const apiBaseUrl = String(window.location.origin).replace(/\/$/, '');
+const publishableKey = String(runtime.clientRuntimeKey || 'cloudflare-runtime');
 const SESSION_KEY = 'commercial.saas.session.v1';
 const PLAN_KEY = 'commercial.saas.plan-intent.v1';
 
@@ -25,7 +25,7 @@ function setStatus(text, tone = '') {
 }
 
 async function supabase(path, token) {
-  const response = await fetch(`${supabaseUrl}${path}`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
       apikey: publishableKey,
       Authorization: `Bearer ${token}`,
@@ -59,7 +59,7 @@ async function createSandboxCheckout(planCode, token) {
 }
 
 async function init() {
-  if (!supabaseUrl || !publishableKey) {
+  if (!apiBaseUrl || !publishableKey) {
     setStatus('Configuração comercial indisponível.', 'error');
     return;
   }

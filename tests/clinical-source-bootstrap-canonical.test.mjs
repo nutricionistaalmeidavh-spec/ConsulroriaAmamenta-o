@@ -24,12 +24,12 @@ const requiredCanonicalPaths = [
   'features/patient-fixes.css'
 ];
 
-test('normal clinical startup loads a complete canonical runtime before considering legacy archives', () => {
+test('normal clinical startup loads a complete canonical runtime without legacy archives', () => {
   assert.match(bootstrap, /CLINICAL_RUNTIME_PATHS/);
   assert.match(bootstrap, /async function loadCanonicalRuntime/);
-  assert.match(bootstrap, /async function loadLegacyRuntime/);
+  assert.doesNotMatch(bootstrap, /async function loadLegacyRuntime/);
   assert.match(bootstrap, /await loadCanonicalRuntime\(\)/);
-  assert.match(bootstrap, /await loadLegacyRuntime\(\)/);
+  assert.doesNotMatch(bootstrap, /await loadLegacyRuntime\(\)/);
   assert.doesNotMatch(
     bootstrap,
     /Promise\.all\(\s*\[\s*loadBaseArchive\(\),\s*loadReleasePatch\(\),\s*loadAgendaPatch\(\),\s*loadCanonical/i,
@@ -41,8 +41,7 @@ test('normal clinical startup loads a complete canonical runtime before consider
   }
 });
 
-test('legacy loaders remain available only as rollback fallback', () => {
-  assert.match(bootstrap, /function loadBaseArchive|async function loadBaseArchive/);
-  assert.match(bootstrap, /function loadReleasePatch|async function loadReleasePatch/);
-  assert.match(bootstrap, /function loadAgendaPatch|async function loadAgendaPatch/);
+test('canonical load failure stops startup', () => {
+  assert.match(bootstrap, /if \(!canonicalRuntime\) throw new Error/);
+  assert.doesNotMatch(bootstrap, /function loadBaseArchive|function loadReleasePatch|function loadAgendaPatch/);
 });

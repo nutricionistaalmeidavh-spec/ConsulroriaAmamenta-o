@@ -53,7 +53,7 @@ test('committed growth entry is fail-closed and dev/build materialize a Cloudfla
   const normalized = normalizeGrowthRuntimeSource(legacyTemplate);
 
   assert.doesNotMatch(committedEntry, /zxowxdfhtksevhnjmeyu|supabase\.co|sb_publishable_/i);
-  assert.match(committedEntry, /served before Cloudflare runtime materialization/);
+  assert.match(committedEntry, /served before Cloudflare runtime materialization|const SB_URL=window\.location\.origin/);
   assert.doesNotMatch(normalized, /zxowxdfhtksevhnjmeyu|supabase\.co/i);
   assert.match(normalized, /const SB_URL=window\.location\.origin/);
   assert.match(normalized, /const WHO_BASE='\/who\/v2026-08-30\/'/);
