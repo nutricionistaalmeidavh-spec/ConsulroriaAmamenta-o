@@ -115,7 +115,7 @@ test('final materialized build completes the critical clinical flow through real
   expect(packageCharges).toHaveLength(1);
   expect(Number(packageCharges[0].amount_cents)).toBe(60000);
 
-  const media = await records(page, 'clinical_media', `encounter_id=eq.${encodeURIComponent(encounterId)}`);
+  const media = await records(page, 'media', `encounter_id=eq.${encodeURIComponent(encounterId)}`);
   expect(media).toHaveLength(1);
 
   await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]`).click();
