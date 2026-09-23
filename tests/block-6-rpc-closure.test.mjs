@@ -8,7 +8,9 @@ const demoSource = readFileSync(new URL('../public/demo-feature.js', import.meta
 const bootstrapSource = readFileSync(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
 const clinicalNoteSource = readFileSync(new URL('../public/clinical-source/features/clinical-note-feature.js', import.meta.url), 'utf8');
 const clinicalManifest = JSON.parse(readFileSync(new URL('../public/clinical-source/manifest.json', import.meta.url), 'utf8'));
-const packageSource = readFileSync(new URL('../worker/package-lifecycle-runtime.js', import.meta.url), 'utf8');
+const packageFacadeSource = readFileSync(new URL('../worker/package-session-atomic-runtime.js', import.meta.url), 'utf8');
+const packageIntegritySource = readFileSync(new URL('../worker/package-integrity-atomic-runtime.js', import.meta.url), 'utf8');
+const packageSource = `${packageFacadeSource}\n${packageIntegritySource}`;
 const billingSource = readFileSync(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
 const appDataSource = readFileSync(new URL('../public/clinical-source/core/lib/app-data.js', import.meta.url), 'utf8');
 
@@ -153,7 +155,8 @@ test('materialized clinical note hash stays in sync with the canonical manifest'
   assert.equal(clinicalManifest.modules['features/clinical-note-feature.js'].sha256, digest);
 });
 
-test('package v2 RPCs are owned by the D1 package lifecycle runtime and accept the live frontend payload', () => {
+test('package v2 RPCs are owned by the canonical atomic package runtimes and accept the live frontend payload', () => {
+  assert.match(packageFacadeSource, /handleAtomicPackageIntegrityRuntime/);
   assert.match(packageSource, /add_care_package_item_v2/);
   assert.match(packageSource, /consume_care_package_item_v2/);
   assert.match(packageSource, /p_request_key/);
