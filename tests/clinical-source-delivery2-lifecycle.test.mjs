@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
 
-const appDataSource = readFileSync('patch-source/delivery2/core/lib/app-data.js', 'utf8');
+const appDataSource = readFileSync('patch-source/cloudflare-license-authority/core/lib/app-data.js', 'utf8');
 
 async function seed(db, table, id, ownerId, record) {
   const now = new Date().toISOString();
