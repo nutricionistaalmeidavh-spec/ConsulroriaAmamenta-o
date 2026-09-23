@@ -3,6 +3,7 @@ import {
   runtimeUserById,
 } from './cloudflare-auth-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
+import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import {
   handleCloudflareDataRuntime,
@@ -45,6 +46,9 @@ export async function handleCloudflareClinicalRuntime(request, env) {
 
   const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
   if (growthResponse) return growthResponse;
+
+  const relationGuardResponse = await handleCloudflareRelationGuard(request, env, url);
+  if (relationGuardResponse) return relationGuardResponse;
 
   const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
   if (upsertResponse) return upsertResponse;
