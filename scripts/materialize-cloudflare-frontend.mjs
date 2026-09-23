@@ -61,6 +61,24 @@ function replaceQuotedLiteral(source, literal, replacementExpression) {
     .replace(new RegExp('`' + escaped + '`', 'g'), replacementExpression);
 }
 
+function migrateOwnedApiPaths(source) {
+  return String(source)
+    .replaceAll('/auth/v1/', '/api/auth/')
+    .replaceAll('/auth/v1', '/api/auth')
+    .replaceAll('/rest/v1/rpc/', '/api/clinical/rpc/')
+    .replaceAll('/rest/v1/rpc', '/api/clinical/rpc')
+    .replaceAll('/rest/v1/', '/api/clinical/records/')
+    .replaceAll('/rest/v1', '/api/clinical/records')
+    .replaceAll('/storage/v1/', '/api/files/')
+    .replaceAll('/storage/v1', '/api/files')
+    .replaceAll('/api/sandbox/webhooks/asaas', '/api/billing/sandbox/webhooks/asaas')
+    .replaceAll('/api/sandbox/asaas/', '/api/billing/sandbox/')
+    .replaceAll('/api/sandbox/asaas', '/api/billing/sandbox')
+    .replaceAll('/api/webhooks/asaas', '/api/billing/webhooks/asaas')
+    .replaceAll('/api/asaas/', '/api/billing/')
+    .replaceAll('/api/asaas', '/api/billing');
+}
+
 function retireDestructiveClinicalDelete(source) {
   return String(source)
     .replace(/async function cnDeleteEncounter\(\)\{[\s\S]*?\}\nfunction cnWireOverlay/, 'function cnWireOverlay')
@@ -74,6 +92,7 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   if (/\.(?:js|mjs)$/i.test(relativePath)) {
     next = replaceQuotedLiteral(next, OLD_ORIGIN, SAME_ORIGIN_EXPRESSION);
     next = replaceQuotedLiteral(next, OLD_KEY, "'cloudflare-runtime'");
+    next = migrateOwnedApiPaths(next);
   }
 
   if (SAME_ORIGIN_TARGETS.has(relativePath)) {
