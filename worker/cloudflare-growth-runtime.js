@@ -4,6 +4,7 @@ import {
   idempotencyInsertStatement,
   idempotencyResponse,
   isIdempotencyConflict,
+  ownerRows,
   recordById,
   recordByIdForOwner,
 } from './d1-record-store.js';
@@ -30,10 +31,38 @@ function recordStatement(db, table, key, row, ownerId, now) {
   return guardedRecordStatement(db, table, key, row, ownerId, now);
 }
 
-function finiteOrNull(value) {
-  if (value === null || value === undefined || value === '') return null;
+function positiveMeasurement(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return { provided: false, value: null };
+  }
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed) || parsed <= 0) return { provided: true, value: null, invalid: true };
+  return { provided: true, value: parsed, invalid: false };
+}
+
+function normalizedMeasuredAt(value, now) {
+  const raw = value === null || value === undefined || String(value).trim() === '' ? now : value;
+  const timestamp = Date.parse(raw);
+  const nowTimestamp = Date.parse(now);
+  if (!Number.isFinite(timestamp) || !Number.isFinite(nowTimestamp) || timestamp > nowTimestamp) return null;
+  return new Date(timestamp).toISOString();
+}
+
+function latestWeightForBaby(entries, babyId) {
+  let latest = null;
+  let latestTimestamp = Number.NEGATIVE_INFINITY;
+  for (const entry of entries || []) {
+    const row = entry?.record || {};
+    if (String(row.baby_id || '') !== String(babyId)) continue;
+    const weight = Number(row.weight_g);
+    const timestamp = Date.parse(row.measured_at);
+    if (!Number.isFinite(weight) || weight <= 0 || !Number.isFinite(timestamp)) continue;
+    if (timestamp >= latestTimestamp) {
+      latestTimestamp = timestamp;
+      latest = row;
+    }
+  }
+  return latest;
 }
 
 function requestIdempotencyKey(request) {
@@ -71,15 +100,23 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
     return json(404, { error: 'baby_not_found' });
   }
 
-  const weight = finiteOrNull(input?.p_weight_g);
-  const length = finiteOrNull(input?.p_length_cm);
-  const head = finiteOrNull(input?.p_head_circumference_cm);
-  if (weight === null && length === null && head === null) {
+  const weightInput = positiveMeasurement(input?.p_weight_g);
+  const lengthInput = positiveMeasurement(input?.p_length_cm);
+  const headInput = positiveMeasurement(input?.p_head_circumference_cm);
+  if (weightInput.invalid || lengthInput.invalid || headInput.invalid) {
+    return json(400, { error: 'measurement_invalid' });
+  }
+  if (!weightInput.provided && !lengthInput.provided && !headInput.provided) {
     return json(400, { error: 'measurement_required' });
   }
 
+  const measuredAt = normalizedMeasuredAt(input?.p_measured_at, now);
+  if (!measuredAt) return json(400, { error: 'measured_at_invalid' });
+
+  const weight = weightInput.value;
+  const length = lengthInput.value;
+  const head = headInput.value;
   const uuid = deps.uuid || (() => crypto.randomUUID());
-  const measuredAt = input?.p_measured_at || now;
   const measurementId = uuid();
   const measurement = {
     id: measurementId,
@@ -93,13 +130,23 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
     updated_at: now,
   };
 
+  let shouldUpdateCurrentWeight = false;
+  if (weight !== null) {
+    const existingWeights = await ownerRows(db, 'weights', user.id);
+    const latestWeight = latestWeightForBaby(existingWeights, babyId);
+    const latestTimestamp = latestWeight ? Date.parse(latestWeight.measured_at) : Number.NEGATIVE_INFINITY;
+    shouldUpdateCurrentWeight = Date.parse(measuredAt) >= latestTimestamp;
+  }
+
   const baby = {
     ...babyEntry.record,
     owner_id: user.id,
     ...(input?.p_sex ? { sex: input.p_sex } : {}),
     ...(input?.p_growth_reference ? { growth_reference: input.p_growth_reference } : {}),
     ...(input?.p_growth_condition ? { growth_condition: input.p_growth_condition } : {}),
-    ...(weight === null ? {} : { current_weight_g: Math.round(weight) }),
+    ...(weight !== null && shouldUpdateCurrentWeight
+      ? { current_weight_g: Math.round(weight), current_weight_measured_at: measuredAt }
+      : {}),
     updated_at: now,
   };
 
