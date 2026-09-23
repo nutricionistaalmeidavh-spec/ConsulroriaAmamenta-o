@@ -90,5 +90,6 @@ test('owned record writes reject foreign parents and cross-account relationship 
     headers: { ...ownerBHeaders, 'content-type': 'application/json' },
     data: { appointment_id: ownerAAppointment.id, baby_id: ownerB.babies[0].id, is_primary: true },
   });
-  expect(crossAccountLink.status()).toBe(403);
+  expect(crossAccountLink.status()).toBe(405);
+  expect(await crossAccountLink.json()).toMatchObject({ error: 'generic_mutation_not_allowed', table: 'appointment_babies' });
 });
