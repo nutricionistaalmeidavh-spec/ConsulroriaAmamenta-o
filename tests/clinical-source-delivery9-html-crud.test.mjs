@@ -68,6 +68,8 @@ test('generic CRUD cannot mutate domain-managed records while canonical reads re
     const session = await runtime.login();
     const headers = authHeaders(session);
     await putRecord(runtime.db, 'mothers', 'm1', { id: 'm1', owner_id: userId, name: 'Paciente' });
+    await putRecord(runtime.db, 'babies', 'b1', { id: 'b1', owner_id: userId, mother_id: 'm1', name: 'Bebê' });
+    await putRecord(runtime.db, 'appointments', 'a1', { id: 'a1', owner_id: userId, mother_id: 'm1', baby_id: 'b1', status: 'Agendado' });
     await putRecord(runtime.db, 'care_packages', 'p1', {
       id: 'p1', owner_id: userId, mother_id: 'm1', service_label: 'Plano seguro', sessions_total: 2, sessions_used: 0, status: 'active',
     });
@@ -81,9 +83,9 @@ test('generic CRUD cannot mutate domain-managed records while canonical reads re
       ['POST', 'http://localhost/api/clinical/records/care_packages?on_conflict=mother_id,service_label', { mother_id: 'm1', service_label: 'Plano seguro', sessions_total: 99 }],
       ['PATCH', 'http://localhost/api/clinical/records/care_packages?id=eq.p1', { sessions_used: 99 }],
       ['DELETE', 'http://localhost/api/clinical/records/care_packages?id=eq.p1', null],
-      ['POST', 'http://localhost/api/clinical/records/growth_measurements', { baby_id: 'b1', weight_g: -1 }],
+      ['POST', 'http://localhost/api/clinical/records/growth_measurements', { baby_id: 'b1', weight_g: 4100, measured_at: '2026-09-20T10:00:00.000Z' }],
       ['POST', 'http://localhost/api/clinical/records/appointment_babies', { appointment_id: 'a1', baby_id: 'b1' }],
-      ['POST', 'http://localhost/api/clinical/records/clinical_encounters', { mother_id: 'm1', status: 'draft' }],
+      ['POST', 'http://localhost/api/clinical/records/clinical_encounters', { mother_id: 'm1', baby_id: 'b1', appointment_id: 'a1', status: 'draft' }],
     ]) {
       const response = await runtime.mf.dispatchFetch(url, {
         method, headers, ...(body ? { body: JSON.stringify(body) } : {}),
