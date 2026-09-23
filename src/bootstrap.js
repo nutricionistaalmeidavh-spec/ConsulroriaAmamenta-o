@@ -214,6 +214,15 @@ function genericizeClinicalShell(source) {
     .replace('`debora-lactacao-backup-${new Date().toISOString().slice(0,10)}.json`', '`gestao-amamentacao-backup-${new Date().toISOString().slice(0,10)}.json`');
 }
 
+async function ensureClinicalPhaseLoaders() {
+  const phase02 = await import(/* @vite-ignore */ '/phase02-loader.js');
+  await phase02.startPhase02?.();
+  const phase35 = await import(/* @vite-ignore */ '/phase35-loader.js');
+  await phase35.startPhase35?.();
+  const phase68 = await import(/* @vite-ignore */ '/phase68-loader.js');
+  await phase68.startPhase68?.();
+}
+
 async function boot() {
   if (await cleanupLegacyServiceWorkers()) return;
 
@@ -264,6 +273,7 @@ async function boot() {
   document.open();
   document.write(html);
   document.close();
+  await ensureClinicalPhaseLoaders();
 }
 
 boot().catch((error) => {
