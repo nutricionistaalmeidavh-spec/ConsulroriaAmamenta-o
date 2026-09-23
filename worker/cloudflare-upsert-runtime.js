@@ -20,7 +20,8 @@ const OWNER_TABLES = new Set([
   'member_engagement_events','member_portal_access','member_shared_items',
 ]);
 const RELATIONAL_OWNER_TABLES = new Set([
-  'babies','weights','growth_measurements','clinical_encounter_addenda','clinical_note_revisions',
+  'babies','appointments','clinical_encounters','appointment_babies','clinical_encounter_babies',
+  'weights','growth_measurements','clinical_encounter_addenda','clinical_note_revisions',
   'care_package_items','care_package_sessions','care_package_item_usages',
 ]);
 const NO_ID_TABLES = new Set(['appointment_babies','clinical_encounter_babies']);
@@ -62,9 +63,9 @@ async function relationalOwnerValid(db, table, row, userId) {
     if (!row[field]) continue;
     sawReference = true;
     const parent = await recordById(db, refTable, row[field]);
-    if (parent && await recordOwnedByUser(db, refTable, parent, userId)) return true;
+    if (!parent || !await recordOwnedByUser(db, refTable, parent, userId)) return false;
   }
-  return !sawReference && Boolean(row.owner_id && String(row.owner_id) === String(userId));
+  return sawReference || Boolean(row.owner_id && String(row.owner_id) === String(userId));
 }
 
 async function ensureWriteOwnership(db, table, row, user) {
