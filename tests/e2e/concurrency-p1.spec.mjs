@@ -56,7 +56,11 @@ test('two tabs may be last-write-wins for distinct edits but never partially cor
   expect(finalBaby.name).toBe(baby);
   expect(finalBaby.mother_id).toBe(patient.mother.id);
 
-  await page.goto(patientUrl);
+  // Both tabs may legitimately retain the result of their own successful save until
+  // they fetch again. The D1 row above is authoritative after last-write-wins, so use
+  // a real document reload (not a same-hash navigation) before asserting persisted UI.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-app-root]')).toBeVisible();
   await expect(page.locator('[data-patient-title]')).toContainText(finalMother.name);
   await expect(page.locator('[data-patient-title]')).toContainText(baby);
   await second.close();
