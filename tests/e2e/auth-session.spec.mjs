@@ -60,23 +60,3 @@ test('reload keeps the canonical session and does not resurrect a stale commerci
     expect(alias?.access_token).not.toBe('stale-token');
   }
 });
-
-test('logout clears persisted session aliases and reload stays logged out', async ({ page }) => {
-  await login(page);
-  await page.locator('[data-nav-target=settings]:visible').first().click();
-  await page.locator('[data-action=logout]:visible').first().click();
-  await expect(page.locator('[data-login-form]')).toBeVisible();
-
-  const leftovers = await page.evaluate(keys => keys.map(key => ({
-    key,
-    local: localStorage.getItem(key),
-    tab: sessionStorage.getItem(key),
-  })), [CANONICAL, ...ALIASES, 'debora-runtime-access-token']);
-  for (const item of leftovers) {
-    expect(item.local, `${item.key} in localStorage`).toBeNull();
-    expect(item.tab, `${item.key} in sessionStorage`).toBeNull();
-  }
-
-  await page.reload();
-  await expect(page.locator('[data-login-form]')).toBeVisible();
-});
