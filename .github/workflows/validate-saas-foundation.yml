@@ -31,6 +31,7 @@ on:
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/block-6-*.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'tests/block-1-2-hygiene.test.mjs'
       - 'tests/cloudflare-client-refresh.test.mjs'
@@ -85,6 +86,7 @@ on:
       - 'scripts/deploy-cloudflare-billing.ps1'
       - 'scripts/test-public-seo.mjs'
       - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/block-6-*.test.mjs'
       - 'tests/cloudflare-auth-guardrail.test.mjs'
       - 'tests/block-1-2-hygiene.test.mjs'
       - 'tests/cloudflare-client-refresh.test.mjs'
@@ -162,6 +164,8 @@ jobs:
         run: node scripts/test-production-deploy-contract.mjs
       - name: Validate package lifecycle on Cloudflare
         run: node --test tests/package-lifecycle-cloudflare.test.mjs
+      - name: Validate Block 6 RPC closure
+        run: npm run test:block6
       - name: Validate D1-only authentication
         run: node --test worker/cloudflare-auth-runtime.test.mjs worker/cloudflare-auth-compat.test.mjs tests/cloudflare-auth-guardrail.test.mjs
       - name: Validate Block 1 and 2 Cloudflare regressions
@@ -185,6 +189,7 @@ jobs:
           node --check worker/cloudflare-clinical-legacy-runtime.js
           node --check worker/cloudflare-billing-runtime.js
           node --check worker/package-lifecycle-runtime.js
+          node --check worker/block6-rpc-runtime.js
           node --check worker/patient-write-runtime.js
           node --check worker/commercial-license-bootstrap.js
           node --check worker/domain-entry.js

@@ -61,6 +61,13 @@ function replaceQuotedLiteral(source, literal, replacementExpression) {
     .replace(new RegExp('`' + escaped + '`', 'g'), replacementExpression);
 }
 
+function retireDestructiveClinicalDelete(source) {
+  return String(source)
+    .replace(/async function cnDeleteEncounter\(\)\{[\s\S]*?\}\nfunction cnWireOverlay/, 'function cnWireOverlay')
+    .replace(/o\.querySelector\('\[data-cn-delete\]'\)\?\.addEventListener\('click',cnDeleteEncounter\);?/g, '')
+    .replace(/<button type="button" class="danger" data-cn-delete>Excluir atendimento<\/button>/g, '');
+}
+
 export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   let next = String(source);
 
@@ -86,6 +93,10 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
     next = next
       .replace("String(CONFIG.API_BASE_URL||'')", `String(CONFIG.API_BASE_URL||${SAME_ORIGIN_EXPRESSION})`)
       .replace("String(CONFIG.CLIENT_RUNTIME_KEY||'')", "String(CONFIG.CLIENT_RUNTIME_KEY||'cloudflare-runtime')");
+  }
+
+  if (relativePath === 'public/clinical-source/features/clinical-note-feature.js') {
+    next = retireDestructiveClinicalDelete(next);
   }
 
   return next;

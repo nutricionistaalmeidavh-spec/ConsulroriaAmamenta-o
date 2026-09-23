@@ -139,3 +139,54 @@ test('manual package consumption is supported by Cloudflare and is idempotent',a
   assert.equal(secondPayload.sessions_used,2);
   assert.equal(db.table('care_package_sessions').length,1,'retry must not consume a second session');
 });
+
+test('add_care_package_item_v2 is idempotent and updates package financial total once',async()=>{
+  const{db,user,env,headers}=await setup();
+  db.seed('care_packages','package-v2',user.id,{id:'package-v2',owner_id:user.id,mother_id:'mother-1',service_label:'Plano',total_cents:76000,sessions_total:4,sessions_used:0,status:'active'});
+  const body={
+    p_package_id:'package-v2',p_catalog_item_id:null,p_item_type:'service',p_label:'Visita adicional',p_quantity_total:2,
+    p_pricing_mode:'additional',p_unit_price_cents:5000,p_amount_cents:10000,p_request_key:'11111111-1111-4111-8111-111111111111'
+  };
+  const request=()=>new Request('https://app.test/rest/v1/rpc/add_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
+  const first=await packageAware(request(),env);
+  assert.equal(first.status,200);
+  const firstPayload=await first.json();
+  assert.equal(firstPayload.idempotent,false);
+  assert.equal(firstPayload.package_total_cents,86000);
+  assert.equal(firstPayload.item.quantity_total,2);
+  assert.equal(firstPayload.item.quantity_used,0);
+  assert.equal(db.table('care_package_items').length,1);
+  assert.equal(db.table('financial_entries').length,1);
+  assert.equal(db.table('care_packages')[0].total_cents,86000);
+
+  const second=await packageAware(request(),env);
+  assert.equal(second.status,200);
+  const secondPayload=await second.json();
+  assert.equal(secondPayload.idempotent,true);
+  assert.equal(secondPayload.package_total_cents,86000);
+  assert.equal(db.table('care_package_items').length,1);
+  assert.equal(db.table('financial_entries').length,1);
+  assert.equal(db.table('care_packages')[0].total_cents,86000,'retry must not charge the additional item twice');
+});
+
+test('consume_care_package_item_v2 consumes once and preserves request-key idempotency',async()=>{
+  const{db,user,env,headers}=await setup();
+  db.seed('care_packages','package-v2',user.id,{id:'package-v2',owner_id:user.id,mother_id:'mother-1',service_label:'Plano',total_cents:76000,sessions_total:0,sessions_used:0,status:'active'});
+  db.seed('care_package_items','item-v2',user.id,{id:'item-v2',owner_id:user.id,package_id:'package-v2',mother_id:'mother-1',label:'Retorno',quantity_total:2,quantity_used:0,pricing_mode:'included',status:'active'});
+  const body={p_item_id:'item-v2',p_appointment_id:null,p_encounter_id:null,p_notes:'uso',p_request_key:'22222222-2222-4222-8222-222222222222'};
+  const request=()=>new Request('https://app.test/rest/v1/rpc/consume_care_package_item_v2',{method:'POST',headers,body:JSON.stringify(body)});
+  const first=await packageAware(request(),env);
+  assert.equal(first.status,200);
+  const firstPayload=await first.json();
+  assert.equal(firstPayload.idempotent,false);
+  assert.equal(firstPayload.item.quantity_used,1);
+  assert.equal(db.table('care_package_item_usages').length,1);
+
+  const second=await packageAware(request(),env);
+  assert.equal(second.status,200);
+  const secondPayload=await second.json();
+  assert.equal(secondPayload.idempotent,true);
+  assert.equal(secondPayload.item.quantity_used,1);
+  assert.equal(db.table('care_package_item_usages').length,1);
+  assert.equal(db.table('care_package_items')[0].quantity_used,1,'retry must not consume a second unit');
+});

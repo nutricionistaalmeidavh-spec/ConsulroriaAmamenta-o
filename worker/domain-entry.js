@@ -7,6 +7,7 @@ import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './clou
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
+import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -128,6 +129,9 @@ export default {
 
     const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
     if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
+
+    const block6Response = await handleBlock6RpcRuntime(request, env, url);
+    if (block6Response) return withNoIndex(block6Response);
 
     // High-value clinical writes are intercepted by explicit D1 runtimes before the
     // compatibility REST layer. This keeps them atomic and removes legacy fallbacks.
