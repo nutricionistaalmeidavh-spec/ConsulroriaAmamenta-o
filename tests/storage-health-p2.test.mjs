@@ -6,6 +6,14 @@ function authHeader(session) {
   return { authorization: `Bearer ${session.access_token}` };
 }
 
+function fixedBody(text) {
+  const bytes = new TextEncoder().encode(text);
+  return {
+    body: bytes,
+    headers: { 'content-type': 'text/plain', 'content-length': String(bytes.byteLength) },
+  };
+}
+
 async function objectExists(runtime, key) {
   const bucket = await runtime.mf.getR2Bucket('CLINICAL_FILES');
   return Boolean(await bucket.get(key));
@@ -24,6 +32,7 @@ test('failed D1 metadata write compensates the R2 upload', async (t) => {
   const bucket = 'clinical-media';
   const path = `${userId}/p2-upload-consistency.txt`;
   const key = `supabase/${bucket}/${path}`;
+  const upload = fixedBody('P2 upload payload');
 
   await runtime.db.prepare(`CREATE TRIGGER fail_storage_metadata_insert_p2
     BEFORE INSERT ON storage_objects
@@ -31,8 +40,8 @@ test('failed D1 metadata write compensates the R2 upload', async (t) => {
 
   const response = await runtime.mf.dispatchFetch(`http://localhost/api/files/object/${bucket}/${path}`, {
     method: 'POST',
-    headers: { ...authHeader(session), 'content-type': 'text/plain' },
-    body: 'P2 upload payload',
+    headers: { ...authHeader(session), ...upload.headers },
+    body: upload.body,
   });
 
   assert.equal(response.status, 500);
@@ -47,11 +56,12 @@ test('failed D1 metadata delete preserves the R2 object and metadata', async (t)
   const bucket = 'clinical-media';
   const path = `${userId}/p2-delete-consistency.txt`;
   const key = `supabase/${bucket}/${path}`;
+  const upload = fixedBody('P2 delete payload');
 
   const uploaded = await runtime.mf.dispatchFetch(`http://localhost/api/files/object/${bucket}/${path}`, {
     method: 'POST',
-    headers: { ...authHeader(session), 'content-type': 'text/plain' },
-    body: 'P2 delete payload',
+    headers: { ...authHeader(session), ...upload.headers },
+    body: upload.body,
   });
   assert.equal(uploaded.status, 200);
   assert.equal(await objectExists(runtime, key), true);
