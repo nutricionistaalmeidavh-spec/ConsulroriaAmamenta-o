@@ -67,6 +67,13 @@ export function hardenDelivery1AppShell(source) {
   const guardedShowScreen = `function showScreen(screen) {\n  if (screen !== 'patient') patientOpenRevision += 1;\n  if (screen !== 'appointment' && screen !== activeScreen)`;
   next = ensureReplace(next, showScreenMarker, guardedShowScreen, 'R01 navigation-away invalidation');
 
+  next = ensureReplace(
+    next,
+    '  flush:()=>currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null)',
+    '  flush:()=>{clearTimeout(encounterAutosaveTimer);encounterAutosaveTimer=null;return currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null)}',
+    'Stage 12 wizard-to-note autosave handoff',
+  );
+
   return next;
 }
 
