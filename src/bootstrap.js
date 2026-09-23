@@ -212,7 +212,7 @@ async function boot() {
     )
     .replace(
       '</body>',
-      `<script>${config}</script><script type="module" src="/canonical-identity-runtime.js"></script><script type="module" src="${shellUrl}"></script><script type="module" src="/growth-feature.js"></script><script type="module" src="/member-feature.js"></script><script type="module" src="/library-disabled.js"></script><script type="module" src="/demo-feature.js"></script><script type="module" src="/template-gallery.js"></script><script type="module" src="/interaction-ui.js"></script><script type="module" src="${clinicalUrl}"></script><script type="module" src="${patientUrl}"></script><script type="module" src="/billing-v2.js"></script><script type="module" src="/p0-route-guard.js"></script></body>`,
+      `<script>${config}</script><script type="module" src="/canonical-identity-runtime.js"></script><script type="module" src="${shellUrl}"></script><script type="module" src="/growth-feature.js"></script><script type="module" src="/member-feature.js"></script><script type="module" src="/library-disabled.js"></script><script type="module" src="/template-gallery.js"></script><script type="module" src="/interaction-ui.js"></script><script type="module" src="${clinicalUrl}"></script><script type="module" src="${patientUrl}"></script><script type="module" src="/billing-v2.js"></script><script type="module" src="/p0-route-guard.js"></script></body>`,
     );
 
   document.open();
