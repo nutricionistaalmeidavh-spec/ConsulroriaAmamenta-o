@@ -84,6 +84,7 @@ export function createSupabaseClient(config, {
     if (!res.ok) {
       const error = new Error(data?.msg || data?.message || data?.error || `Falha de autenticação (${res.status}).`);
       error.status = res.status;
+      error.code = data?.error || null;
       throw error;
     }
     return data;
@@ -94,6 +95,7 @@ export function createSupabaseClient(config, {
     while (Date.now() < deadline) {
       const latest = getSession();
       if (latest?.refresh_token && latest.refresh_token !== previousRefreshToken) return latest;
+      if (!latest) return null;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     return null;
@@ -109,21 +111,22 @@ export function createSupabaseClient(config, {
       });
     } catch (error) {
       let latest = getSession();
-      if ([400, 401, 403].includes(error.status)
+      const rotationFailure = [400, 401, 403].includes(error.status);
+      if (rotationFailure
         && latest?.refresh_token
         && latest.refresh_token !== current.refresh_token) {
-        // Another tab won the refresh race. Adopt the already-persisted canonical session.
+        // Another tab already persisted the replacement session.
         return latest;
       }
-      if (error.status === 401 && /outra aba/i.test(error.message || '')) {
-        // The backend may reject the losing tab a few milliseconds before the winner
-        // has persisted its replacement session in shared localStorage.
+      if (rotationFailure && latest?.refresh_token === current.refresh_token) {
+        // A refresh response can arrive after the server has already revoked the old token.
+        // Wait for the shared session to rotate regardless of the backend error wording.
         const replacement = await waitForSessionReplacement(current.refresh_token);
         if (replacement) return replacement;
         latest = getSession();
+        if (latest?.refresh_token && latest.refresh_token !== current.refresh_token) return latest;
       }
-      if ([400, 401, 403].includes(error.status)
-        && latest?.refresh_token === current.refresh_token) {
+      if (rotationFailure && latest?.refresh_token === current.refresh_token) {
         setSession(null);
       }
       throw error;
