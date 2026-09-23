@@ -46,6 +46,9 @@ on:
       - 'tests/cloudflare-native-bootstrap.test.mjs'
       - 'tests/cloudflare-async-errors.test.mjs'
       - 'tests/service-worker-update.test.mjs'
+      - 'tests/session-stability.test.mjs'
+      - 'tests/frontend-stability.test.mjs'
+      - 'tests/patient-edit-atomic.test.mjs'
       - 'src/bootstrap.js'
       - 'app/index.html'
       - 'index.html'
@@ -104,6 +107,9 @@ on:
       - 'tests/cloudflare-native-bootstrap.test.mjs'
       - 'tests/cloudflare-async-errors.test.mjs'
       - 'tests/service-worker-update.test.mjs'
+      - 'tests/session-stability.test.mjs'
+      - 'tests/frontend-stability.test.mjs'
+      - 'tests/patient-edit-atomic.test.mjs'
       - 'src/bootstrap.js'
       - 'app/index.html'
       - 'index.html'
@@ -186,6 +192,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Validate native recovery and bootstrap
         run: npm run test:block5
+      - name: Validate post-migration failure recovery
+        run: npm run test:stability
       - name: Validate frontend Cloudflare cutover
         run: node --test tests/frontend-cloudflare-cutover.test.mjs
       - name: Validate SEO API contract

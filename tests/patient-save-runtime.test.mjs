@@ -222,5 +222,6 @@ test('clinical materializer wires new-patient submit to the atomic endpoint', as
   const source = await readFile(new URL('../scripts/materialize-clinical-source.mjs', import.meta.url), 'utf8');
   assert.match(source, /atomic-patient-create/);
   assert.match(source, /workerRequest\('\/api\/clinical\/patients'/);
-  assert.match(source, /body:\s*\{ \.\.\.payload, consents \}/);
+  assert.match(source, /const body = \{ \.\.\.payload, mother:.*consents \}/);
+  assert.match(source, /method: editingPatientId \? 'PATCH' : 'POST'/);
 });

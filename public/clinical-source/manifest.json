@@ -10,8 +10,8 @@
     },
     "core/app-shell.js": {
       "promoted": true,
-      "source": "agenda:core/app-shell.js+cloudflare-runtime-config+atomic-patient-create",
-      "sha256": "44e81d916ca72d6abf4508691253f91047c2f9d6fbcb4b7604d5403de757a662"
+      "source": "agenda:core/app-shell.js+cloudflare-runtime-config+atomic-patient-create+patient-save-attempt-lifecycle+await-startup-before-editing",
+      "sha256": "41a2c453c19a81f2dd9fad4729ee4cf79d8e655320e9344abceb03ee970848c4"
     },
     "core/lib/app-data.js": {
       "promoted": true,
@@ -51,7 +51,7 @@
     "core/lib/supabase-client.js": {
       "promoted": true,
       "source": "cloudflare-license-authority:core/lib/supabase-client.js",
-      "sha256": "2bea75380c03cd496d192da07affc55b8c4052cf944bffe315dd8065a7424076"
+      "sha256": "32602d26d20ae0ef4ca166d2cece1f4c49c560b64e3bad3139d8e88ad3910119"
     },
     "features/clinical-note-feature.css": {
       "promoted": true,
@@ -61,7 +61,7 @@
     "features/clinical-note-feature.js": {
       "promoted": true,
       "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover",
-      "sha256": "a70834806a26db1a533bff659bb485992efc13837682df19c327643c892b2806"
+      "sha256": "734c56adc0e326b3089a44b762928ea085fc566805c1e04d738677748825b8ec"
     },
     "features/patient-fixes.css": {
       "promoted": true,
@@ -71,7 +71,7 @@
     "features/patient-fixes.js": {
       "promoted": true,
       "source": "release:features/patient-fixes.js+frontend-cloudflare-cutover",
-      "sha256": "7f32018980e7a2112dbe5dc15aef954d5852a13f659a6a5c570365a6ca593bb7"
+      "sha256": "bc42bf0ddb155e803aa173fdb5f9e7327d3a799d777891b3cf80003e087c1133"
     },
     "index.html": {
       "promoted": true,

@@ -4,6 +4,8 @@ import {
   idempotencyInsertStatement,
   idempotencyResponse,
   isIdempotencyConflict,
+  ownerRows,
+  recordByIdForOwner,
 } from './d1-record-store.js';
 
 const PRODUCT_CODE = 'debora-lactacao';
@@ -162,9 +164,89 @@ export async function persistNewPatient(env, user, input, {
   return records;
 }
 
+export async function persistPatientEdit(env, user, input, {
+  now = new Date().toISOString(),
+  uuid = () => crypto.randomUUID(),
+  idempotencyKey = '',
+} = {}) {
+  const db = env.CLINICAL_DB;
+  if (!db) throw writeError('clinical_db_not_configured', 'Banco clínico indisponível.', 503);
+  if (idempotencyKey) {
+    const replay = await idempotencyResponse(db, user.id, 'update_patient', idempotencyKey, now);
+    if (replay) return replay;
+  }
+  const patch = input.mother;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !patch.id) {
+    throw writeError('invalid_patient_payload', 'Identificação da mãe é obrigatória.');
+  }
+  function assertRelations(row, motherId) {
+    if ((row.owner_id != null && row.owner_id !== user.id)
+      || (motherId && row.mother_id != null && row.mother_id !== motherId)) {
+      throw writeError('patient_ownership_mismatch', 'Dados não pertencem a esta paciente.', 403);
+    }
+  }
+  assertRelations(patch);
+  const existing = await recordByIdForOwner(db, 'mothers', patch.id, user.id);
+  if (!existing) throw writeError('patient_not_found', 'Paciente não encontrada.', 404);
+  const mother = { ...existing.record, ...patch, id: existing.record.id, owner_id: user.id, created_at: existing.record.created_at, updated_at: now };
+  mother.name = String(mother.name || '').trim();
+  if (!mother.name) throw writeError('invalid_patient_payload', 'Nome da mãe é obrigatório.');
+
+  const babyRows = (await ownerRows(db, 'babies', user.id)).filter(({ record }) => record.mother_id === mother.id);
+  const babies = babyRows.map(({ record }) => record);
+  const babyWrites = [];
+  const babyPatches = input.babies ?? (input.baby ? [input.baby] : []);
+  if (!Array.isArray(babyPatches)) throw writeError('invalid_patient_payload', 'Dados dos bebês inválidos.');
+  const seen = new Set();
+  for (const babyPatch of babyPatches) {
+    if (!babyPatch || typeof babyPatch !== 'object' || Array.isArray(babyPatch)) throw writeError('invalid_patient_payload', 'Dados do bebê inválidos.');
+    assertRelations(babyPatch, mother.id);
+    const previous = babyPatch.id ? babyRows.find(({ record, key }) => record.id === babyPatch.id || key === babyPatch.id) : null;
+    if (babyPatch.id && !previous) throw writeError('patient_ownership_mismatch', 'Bebê não pertence a esta paciente.', 403);
+    if (previous && seen.has(previous.key)) throw writeError('invalid_patient_payload', 'Bebê repetido na edição.');
+    if (previous) seen.add(previous.key);
+    const baby = { ...previous?.record, ...babyPatch, id: previous?.record.id || uuid(), mother_id: mother.id, owner_id: user.id, created_at: previous?.record.created_at || now, updated_at: now };
+    baby.name = String(baby.name || '').trim();
+    if (!baby.name) throw writeError('invalid_patient_payload', 'Nome do bebê é obrigatório.');
+    if (previous) babies[babies.indexOf(previous.record)] = baby;
+    else babies.push(baby);
+    babyWrites.push(recordStatement(db, 'babies', baby, previous?.key || baby.id, user.id, now));
+  }
+  const consentRows = (await ownerRows(db, 'consents', user.id)).filter(({ record }) => record.mother_id === mother.id);
+  const consents = consentRows.map(({ record }) => record);
+  const consentWrites = [];
+  if (input.consents != null && (typeof input.consents !== 'object' || Array.isArray(input.consents))) {
+    throw writeError('invalid_patient_payload', 'Consentimentos inválidos.');
+  }
+  for (const [type, granted] of Object.entries(normalizedConsents(input))) {
+    if (typeof granted !== 'boolean') throw writeError('invalid_patient_payload', 'Consentimento inválido.');
+    const matches = consentRows.filter(({ record }) => record.consent_type === type);
+    // Keep the physical keys of migrated records, including historical duplicates.
+    for (const previous of matches.length ? matches : [null]) {
+      const consent = { ...previous?.record, id: previous?.record.id || uuid(), owner_id: user.id, mother_id: mother.id, consent_type: type, granted, accepted_at: granted ? (previous?.record.granted ? previous.record.accepted_at || now : now) : null, revoked_at: granted ? null : (previous?.record.granted === false ? previous.record.revoked_at || now : now), created_at: previous?.record.created_at || now, updated_at: now };
+      if (previous) consents[consents.indexOf(previous.record)] = consent;
+      else consents.push(consent);
+      consentWrites.push(recordStatement(db, 'consents', consent, previous?.key || consent.id, user.id, now));
+    }
+  }
+  const records = { mother, babies, consents };
+  const statements = [recordStatement(db, 'mothers', mother, existing.key, user.id, now), ...babyWrites, ...consentWrites];
+  if (idempotencyKey) statements.push(idempotencyInsertStatement(db, user.id, 'update_patient', idempotencyKey, records, now));
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    if (idempotencyKey && isIdempotencyConflict(error)) {
+      const replay = await idempotencyResponse(db, user.id, 'update_patient', idempotencyKey, now);
+      if (replay) return replay;
+    }
+    throw error;
+  }
+  return records;
+}
+
 export async function handleCloudflarePatientWrite(request, env, url = new URL(request.url), deps = {}) {
   if (url.pathname !== '/api/clinical/patients') return null;
-  if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+  if (!['POST', 'PATCH'].includes(request.method)) return json(405, { error: 'method_not_allowed' });
 
   const authenticate = deps.authenticate || authenticateClinicalRequest;
   const user = await authenticate(request, env);
@@ -176,16 +258,17 @@ export async function handleCloudflarePatientWrite(request, env, url = new URL(r
   }
 
   try {
-    const saved = await persistNewPatient(env, user, input, {
+    const persist = request.method === 'PATCH' ? persistPatientEdit : persistNewPatient;
+    const saved = await persist(env, user, input, {
       ...deps,
       idempotencyKey: deps.idempotencyKey ?? requestIdempotencyKey(request),
     });
-    return json(201, saved);
+    return json(request.method === 'PATCH' ? 200 : 201, saved);
   } catch (error) {
     console.error('patient write failed', error);
     const status = Number(error?.status || 500);
     return json(status, {
-      error: error?.code || 'patient_create_failed',
+      error: error?.code || (request.method === 'PATCH' ? 'patient_update_failed' : 'patient_create_failed'),
       message: error?.message || 'Não foi possível salvar a paciente.',
       ...(error?.extra || {}),
     });

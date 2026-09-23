@@ -19,6 +19,7 @@ function readCommercialSession() {
 function transferSession() {
   const current = readCommercialSession();
   if (!current) return false;
+  localStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, current.raw);
   sessionStorage.setItem(LEGACY_CLINICAL_SESSION_KEY, current.raw);
   sessionStorage.setItem(CANONICAL_SESSION_KEY, current.raw);
   return true;

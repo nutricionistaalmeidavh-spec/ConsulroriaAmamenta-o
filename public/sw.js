@@ -1,4 +1,4 @@
-const VERSION='1.14.0-cloudflare-native';
+const VERSION='1.14.1-stability';
 const CACHE_NAME=`debora-lactacao-v${VERSION}`;
 const SHELL=['./','./manifest.webmanifest','./icon.svg','./icon-192.png?v=1.12.1','./icon-512.png?v=1.12.1','./growth-feature.js','./growth-feature.css','./weight-evolution-v5.js','./weight-evolution-v5.css','./billing-v2.js','./p0-route-guard.js','./phase68-loader.js','./package-card-singleton-guard.js','./member-feature.js','./member-feature.css','./library-disabled.js','./library-disabled.css','./template-gallery.js','./template-gallery.css','./interaction-ui.js','./interaction-ui.css','./template-runtime.js.gz','./demo-feature.js','./who/v2026-08-30/who-wfa-male.csv','./who/v2026-08-30/who-wfa-female.csv','./who/v2026-08-30/who-lfa-male.csv','./who/v2026-08-30/who-lfa-female.csv','./who/v2026-08-30/who-wfl-male.csv','./who/v2026-08-30/who-wfl-female.csv','./who/v2026-08-30/who-hc-male.csv','./who/v2026-08-30/who-hc-female.csv'];
 const PRIVATE_PREFIXES=['/api/','/auth/','/rest/','/storage/','/admin/','/clinical-source/'];
