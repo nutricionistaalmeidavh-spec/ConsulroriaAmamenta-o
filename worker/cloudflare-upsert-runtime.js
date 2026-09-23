@@ -1,4 +1,11 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import {
+  guardedRecordStatement,
+  ownerRows,
+  recordById,
+  recordByKey,
+  unownedRows,
+} from './d1-record-store.js';
 
 const GLOBAL_READ_TABLES = new Set([
   'billing_plan_catalog', 'clinical_document_templates', 'document_templates', 'portal_content', 'member_perks',
@@ -17,37 +24,12 @@ const RELATIONAL_OWNER_TABLES = new Set([
   'care_package_items','care_package_sessions','care_package_item_usages',
 ]);
 const NO_ID_TABLES = new Set(['appointment_babies','clinical_encounter_babies']);
-const UPSERT_RECORD_SQL = `INSERT INTO supabase_records(
-  table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
-) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET
-  owner_id=excluded.owner_id,record_json=excluded.record_json,source_created_at=excluded.source_created_at,
-  source_updated_at=excluded.source_updated_at,migrated_at=excluded.migrated_at`;
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
-}
-
-function parseRecord(row) {
-  if (!row) return null;
-  try { return { key: row.record_key, ownerId: row.owner_id || null, record: JSON.parse(row.record_json) }; }
-  catch { return null; }
-}
-
-async function tableRows(db, table) {
-  const result = await db.prepare(
-    'SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = ?',
-  ).bind(table).all();
-  return (result.results || []).map(parseRecord).filter(Boolean);
-}
-
-async function recordById(db, table, id) {
-  if (!id) return null;
-  return (await tableRows(db, table)).find(
-    (entry) => String(entry.record?.id || entry.key) === String(id),
-  ) || null;
 }
 
 async function recordOwnedByUser(db, table, entry, userId, depth = 0) {
@@ -59,7 +41,7 @@ async function recordOwnedByUser(db, table, entry, userId, depth = 0) {
   if (table === 'professional_profiles' && String(row.id || '') === String(userId)) return true;
   const refs = [
     ['mother_id','mothers'], ['baby_id','babies'], ['appointment_id','appointments'],
-    ['encounter_id','clinical_encounters'], ['care_package_id','care_packages'],
+    ['encounter_id','clinical_encounters'], ['care_package_id','care_packages'], ['package_id','care_packages'],
   ];
   for (const [field, refTable] of refs) {
     if (!row[field]) continue;
@@ -69,13 +51,44 @@ async function recordOwnedByUser(db, table, entry, userId, depth = 0) {
   return GLOBAL_READ_TABLES.has(table);
 }
 
+async function relationalOwnerValid(db, table, row, userId) {
+  if (!RELATIONAL_OWNER_TABLES.has(table)) return true;
+  const refs = [
+    ['mother_id','mothers'], ['baby_id','babies'], ['appointment_id','appointments'],
+    ['encounter_id','clinical_encounters'], ['care_package_id','care_packages'], ['package_id','care_packages'],
+  ];
+  let sawReference = false;
+  for (const [field, refTable] of refs) {
+    if (!row[field]) continue;
+    sawReference = true;
+    const parent = await recordById(db, refTable, row[field]);
+    if (parent && await recordOwnedByUser(db, refTable, parent, userId)) return true;
+  }
+  return !sawReference && Boolean(row.owner_id && String(row.owner_id) === String(userId));
+}
+
 async function ensureWriteOwnership(db, table, row, user) {
   if (!user?.id) return false;
   if (row.owner_id && String(row.owner_id) !== String(user.id)) return false;
-  if (OWNER_TABLES.has(table) && !row.owner_id && !RELATIONAL_OWNER_TABLES.has(table)) row.owner_id = user.id;
+  if (RELATIONAL_OWNER_TABLES.has(table) && !await relationalOwnerValid(db, table, row, user.id)) return false;
+  if (OWNER_TABLES.has(table)) {
+    row.owner_id = user.id;
+    return true;
+  }
   if (row.owner_id) return String(row.owner_id) === String(user.id);
   if (row.user_id) return String(row.user_id) === String(user.id);
   return recordOwnedByUser(db, table, { key: row.id || '', ownerId: null, record: row }, user.id);
+}
+
+async function scopedRows(db, table, userId) {
+  if (!OWNER_TABLES.has(table)) return unownedRows(db, table);
+  const ownedRows = await ownerRows(db, table, userId);
+  const legacyRows = await unownedRows(db, table);
+  const accepted = [];
+  for (const entry of legacyRows) {
+    if (await recordOwnedByUser(db, table, entry, userId)) accepted.push(entry);
+  }
+  return [...ownedRows, ...accepted];
 }
 
 function recordKey(table, row) {
@@ -87,15 +100,7 @@ function recordKey(table, row) {
 }
 
 function recordStatement(db, table, key, row, now) {
-  return db.prepare(UPSERT_RECORD_SQL).bind(
-    table,
-    key,
-    row.owner_id || null,
-    JSON.stringify(row),
-    row.created_at || now,
-    row.updated_at || now,
-    now,
-  );
+  return guardedRecordStatement(db, table, key, row, row.owner_id, now);
 }
 
 async function licenseCall(env, body) {
@@ -115,10 +120,7 @@ async function licenseCall(env, body) {
 async function patientAllowance(env, db, user) {
   const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
   if (!access?.commercial || !Number.isInteger(access.patientLimit)) return null;
-  let count = 0;
-  for (const entry of await tableRows(db, 'mothers')) {
-    if (await recordOwnedByUser(db, 'mothers', entry, user.id)) count++;
-  }
+  const count = (await ownerRows(db, 'mothers', user.id)).length;
   return { limit: Number(access.patientLimit), count };
 }
 
@@ -153,7 +155,7 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
   if (!conflictFields.length) return null;
 
   const db = env.CLINICAL_DB;
-  const existingRows = await tableRows(db, table);
+  const existingRows = await scopedRows(db, table, user.id);
   const now = deps.now || new Date().toISOString();
   const uuid = deps.uuid || (() => crypto.randomUUID());
   const ignoreDuplicates = /resolution=ignore-duplicates/i.test(request.headers.get('prefer') || '');
@@ -201,6 +203,10 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
     };
     if (!await ensureWriteOwnership(db, table, row, user)) return json(403, { error: 'record_outside_account' });
     const key = recordKey(table, row);
+    const collision = await recordByKey(db, table, key);
+    if (collision && String(collision.ownerId || collision.record?.owner_id || '') !== String(user.id)) {
+      return json(409, { error: 'record_key_conflict' });
+    }
     statements.push(recordStatement(db, table, key, row, now));
     saved.push(row);
     if (table === 'mothers') pendingNewMothers++;

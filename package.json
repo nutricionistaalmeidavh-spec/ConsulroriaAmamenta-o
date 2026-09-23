@@ -21,6 +21,7 @@
     "test:block6": "node --test tests/block-6-rpc-closure.test.mjs tests/block-6-member-access.test.mjs tests/package-lifecycle-cloudflare.test.mjs",
     "test:block7": "node --test tests/block-7-no-core-fallback.test.mjs",
     "test:block8": "node --test tests/block-8-owned-api.test.mjs",
+    "test:block9": "node --test tests/block-9-d1-hardening.test.mjs",
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
