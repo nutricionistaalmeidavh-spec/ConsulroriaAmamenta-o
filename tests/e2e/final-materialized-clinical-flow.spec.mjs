@@ -96,7 +96,7 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.baby_id).toBe(patient.babies[0].id);
   expect(encounter?.appointment_id).toBe(appointmentId);
   expect(encounter?.chief_complaint?.notes).toBe(complaint);
-  expect(encounter?.clinical_note_body).toBe(clinicalNote);
+  expect(encounter?.clinical_note).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
   expect(encounter?.care_plan?.instructions).toBe(instructions);
 
