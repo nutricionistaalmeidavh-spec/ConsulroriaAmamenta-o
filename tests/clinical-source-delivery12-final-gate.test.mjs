@@ -64,12 +64,9 @@ test('Stage 12 note handoff cancels a pending wizard autosave before flushing th
   );
 });
 
-test('Stage 12 note save synchronizes optimistic encounter version before replaying the wizard action', () => {
-  const appData = read('patch-source/cloudflare-license-authority/core/lib/app-data.js');
+test('Stage 12 note save refreshes the wizard optimistic version before replaying the wizard action', () => {
   const materializedShell = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
   const noteHardener = read('scripts/harden-delivery3-versioning.mjs');
-  assert.match(appData, /function syncEncounterVersion\(id, version\)/, 'app data must accept a version produced by the SQL note editor');
-  assert.match(appData, /syncEncounterVersion,/, 'version synchronizer must be part of the app-data public contract');
-  assert.match(materializedShell, /syncVersion:\(id,version\)=>appData\?\.syncEncounterVersion\?\.\(id,version\)/, 'wizard bridge must expose encounter version synchronization');
-  assert.match(noteHardener, /syncVersion\?\.\(enc\.id,rows\[0\]\.record_version\)/, 'note persistence must publish its new record version before replaying the wizard button');
+  assert.match(materializedShell, /syncVersion:\(id\)=>appData\?\.getEncounter\?\.\(id\)/, 'wizard bridge must be able to refresh its cached encounter version');
+  assert.match(noteHardener, /await window\.DeboraEncounter\?\.syncVersion\?\.\(enc\.id\)/, 'note persistence must refresh the wizard version before replaying the pending button');
 });
