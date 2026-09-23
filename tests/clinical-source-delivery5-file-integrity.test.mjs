@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 
 const clinicalSource=readFileSync(new URL('../worker/cloudflare-clinical-runtime.js', import.meta.url),'utf8');
-const storageSource=readFileSync(new URL('../worker/file-integrity-runtime.js', import.meta.url),'utf8');
+const storageSource=readFileSync(new URL('../worker/storage-consistency-runtime.js', import.meta.url),'utf8');
+const storageDeleteSource=readFileSync(new URL('../worker/storage-delete-claim-runtime.js', import.meta.url),'utf8');
 const documentsSource=readFileSync(new URL('../public/documents-feature.js', import.meta.url),'utf8');
 const patientSource=readFileSync(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url),'utf8');
 const albumSource=readFileSync(new URL('../public/clinical-source/features/album-feature.js', import.meta.url),'utf8');
@@ -103,12 +104,14 @@ test('C03 stale pending clinical upload can be reconciled without touching confi
   }finally{await runtime.close()}
 });
 
-test('C11 storage mutation uses immutable operation objects and conditional metadata deletion',()=>{
-  assert.match(storageSource,/immutableR2Key/);
-  assert.match(storageSource,/delete_pending/);
+test('C11 storage mutation uses immutable operation objects and conditional claimed deletion',()=>{
+  assert.match(storageSource,/immutableStorageKey/);
   assert.match(storageSource,/operation_id/);
-  assert.match(storageSource,/DELETE FROM storage_objects[\s\S]*r2_key\s*=\s*\?/);
-  assert.doesNotMatch(storageSource,/compensateMetadata/);
+  assert.match(storageDeleteSource,/storage_delete_claims/);
+  assert.match(storageDeleteSource,/CLINICAL_DB\.batch\(\[/);
+  assert.match(storageDeleteSource,/DELETE FROM storage_objects[\s\S]*r2_key\s*=\s*\?/);
+  assert.match(storageDeleteSource,/CLINICAL_FILES\.delete\(r2Key\)/);
+  assert.doesNotMatch(`${storageSource}\n${storageDeleteSource}`,/compensateMetadata/);
 });
 
 test('C04 signed file consumers accept the canonical /api/files URL without double prefixing', () => {
