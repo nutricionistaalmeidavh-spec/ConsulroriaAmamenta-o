@@ -70,6 +70,12 @@ test('mobile critical path supports login, patient, atendimento, agenda and logo
   const label = uniqueLabel(`Mobile ${testInfo.project.name}`);
   const appointment = await scheduleAppointment(page, headers, patient, label);
 
+  // The appointment was created through the owned API, so refresh the browser state
+  // before asserting UI projections such as agenda and scheduled encounter actions.
+  await page.reload();
+  await expect(page.locator('[data-app-root]')).toBeVisible();
+  await expect(page.locator('.lactation-bottom-nav')).toBeVisible();
+
   await page.locator('.lactation-fab[data-action="new-appointment"]:visible').click();
   await expect(page.locator('[data-screen=appointment]')).toBeVisible();
   await expect(page.locator('[data-appointment-patient]')).toHaveValue(patient.mother.id);
