@@ -55,6 +55,17 @@ test('billing v2 materialization schedules an initial mount so early appointment
   );
 });
 
+test('Stage 12 billing mount scheduler cannot be starved by continuous DOM mutations', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
+  assert.match(
+    materialized,
+    /function bvSchedule\(\)\{if\(bvTimer\)return;bvTimer=setTimeout\(\(\)=>\{bvTimer=null;/,
+    'DOM mutations must coalesce into one guaranteed billing mount instead of repeatedly resetting its timeout',
+  );
+  assert.doesNotMatch(materialized, /function bvSchedule\(\)\{clearTimeout\(bvTimer\)/,
+    'billing mount scheduler must not debounce forever while other modules mutate the DOM');
+});
+
 test('Stage 12 billing remount preserves package_new for the appointment that just created its package', () => {
   const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
   assert.match(
