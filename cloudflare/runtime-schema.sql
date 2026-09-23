@@ -1,5 +1,37 @@
 PRAGMA foreign_keys = ON;
 
+CREATE INDEX IF NOT EXISTS supabase_records_owner_record_idx
+  ON supabase_records(table_name, owner_id, record_key);
+CREATE INDEX IF NOT EXISTS supabase_records_owner_json_id_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_mother_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.mother_id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_baby_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.baby_id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_appointment_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.appointment_id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_encounter_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.encounter_id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_package_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.package_id'));
+CREATE INDEX IF NOT EXISTS supabase_records_owner_request_key_idx
+  ON supabase_records(table_name, owner_id, json_extract(record_json,'$.request_key'));
+
+CREATE TABLE IF NOT EXISTS clinical_idempotency_keys (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT,
+  UNIQUE(owner_id, operation, idempotency_key),
+  FOREIGN KEY (owner_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS clinical_idempotency_expiry_idx
+  ON clinical_idempotency_keys(expires_at)
+  WHERE expires_at IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS auth_credentials (
   user_id TEXT PRIMARY KEY,
   password_salt TEXT NOT NULL,
