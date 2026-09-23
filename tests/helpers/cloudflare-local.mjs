@@ -30,7 +30,11 @@ export async function createLocalRuntime({ port = 0, assets = false } = {}) {
   });
   await mf.ready;
   const db = await mf.getD1Database('CLINICAL_DB');
-  for (const path of ['cloudflare/full-migration-schema.sql', 'cloudflare/runtime-schema.sql']) {
+  for (const path of [
+    'cloudflare/full-migration-schema.sql',
+    'cloudflare/runtime-schema.sql',
+    'cloudflare/migrations/0007-clinical-query-performance.sql',
+  ]) {
     const sql = (await readFile(path, 'utf8')).replace(/^--.*$/gm, '');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
   }
