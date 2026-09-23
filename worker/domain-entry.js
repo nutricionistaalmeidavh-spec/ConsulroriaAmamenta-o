@@ -5,6 +5,8 @@ import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.j
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
+import { handleAtomicEncounterFinalizeRuntime } from './encounter-billing-atomic-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
@@ -207,6 +209,14 @@ export default {
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
+
+    // Package consumption/finalization must claim the remaining slot atomically
+    // before the broader lifecycle or generic clinical adapters can read stale state.
+    const atomicPackageSessionResponse = await handleAtomicPackageSessionRuntime(request, env, url);
+    if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
+
+    const atomicEncounterFinalizeResponse = await handleAtomicEncounterFinalizeRuntime(request, env, url);
+    if (atomicEncounterFinalizeResponse) return withNoIndex(atomicEncounterFinalizeResponse);
 
     const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
     if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
