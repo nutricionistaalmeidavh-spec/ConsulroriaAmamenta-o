@@ -21,12 +21,13 @@ test('C01 finalization drains the active autosave and rejects any newer draft', 
     },
     appointments: { update: async () => { throw new Error('Realizado must be deferred to atomic finalization'); } },
     encounters: {
+      get: async (id) => ({ id, status: 'draft', record_version: 0 }),
       update: async (id, payload) => {
         calls.push(`draft:${payload.clinical_note}`);
         markDraftStarted();
         await draftGate;
         calls.push(`draft-done:${payload.clinical_note}`);
-        return { id, ...payload };
+        return { id, ...payload, record_version: Number(payload._expected_version || 0) + 1 };
       },
     },
     followups: { list: async () => [] },
