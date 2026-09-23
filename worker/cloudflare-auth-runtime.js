@@ -376,23 +376,29 @@ async function handleResetPassword(request, env) {
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const now = new Date().toISOString();
-  const results = await db.batch([
+
+  // Claim the one-use token with a single D1 write before opening the credential batch.
+  // Concurrent requests are serialized at this statement: exactly one can receive user_id.
+  const claimed = await db.prepare(`DELETE FROM auth_recovery_tokens
+      WHERE token_hash = ? AND expires_at > ?
+      RETURNING user_id`)
+    .bind(tokenHash, now)
+    .first();
+  if (!claimed?.user_id) {
+    return json(400, { message: 'Link inválido ou expirado. Solicite uma nova recuperação.' });
+  }
+
+  await db.batch([
     db.prepare(`INSERT INTO auth_credentials(user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at)
-      SELECT user_id,?,?,?,'PBKDF2-SHA256',?,? FROM auth_recovery_tokens WHERE token_hash=? AND expires_at>?
+      VALUES(?,?,?,?, 'PBKDF2-SHA256',?,?)
       ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
       password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=excluded.updated_at`)
-      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now,tokenHash,now),
-    db.prepare(`UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(now,salt,hash),
-    db.prepare(`UPDATE auth_users SET password_reset_required=0,updated_at=? WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(now,salt,hash),
-    db.prepare(`DELETE FROM auth_recovery_tokens WHERE user_id IN
-      (SELECT user_id FROM auth_credentials WHERE password_salt=? AND password_hash=?)`)
-      .bind(salt,hash),
+      .bind(claimed.user_id,salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now),
+    db.prepare('UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id=?')
+      .bind(now,claimed.user_id),
+    db.prepare('UPDATE auth_users SET password_reset_required=0,updated_at=? WHERE user_id=?')
+      .bind(now,claimed.user_id),
   ]);
-  if (!results[0].meta.changes) return json(400, { message: 'Link inválido ou expirado. Solicite uma nova recuperação.' });
   return json(200, { message: 'Senha atualizada. Entre novamente com sua nova senha.' });
 }
 
