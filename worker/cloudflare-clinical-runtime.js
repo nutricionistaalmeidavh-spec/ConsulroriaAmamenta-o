@@ -8,6 +8,7 @@ import { handleClinicalNoteVersioning } from './clinical-note-versioning-runtime
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 import { handleClaimedStorageDelete } from './storage-delete-claim-runtime.js';
 import { handleConsistentStorageMutation } from './storage-consistency-runtime.js';
 import {
@@ -69,6 +70,13 @@ export async function handleCloudflareClinicalRuntime(request, env) {
   const relationGuardResponse = await handleCloudflareRelationGuard(request, env, url);
   if (relationGuardResponse) return relationGuardResponse;
 
+  // POST upserts run before the versioned encounter adapter. Apply the table policy
+  // here so a generic on_conflict request cannot bypass a domain-managed write path.
+  if (request.method === 'POST') {
+    const genericPostPolicyResponse = handleGenericCrudPolicy(request, url);
+    if (genericPostPolicyResponse) return genericPostPolicyResponse;
+  }
+
   const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
   if (upsertResponse) return upsertResponse;
 
@@ -86,6 +94,11 @@ export async function handleCloudflareClinicalRuntime(request, env) {
 
   const atomicStartResponse = await handleAtomicAppointmentEncounterStart(request, env, url);
   if (atomicStartResponse) return atomicStartResponse;
+
+  // Specialized handlers above get first refusal. Anything still reaching the generic
+  // records adapter must obey the explicit table/method allowlist.
+  const genericPolicyResponse = handleGenericCrudPolicy(request, url);
+  if (genericPolicyResponse) return genericPolicyResponse;
 
   return handleCloudflareDataRuntime(request, env, url);
 }
