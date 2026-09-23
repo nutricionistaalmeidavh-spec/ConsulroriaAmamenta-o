@@ -95,8 +95,8 @@ async function addPackageItemV2(env,user,input){
   const packageId=String(input?.p_package_id||'').trim();
   const key=requestKey(input);
   const label=String(input?.p_label||'').trim();
-  const itemType=String(input?.p_item_type||'service').trim()||'service';
-  const quantity=Math.trunc(Number(input?.p_quantity_total??1));
+  const itemType=String(input?.p_item_type||input?.p_category||'service').trim()||'service';
+  const quantity=Math.trunc(Number(input?.p_quantity_total??input?.p_quantity??1));
   const pricingMode=String(input?.p_pricing_mode||'included').trim();
   const unitPrice=Math.max(0,Math.trunc(Number(input?.p_unit_price_cents||0))||0);
   const explicitAmount=Math.max(0,Math.trunc(Number(input?.p_amount_cents||0))||0);
