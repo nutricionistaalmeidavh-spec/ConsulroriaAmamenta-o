@@ -25,6 +25,17 @@ function response(body){
   };
 }
 
+function billingRows(resource){
+  const value=String(resource);
+  if(value.includes('care_packages?'))return [{
+    id:'package-1',service_label:'Plano de acompanhamento · 4 consultas',total_cents:76000,
+    sessions_total:4,sessions_used:4,status:'active',payment_method:'Pix',created_at:'2026-09-01T00:00:00Z'
+  }];
+  if(value.includes('care_package_items?'))return [];
+  if(value.includes('financial_entries?'))return [];
+  return [];
+}
+
 test('weight evolution stylesheet is root-safe under the canonical /app entry',()=>{
   assert.match(weightSource,/link\.href=['"]\/weight-evolution-v5\.css['"]/);
 });
@@ -49,6 +60,7 @@ test('three concurrent patient-plan remounts leave exactly one plan card',async(
         dataset:{},
         className:'',
         innerHTML:'',
+        querySelector(){return null},
         remove(){const index=hosts.indexOf(this);if(index>=0)hosts.splice(index,1)}
       };
     },
@@ -68,18 +80,13 @@ test('three concurrent patient-plan remounts leave exactly one plan card',async(
     addEventListener(){},
     confirm(){return true},
     crypto:{randomUUID(){return '00000000-0000-4000-8000-000000000001'}},
-    fetch:async url=>{
-      await Promise.resolve();
-      const value=String(url);
-      if(value.includes('/care_packages?'))return response([{
-        id:'package-1',service_label:'Plano de acompanhamento · 4 consultas',total_cents:76000,
-        sessions_total:4,sessions_used:4,status:'active',payment_method:'Pix',created_at:'2026-09-01T00:00:00Z'
-      }]);
-      if(value.includes('/care_package_items?'))return response([]);
-      if(value.includes('/financial_entries?'))return response([]);
-      return response([]);
+    fetch:async url=>response(billingRows(String(url).replace(/^.*\/api\/clinical\/records\//,''))),
+    DeboraRuntimeClient:{
+      getSession(){return{access_token:'a.b.c'}},
+      async rest(table,{query='' }={}){return billingRows(`${table}?${query}`)},
+      async rpc(){return{}}
     },
-    DEBORA_APP_CONFIG:{SUPABASE_URL:'https://example.test',SUPABASE_PUBLISHABLE_KEY:'test-key'}
+    DEBORA_APP_CONFIG:{API_BASE_URL:'https://example.test',CLIENT_RUNTIME_KEY:'test-key'}
   };
   context.window=context;
   context.globalThis=context;
