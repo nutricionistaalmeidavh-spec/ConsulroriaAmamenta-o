@@ -5,6 +5,7 @@ import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.j
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
@@ -142,6 +143,12 @@ export default {
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
+
+    // Manual package consumption needs a D1 compare-and-increment path. It must run
+    // before the broader package lifecycle adapter so two requests cannot both
+    // claim the last available session from a stale read.
+    const atomicPackageSessionResponse = await handleAtomicPackageSessionRuntime(request, env, url);
+    if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
 
     const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
     if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
