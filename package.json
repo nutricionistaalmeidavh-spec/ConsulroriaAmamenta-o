@@ -8,7 +8,7 @@
     "build": "node scripts/normalize-growth-runtime.mjs && node scripts/materialize-clinical-source.mjs --write && node scripts/materialize-cloudflare-frontend.mjs --write && node scripts/generate-pwa-icons.mjs && vite build",
     "preview": "vite preview",
     "test:auth-runtime": "node scripts/test-cloudflare-runtime.mjs && node --test worker/domain-entry-response.test.mjs worker/cloudflare-auth-compat.test.mjs worker/cloudflare-auth-runtime.test.mjs tests/cloudflare-auth-guardrail.test.mjs tests/block-1-2-hygiene.test.mjs tests/cloudflare-client-refresh.test.mjs tests/cloudflare-functional-regressions.test.mjs tests/patient-save-runtime.test.mjs tests/patient-ui-integrity.test.mjs tests/package-card-singleton.test.mjs tests/package-lifecycle-cloudflare.test.mjs",
-    "test:cloudflare-regressions": "node scripts/test-cloudflare-runtime.mjs && node scripts/test-cloudflare-license-authority.mjs && node --test tests/block-1-2-hygiene.test.mjs tests/cloudflare-client-refresh.test.mjs tests/cloudflare-functional-regressions.test.mjs tests/patient-save-runtime.test.mjs",
+    "test:cloudflare-regressions": "node scripts/test-cloudflare-runtime.mjs && node scripts/test-cloudflare-license-authority.mjs && node --test tests/block-1-2-hygiene.test.mjs tests/cloudflare-client-refresh.test.mjs tests/cloudflare-functional-regressions.test.mjs tests/patient-save-runtime.test.mjs tests/block-6-rpc-closure.test.mjs",
     "test:billing": "node scripts/test-cloudflare-billing-d1.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
@@ -18,6 +18,7 @@
     "deploy:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-cloudflare-billing.ps1",
     "test:frontend-cutover": "node scripts/materialize-clinical-source.mjs --write && node scripts/materialize-cloudflare-frontend.mjs --check && node --test tests/frontend-cloudflare-cutover.test.mjs",
     "test:block5": "node --test tests/cloudflare-password-recovery.test.mjs tests/cloudflare-recovery-d1.test.mjs tests/cloudflare-native-bootstrap.test.mjs tests/cloudflare-async-errors.test.mjs tests/service-worker-update.test.mjs",
+    "test:block6": "node --test tests/block-6-rpc-closure.test.mjs tests/package-lifecycle-cloudflare.test.mjs",
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
