@@ -231,7 +231,7 @@ export default {
         status: route.status,
         headers: {
           location: route.location,
-          'cache-control': DYNAMIC_DOCUMENT_CACHE_CONTROL,
+          'cache-control': 'no-store, no-cache, must-revalidate',
           'pragma': 'no-cache',
           'expires': '0',
         },
