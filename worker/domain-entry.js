@@ -7,6 +7,7 @@ import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
 import { handleClinicalBackupRuntime } from './clinical-backup-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
+import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
 import { handleAtomicEncounterFinalizeRuntime } from './encounter-billing-atomic-runtime.js';
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
@@ -238,6 +239,13 @@ export default {
 
     const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
     if (growthResponse) return withNoIndex(growthResponse);
+
+    // The outer upsert adapter is also a generic mutation surface. Apply the same
+    // table policy before it gets a chance to consume on_conflict writes.
+    if (request.method === 'POST') {
+      const genericPostPolicyResponse = handleGenericCrudPolicy(request, url);
+      if (genericPostPolicyResponse) return withNoIndex(genericPostPolicyResponse);
+    }
 
     const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
     if (upsertResponse) return withNoIndex(upsertResponse);
