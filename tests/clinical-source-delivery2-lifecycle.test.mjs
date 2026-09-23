@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
 
-const appShellSource = readFileSync('public/clinical-source/core/app-shell.js', 'utf8');
+const appDataSource = readFileSync('public/clinical-source/core/lib/app-data.js', 'utf8');
 
 async function seed(db, table, id, ownerId, record) {
   const now = new Date().toISOString();
@@ -248,11 +248,12 @@ test('C01 finalized encounters reject generic PATCH attempts that regress them t
   assert.equal((await record(runtime.db, 'clinical_encounters', 'e1')).status, 'finalized');
 });
 
-test('C01 frontend autosave has a drain barrier and cannot write an older draft after finalization begins', () => {
-  assert.match(appShellSource, /encounterAutosaveRevision/);
-  assert.match(appShellSource, /encounterAutosaveQueued/);
-  assert.match(appShellSource, /encounterFinalizing/);
-  assert.match(appShellSource, /async function drainEncounterAutosave/);
-  assert.match(appShellSource, /await\s+drainEncounterAutosave\(\)/);
-  assert.match(appShellSource, /if\s*\(encounterFinalizing\)\s*return/);
+test('C01 app-data serializes encounter writes and closes the draft queue before atomic finalization', () => {
+  assert.match(appDataSource, /const encounterWriteChains = new Map\(\)/);
+  assert.match(appDataSource, /const encounterLifecycle = new Map\(\)/);
+  assert.match(appDataSource, /function queueEncounterWrite/);
+  assert.match(appDataSource, /encounterLifecycle\.set\(id, 'finalizing'\)/);
+  assert.match(appDataSource, /lifecycle === 'finalizing' \|\| lifecycle === 'finalized'/);
+  assert.match(appDataSource, /finalize_clinical_encounter_atomic/);
+  assert.match(appDataSource, /pendingAppointmentFinalization/);
 });
