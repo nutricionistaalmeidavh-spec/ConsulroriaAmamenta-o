@@ -8,6 +8,7 @@ import {
   createMemorySessionStorage,
   createSupabaseClient,
 } from '../patch-source/cloudflare-license-authority/core/lib/supabase-client.js';
+import { ownedApiInternalPath } from '../worker/owned-api-paths.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -87,17 +88,21 @@ test('canonical browser client emits owned auth, clinical RPC/record and file ro
   ]);
 });
 
-test('worker owns auth, clinical/files and billing entry families', () => {
-  const auth = source('worker/cloudflare-auth-runtime.js');
+test('worker entry translates owned API families only inside the Cloudflare process', () => {
   const domain = source('worker/domain-entry.js');
-  const billing = source('worker/cloudflare-billing-runtime.js');
-
-  assert.match(auth, /\/api\/auth\/token/);
-  assert.match(auth, /\/api\/auth\/signup/);
-  assert.match(auth, /\/api\/auth\/user/);
   assert.match(domain, /normalizeOwnedApiRequest/);
-  assert.match(domain, /\/api\/files\//);
-  assert.match(billing, /\/api\/billing\/checkout/);
-  assert.match(billing, /\/api\/billing\/pending-status/);
-  assert.match(billing, /\/api\/billing\/webhooks\/asaas/);
+
+  assert.equal(ownedApiInternalPath('/api/auth/token'), '/auth/v1/token');
+  assert.equal(ownedApiInternalPath('/api/auth/signup'), '/auth/v1/signup');
+  assert.equal(ownedApiInternalPath('/api/clinical/records/mothers'), '/rest/v1/mothers');
+  assert.equal(ownedApiInternalPath('/api/clinical/rpc/claim_member_portal'), '/rest/v1/rpc/claim_member_portal');
+  assert.equal(ownedApiInternalPath('/api/files/object/clinical-media/u/file.pdf'), '/storage/v1/object/clinical-media/u/file.pdf');
+  assert.equal(ownedApiInternalPath('/api/billing/checkout'), '/api/asaas/checkout');
+  assert.equal(ownedApiInternalPath('/api/billing/pending-status'), '/api/asaas/pending-status');
+  assert.equal(ownedApiInternalPath('/api/billing/webhooks/asaas'), '/api/webhooks/asaas');
+  assert.equal(ownedApiInternalPath('/api/billing/sandbox/checkout'), '/api/sandbox/asaas/checkout');
+
+  // Existing special endpoints are already owned and must not be rewritten.
+  assert.equal(ownedApiInternalPath('/api/auth/recovery'), '/api/auth/recovery');
+  assert.equal(ownedApiInternalPath('/api/clinical/patients'), '/api/clinical/patients');
 });
