@@ -55,6 +55,14 @@ async function startEncounter(page, appointmentId) {
   return response;
 }
 
+async function waitForFeatureModules(page) {
+  await page.waitForFunction(() => Boolean(
+    window.DeboraDocuments?.rest
+    && window.DeboraBilling?.remountPlan
+    && window.DeboraClinicalNote?.openEncounter
+  ));
+}
+
 async function poisonAccessToken(page) {
   await page.evaluate(() => {
     const key = 'debora-lactacao-session';
@@ -107,6 +115,7 @@ for (const scenario of [
   test(`${scenario.name} read failure is shown as an error, never as an empty record count`, async ({ page }) => {
     await login(page);
     await createPatient(page, `Read failure ${scenario.name}`);
+    await waitForFeatureModules(page);
     await page.route(scenario.pattern, route => route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -116,7 +125,7 @@ for (const scenario of [
       document.querySelector('[data-prh-card]')?.remove();
       window.DeboraPatientRecordsHub?.refresh?.();
     });
-    await expect(page.locator('[data-app-toast]')).toContainText(`synthetic ${scenario.name} read failure`);
+    await expect(page.locator('#dui-toast-region .dui-toast')).toContainText(`synthetic ${scenario.name} read failure`);
     await expect(page.locator('[data-prh-card]')).toHaveCount(0);
   });
 }
@@ -128,6 +137,7 @@ test('clinical note auxiliary read failure does not masquerade as an empty pront
   const started = await startEncounter(page, appointment.id);
   expect(started.ok()).toBeTruthy();
   const { encounter_id: encounterId } = await started.json();
+  await waitForFeatureModules(page);
 
   await page.route('**/api/clinical/records/clinical_encounter_addenda?*', route => route.fulfill({
     status: 500,
@@ -155,6 +165,7 @@ test('documents, billing and clinical note share the canonical 401 refresh path'
   const started = await startEncounter(page, appointment.id);
   expect(started.ok()).toBeTruthy();
   const { encounter_id: encounterId } = await started.json();
+  await waitForFeatureModules(page);
 
   await poisonAccessToken(page);
   const docs = await page.evaluate(async motherId => window.DeboraDocuments.consents(motherId), patient.mother.id);
@@ -176,6 +187,7 @@ test('documents, billing and clinical note share the canonical 401 refresh path'
 
 test('two tabs racing one refresh token both recover while the backend rotates it only once', async ({ page, context, request }) => {
   await login(page);
+  await waitForFeatureModules(page);
   const beforeSession = await session(page);
   const email = beforeSession?.user?.email;
   expect(email).toBeTruthy();
@@ -186,6 +198,7 @@ test('two tabs racing one refresh token both recover while the backend rotates i
   const second = await context.newPage();
   await second.goto('/app/');
   await expect(second.locator('[data-app-root]')).toBeVisible();
+  await waitForFeatureModules(second);
   await poisonAccessToken(page);
   await poisonAccessToken(second);
 
