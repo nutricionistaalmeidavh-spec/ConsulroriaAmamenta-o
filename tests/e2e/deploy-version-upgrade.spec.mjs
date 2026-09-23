@@ -8,6 +8,41 @@ const STALE_MARKER = 'STALE_VERSION_N';
 const LEGACY_WORKER = '/legacy-sw-test.js';
 const currentServiceWorker = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
 
+function isPlaywrightLifecycleRace(error) {
+  const message = String(error?.message || error || '');
+  return /Target page, context or browser has been closed|Object with guid .* was not bound in the connection/i.test(message);
+}
+
+async function readUpgradedState(context) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const verifyPage = await context.newPage();
+    try {
+      await verifyPage.goto(`/app/?release=${encodeURIComponent(RELEASE_N_PLUS_1)}`, { waitUntil: 'domcontentloaded' });
+      await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
+      await verifyPage.reload({ waitUntil: 'domcontentloaded' });
+      await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
+      return await verifyPage.evaluate(async () => {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        return {
+          caches: await caches.keys(),
+          controller: navigator.serviceWorker.controller?.scriptURL || '',
+          registrations: registrations.flatMap((registration) => [registration.installing, registration.waiting, registration.active]
+            .map((worker) => worker?.scriptURL)
+            .filter(Boolean)),
+          html: document.documentElement.outerHTML,
+        };
+      });
+    } catch (error) {
+      lastError = error;
+      if (!isPlaywrightLifecycleRace(error)) throw error;
+    } finally {
+      if (!verifyPage.isClosed()) await verifyPage.close().catch(() => undefined);
+    }
+  }
+  throw lastError || new Error('Could not verify upgraded service worker state.');
+}
+
 test.use({ serviceWorkers: 'allow' });
 
 test('client on version N upgrades to N+1 and never resurrects stale HTML after reload', async ({ page, context }) => {
@@ -80,28 +115,12 @@ test('client on version N upgrades to N+1 and never resurrects stale HTML after 
 
   expect(upgradedController).toMatch(/\/sw\.js(?:\?|$)/);
 
-  // The page that performed controller replacement is intentionally discarded.
-  // Verifying the new release from a fresh page avoids Playwright navigation/response
-  // bookkeeping racing the controller transition while still exercising the real
-  // persisted browser ServiceWorker + CacheStorage state.
+  // The controller transition can make Playwright discard a page/response handle while
+  // the browser itself keeps the persisted ServiceWorker and CacheStorage state intact.
+  // Verify from a fresh page and retry only that Playwright lifecycle race. Product-state
+  // assertions below remain strict and are never retried or swallowed.
   await page.close();
-  const verifyPage = await context.newPage();
-  await verifyPage.goto(`/app/?release=${encodeURIComponent(RELEASE_N_PLUS_1)}`, { waitUntil: 'domcontentloaded' });
-  await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
-  await verifyPage.reload({ waitUntil: 'domcontentloaded' });
-  await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
-
-  const state = await verifyPage.evaluate(async () => {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    return {
-      caches: await caches.keys(),
-      controller: navigator.serviceWorker.controller?.scriptURL || '',
-      registrations: registrations.flatMap((registration) => [registration.installing, registration.waiting, registration.active]
-        .map((worker) => worker?.scriptURL)
-        .filter(Boolean)),
-      html: document.documentElement.outerHTML,
-    };
-  });
+  const state = await readUpgradedState(context);
 
   expect(state.caches).not.toContain(OLD_CACHE);
   expect(state.controller).toMatch(/\/sw\.js(?:\?|$)/);
