@@ -2,6 +2,7 @@ import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { runtimeJson } from './cloudflare-clinical-runtime.js';
 
 const RPC_PATH = '/api/clinical/rpc/consume_care_package_session_manual';
+const CLAIM_PATH = '$.__manual_session_claim';
 
 function requireDb(env) {
   if (!env.CLINICAL_DB) throw new Error('clinical_db_not_configured');
@@ -58,7 +59,32 @@ async function sessionByRequestKey(database, ownerId, packageId, requestKey) {
   return parseEntry(row);
 }
 
-function sessionInsertStatement(database, { sessionKey, ownerId, packageKey, requestKey, recordJson, now }) {
+function packageClaimStatement(database, { packageKey, ownerId, expectedUsed, claimKey, now }) {
+  return database.prepare(`UPDATE supabase_records
+    SET record_json = json_set(
+          record_json,
+          '$.sessions_used', CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER) + 1,
+          '$.status', CASE
+            WHEN CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER) + 1
+              >= CAST(COALESCE(json_extract(record_json,'$.sessions_total'),0) AS INTEGER)
+            THEN 'completed' ELSE 'active' END,
+          '$.updated_at', ?,
+          '${CLAIM_PATH}', ?
+        ),
+        source_updated_at = ?,
+        migrated_at = ?
+    WHERE table_name = 'care_packages'
+      AND record_key = ?
+      AND owner_id = ?
+      AND COALESCE(json_extract(record_json,'$.status'),'active') = 'active'
+      AND CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER) = ?
+      AND CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER)
+        < CAST(COALESCE(json_extract(record_json,'$.sessions_total'),0) AS INTEGER)`).bind(
+    now, claimKey, now, now, packageKey, ownerId, expectedUsed,
+  );
+}
+
+function sessionInsertStatement(database, { sessionKey, ownerId, packageKey, claimKey, recordJson, now }) {
   return database.prepare(`INSERT INTO supabase_records(
       table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
     )
@@ -68,32 +94,23 @@ function sessionInsertStatement(database, { sessionKey, ownerId, packageKey, req
       WHERE table_name = 'care_packages'
         AND record_key = ?
         AND owner_id = ?
-        AND COALESCE(json_extract(record_json,'$.status'),'active') = 'active'
-        AND CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER)
-          < CAST(COALESCE(json_extract(record_json,'$.sessions_total'),0) AS INTEGER)
-    )`).bind(sessionKey, ownerId, recordJson, now, now, now, packageKey, ownerId);
+        AND json_extract(record_json,'${CLAIM_PATH}') = ?
+    )
+    ON CONFLICT(table_name,record_key) DO NOTHING`).bind(
+    sessionKey, ownerId, recordJson, now, now, now, packageKey, ownerId, claimKey,
+  );
 }
 
-function packageIncrementStatement(database, { packageKey, ownerId, now }) {
+function packageClaimCleanupStatement(database, { packageKey, ownerId, claimKey, now }) {
   return database.prepare(`UPDATE supabase_records
-    SET record_json = json_set(
-          record_json,
-          '$.sessions_used', CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER) + 1,
-          '$.status', CASE
-            WHEN CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER) + 1
-              >= CAST(COALESCE(json_extract(record_json,'$.sessions_total'),0) AS INTEGER)
-            THEN 'completed' ELSE 'active' END,
-          '$.updated_at', ?
-        ),
+    SET record_json = json_remove(record_json,'${CLAIM_PATH}'),
         source_updated_at = ?,
         migrated_at = ?
     WHERE table_name = 'care_packages'
       AND record_key = ?
       AND owner_id = ?
-      AND COALESCE(json_extract(record_json,'$.status'),'active') = 'active'
-      AND CAST(COALESCE(json_extract(record_json,'$.sessions_used'),0) AS INTEGER)
-        < CAST(COALESCE(json_extract(record_json,'$.sessions_total'),0) AS INTEGER)`).bind(
-    now, now, now, packageKey, ownerId,
+      AND json_extract(record_json,'${CLAIM_PATH}') = ?`).bind(
+    now, now, packageKey, ownerId, claimKey,
   );
 }
 
@@ -133,7 +150,9 @@ export async function handleAtomicPackageSessionRuntime(request, env, url = new 
   }
 
   const now = new Date().toISOString();
+  const expectedUsed = Number(entry.record.sessions_used || 0);
   const sessionKey = `manual:${packageId}:${requestKey}`;
+  const claimKey = `${sessionKey}:${crypto.randomUUID()}`;
   const session = {
     id: sessionKey,
     owner_id: user.id,
@@ -154,17 +173,25 @@ export async function handleAtomicPackageSessionRuntime(request, env, url = new 
   let results;
   try {
     results = await database.batch([
+      packageClaimStatement(database, {
+        packageKey: entry.key,
+        ownerId: user.id,
+        expectedUsed,
+        claimKey,
+        now,
+      }),
       sessionInsertStatement(database, {
         sessionKey,
         ownerId: user.id,
         packageKey: entry.key,
-        requestKey,
+        claimKey,
         recordJson: JSON.stringify(session),
         now,
       }),
-      packageIncrementStatement(database, {
+      packageClaimCleanupStatement(database, {
         packageKey: entry.key,
         ownerId: user.id,
+        claimKey,
         now,
       }),
     ]);
@@ -180,13 +207,13 @@ export async function handleAtomicPackageSessionRuntime(request, env, url = new 
     return runtimeJson(503, { message: 'Não foi possível registrar a consulta do plano. Tente novamente.' });
   }
 
-  const insertChanges = changes(results?.[0]);
-  const updateChanges = changes(results?.[1]);
+  const claimChanges = changes(results?.[0]);
+  const insertChanges = changes(results?.[1]);
   const persistedSession = await sessionByRequestKey(database, user.id, packageId, requestKey);
   const currentEntry = await ownedPackage(database, packageId, user.id);
   const currentPackage = currentEntry?.record || entry.record;
 
-  if (persistedSession && (insertChanges === 1 || insertChanges === null) && (updateChanges === 1 || updateChanges === null)) {
+  if (claimChanges === 1 && persistedSession && (insertChanges === 1 || insertChanges === null)) {
     return runtimeJson(200, packagePayload(currentPackage, { idempotent: false }));
   }
 
