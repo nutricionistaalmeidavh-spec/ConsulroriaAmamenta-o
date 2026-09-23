@@ -1,10 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
+const RELEASE_N = 'e2e-N';
+const RELEASE_N_PLUS_1 = 'e2e-N+1';
 const OLD_CACHE = 'debora-lactacao-v1.14.1-stability';
 const STALE_MARKER = 'STALE_VERSION_N';
 const LEGACY_WORKER = '/legacy-sw-test.js';
+const currentServiceWorker = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
 
 test('client on version N upgrades to N+1 and never resurrects stale HTML after reload', async ({ page }) => {
+  expect(RELEASE_N).toBe('e2e-N');
+  expect(RELEASE_N_PLUS_1).toBe('e2e-N+1');
+  expect(currentServiceWorker).toContain("VERSION='1.14.2-cache-reset'");
+  expect(currentServiceWorker).not.toContain("cache.match('./')");
+
   await page.goto('/comercial/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => 'serviceWorker' in navigator);
 
@@ -45,6 +54,24 @@ test('client on version N upgrades to N+1 and never resurrects stale HTML after 
       .some((worker) => worker?.scriptURL.includes('/sw.js')));
   }, { timeout: 20000 });
 
+  const controllerchange = page.evaluate(() => new Promise((resolve, reject) => {
+    const currentController = () => navigator.serviceWorker.controller?.scriptURL || '';
+    if (currentController().includes('/sw.js')) {
+      resolve(currentController());
+      return;
+    }
+
+    const timeout = setTimeout(() => reject(new Error('controllerchange timeout')), 20000);
+    const onControllerChange = () => {
+      const scriptUrl = currentController();
+      if (!scriptUrl.includes('/sw.js')) return;
+      clearTimeout(timeout);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      resolve(scriptUrl);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+  }));
+
   await page.evaluate(async () => {
     const registrations = await navigator.serviceWorker.getRegistrations();
     const registration = registrations.find((item) => [item.installing, item.waiting, item.active]
@@ -53,6 +80,7 @@ test('client on version N upgrades to N+1 and never resurrects stale HTML after 
     await registration.update();
   });
 
+  await controllerchange;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
 
