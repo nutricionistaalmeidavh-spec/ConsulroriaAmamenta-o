@@ -6,6 +6,9 @@ const CLINICAL_BUCKET = 'clinical-media';
 const CLINICAL_CONFIRM_PATH = '/api/clinical/media/confirm';
 const CLINICAL_RECONCILE_PATH = '/api/clinical/media/reconcile';
 const SIGN_PREFIX = '/api/files/object/sign/';
+const OBJECT_PREFIX = '/api/files/object/';
+const enc = new TextEncoder();
+const dec = new TextDecoder();
 
 function legacyStorageKey(bucket, path) {
   return `supabase/${bucket}/${path}`;
@@ -24,6 +27,53 @@ function parseMetadata(row) {
   try { return JSON.parse(row?.metadata_json || '{}'); } catch { return {}; }
 }
 
+function b64urlBytes(bytes) {
+  let binary = '';
+  for (const value of bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)) binary += String.fromCharCode(value);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function bytesFromB64url(value) {
+  let normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (normalized.length % 4) normalized += '=';
+  const binary = atob(normalized);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+async function fileSigningKey(env) {
+  const secret = String(env.CLINICAL_AUTH_SECRET || '');
+  if (!secret) throw new Error('clinical_auth_secret_missing');
+  return crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+async function signFileGrant(payload, env) {
+  const body = b64urlBytes(enc.encode(JSON.stringify(payload)));
+  const signature = await crypto.subtle.sign('HMAC', await fileSigningKey(env), enc.encode(body));
+  return `${body}.${b64urlBytes(new Uint8Array(signature))}`;
+}
+
+async function verifyFileGrant(token, env) {
+  const [body, signature] = String(token || '').split('.');
+  if (!body || !signature) return null;
+  const valid = await crypto.subtle.verify('HMAC', await fileSigningKey(env), bytesFromB64url(signature), enc.encode(body)).catch(() => false);
+  if (!valid) return null;
+  try {
+    const payload = JSON.parse(dec.decode(bytesFromB64url(body)));
+    if (Number(payload.exp || 0) <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function parseObjectTarget(url, prefix = OBJECT_PREFIX) {
+  const relative = url.pathname.slice(prefix.length);
+  const [bucketEncoded, ...pathParts] = relative.split('/');
+  const bucket = decodeURIComponent(bucketEncoded || '');
+  const path = pathParts.map(decodeURIComponent).join('/');
+  return bucket && path ? { bucket, path } : null;
+}
+
 function mutationTarget(request, url) {
   if (!['POST', 'PUT', 'DELETE'].includes(request.method)) return null;
 
@@ -33,14 +83,10 @@ function mutationTarget(request, url) {
   }
 
   // Signing is a read-capability operation even though the endpoint uses POST.
-  // It must reach the file signing handler instead of being interpreted as bucket "sign".
+  // It must never be interpreted as bucket "sign".
   if (url.pathname.startsWith(SIGN_PREFIX)) return null;
-  if (!url.pathname.startsWith('/api/files/object/')) return null;
-  const relative = url.pathname.slice('/api/files/object/'.length);
-  const [bucketEncoded, ...pathParts] = relative.split('/');
-  const bucket = decodeURIComponent(bucketEncoded || '');
-  const path = pathParts.map(decodeURIComponent).join('/');
-  return bucket && path ? { bucket, path } : null;
+  if (!url.pathname.startsWith(OBJECT_PREFIX)) return null;
+  return parseObjectTarget(url);
 }
 
 async function resolveMediaAccess(env, user) {
@@ -208,6 +254,47 @@ async function remove(env, { bucket, path }) {
   }
 
   return new Response(null, { status: 204 });
+}
+
+async function signCurrentObject(request, env, user, url) {
+  const target = parseObjectTarget(url, SIGN_PREFIX);
+  if (!target || target.path.includes('..')) return runtimeJson(400, { message: 'Caminho inválido.' });
+  if (!target.path.startsWith(`${user.id}/`)) return runtimeJson(403, { message: 'Arquivo fora do escopo da conta.' });
+  const storage = await metadataRow(env.CLINICAL_DB, target.bucket, target.path);
+  if (!storage) return runtimeJson(404, { message: 'Arquivo não encontrado.' });
+  const input = await request.json().catch(() => ({}));
+  const ttl = Math.max(60, Math.min(3600, Number(input?.expiresIn || 300)));
+  const now = Math.floor(Date.now() / 1000);
+  const token = await signFileGrant({ sub: user.id, bucket: target.bucket, path: target.path, iat: now, exp: now + ttl }, env);
+  const signedURL = `${OBJECT_PREFIX}${encodeURIComponent(target.bucket)}/${target.path.split('/').map(encodeURIComponent).join('/')}?token=${encodeURIComponent(token)}`;
+  return runtimeJson(200, { signedURL, expiresIn: ttl, expiresAt: new Date((now + ttl) * 1000).toISOString() });
+}
+
+async function serveCurrentObject(request, env, url) {
+  const target = parseObjectTarget(url);
+  if (!target || target.path.includes('..')) return runtimeJson(400, { message: 'Caminho inválido.' });
+
+  const token = url.searchParams.get('token');
+  if (token) {
+    const grant = await verifyFileGrant(token, env);
+    if (!grant || grant.bucket !== target.bucket || grant.path !== target.path) {
+      return runtimeJson(403, { message: 'Link expirado ou inválido.' });
+    }
+  } else {
+    const user = await authenticateClinicalRequest(request, env);
+    if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada.' });
+    if (!target.path.startsWith(`${user.id}/`)) return runtimeJson(403, { message: 'Arquivo fora do escopo da conta.' });
+  }
+
+  const storage = await metadataRow(env.CLINICAL_DB, target.bucket, target.path);
+  const key = storage?.r2_key || legacyStorageKey(target.bucket, target.path);
+  const object = await env.CLINICAL_FILES.get(key);
+  if (!object) return runtimeJson(404, { message: 'Arquivo não encontrado.' });
+  const headers = new Headers();
+  object.writeHttpMetadata?.(headers);
+  if (object.httpEtag) headers.set('etag', object.httpEtag);
+  headers.set('cache-control', token ? 'private, max-age=300' : 'private, no-store');
+  return new Response(object.body, { status: 200, headers });
 }
 
 async function existingClinicalMedia(db, ownerId, mediaId) {
@@ -381,15 +468,20 @@ export async function resolveStorageObjectKey(env, bucket, path) {
 
 export async function handleConsistentStorageMutation(request, env, url = new URL(request.url)) {
   const clinicalControl = url.pathname === CLINICAL_CONFIRM_PATH || url.pathname === CLINICAL_RECONCILE_PATH;
+  const signRequest = request.method === 'POST' && url.pathname.startsWith(SIGN_PREFIX);
+  const objectRead = request.method === 'GET' && url.pathname.startsWith(OBJECT_PREFIX) && !url.pathname.startsWith(SIGN_PREFIX);
   const target = mutationTarget(request, url);
-  if (!target && !clinicalControl) return null;
+  if (!target && !clinicalControl && !signRequest && !objectRead) return null;
 
   if (!env.CLINICAL_DB) return runtimeJson(503, { error: 'cloudflare_d1_required' });
   if (!env.CLINICAL_FILES) return runtimeJson(503, { message: 'R2 não configurado.' });
 
+  if (objectRead) return serveCurrentObject(request, env, url);
+
   const user = await authenticateClinicalRequest(request, env);
   if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada.' });
 
+  if (signRequest) return signCurrentObject(request, env, user, url);
   if (url.pathname === CLINICAL_CONFIRM_PATH && request.method === 'POST') {
     return confirmClinicalMedia(request, env, user);
   }
