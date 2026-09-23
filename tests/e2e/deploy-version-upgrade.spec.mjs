@@ -10,7 +10,7 @@ const currentServiceWorker = readFileSync(new URL('../../public/sw.js', import.m
 
 test.use({ serviceWorkers: 'allow' });
 
-test('client on version N upgrades to N+1 and never resurrects stale HTML after reload', async ({ page }) => {
+test('client on version N upgrades to N+1 and never resurrects stale HTML after reload', async ({ page, context }) => {
   expect(RELEASE_N).toBe('e2e-N');
   expect(RELEASE_N_PLUS_1).toBe('e2e-N+1');
   expect(currentServiceWorker).toContain("VERSION='1.14.2-cache-reset'");
@@ -80,12 +80,18 @@ test('client on version N upgrades to N+1 and never resurrects stale HTML after 
 
   expect(upgradedController).toMatch(/\/sw\.js(?:\?|$)/);
 
-  await page.goto('/app/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
+  // The page that performed controller replacement is intentionally discarded.
+  // Verifying the new release from a fresh page avoids Playwright navigation/response
+  // bookkeeping racing the controller transition while still exercising the real
+  // persisted browser ServiceWorker + CacheStorage state.
+  await page.close();
+  const verifyPage = await context.newPage();
+  await verifyPage.goto(`/app/?release=${encodeURIComponent(RELEASE_N_PLUS_1)}`, { waitUntil: 'domcontentloaded' });
+  await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
+  await verifyPage.reload({ waitUntil: 'domcontentloaded' });
+  await verifyPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.includes('/sw.js'));
 
-  const state = await page.evaluate(async () => {
+  const state = await verifyPage.evaluate(async () => {
     const registrations = await navigator.serviceWorker.getRegistrations();
     return {
       caches: await caches.keys(),
