@@ -10,6 +10,7 @@ import { handleAtomicEncounterFinalizeRuntime } from './encounter-billing-atomic
 import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
+import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -206,6 +207,9 @@ export default {
     if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
       await ensureExplicitCommercialMarker(request, env);
     }
+
+    const relationalIntegrityResponse = await handleRelationalIntegrityGuard(request, env, url);
+    if (relationalIntegrityResponse) return withNoIndex(relationalIntegrityResponse);
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
