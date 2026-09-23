@@ -1,10 +1,12 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
-
-const UPSERT_RECORD_SQL = `INSERT INTO supabase_records(
-  table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
-) VALUES(?,?,?,?,?,?,?) ON CONFLICT(table_name,record_key) DO UPDATE SET
-  owner_id=excluded.owner_id,record_json=excluded.record_json,source_created_at=excluded.source_created_at,
-  source_updated_at=excluded.source_updated_at,migrated_at=excluded.migrated_at`;
+import {
+  guardedRecordStatement,
+  idempotencyInsertStatement,
+  idempotencyResponse,
+  isIdempotencyConflict,
+  recordById,
+  recordByIdForOwner,
+} from './d1-record-store.js';
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -13,32 +15,10 @@ function json(status, body) {
   });
 }
 
-function parseRecord(row) {
-  if (!row) return null;
-  try {
-    return { key: row.record_key, ownerId: row.owner_id || null, record: JSON.parse(row.record_json) };
-  } catch {
-    return null;
-  }
-}
-
-async function tableRows(db, table) {
-  const result = await db.prepare(
-    'SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = ?',
-  ).bind(table).all();
-  return (result.results || []).map(parseRecord).filter(Boolean);
-}
-
-async function recordById(db, table, id) {
-  if (!id) return null;
-  const rows = await tableRows(db, table);
-  return rows.find((entry) => String(entry.record?.id || entry.key) === String(id)) || null;
-}
-
 async function babyOwnedByUser(db, babyEntry, userId) {
   if (!babyEntry || !userId) return false;
-  if (babyEntry.ownerId && String(babyEntry.ownerId) === String(userId)) return true;
-  if (babyEntry.record?.owner_id && String(babyEntry.record.owner_id) === String(userId)) return true;
+  if (babyEntry.ownerId) return String(babyEntry.ownerId) === String(userId);
+  if (babyEntry.record?.owner_id) return String(babyEntry.record.owner_id) === String(userId);
   const motherId = babyEntry.record?.mother_id;
   if (!motherId) return false;
   const mother = await recordById(db, 'mothers', motherId);
@@ -47,21 +27,18 @@ async function babyOwnedByUser(db, babyEntry, userId) {
 }
 
 function recordStatement(db, table, key, row, ownerId, now) {
-  return db.prepare(UPSERT_RECORD_SQL).bind(
-    table,
-    key,
-    ownerId || null,
-    JSON.stringify(row),
-    row.created_at || now,
-    row.updated_at || now,
-    now,
-  );
+  return guardedRecordStatement(db, table, key, row, ownerId, now);
 }
 
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function requestIdempotencyKey(request) {
+  const value = String(request.headers.get('idempotency-key') || '').trim();
+  return value && value.length <= 200 ? value : '';
 }
 
 export async function handleCloudflareGrowthRuntime(request, env, url = new URL(request.url), deps = {}) {
@@ -78,7 +55,18 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
   if (!babyId) return json(400, { error: 'baby_id_required' });
 
   const db = env.CLINICAL_DB;
-  const babyEntry = await recordById(db, 'babies', babyId);
+  const now = deps.now || new Date().toISOString();
+  const idempotencyKey = requestIdempotencyKey(request);
+  if (idempotencyKey) {
+    const replay = await idempotencyResponse(db, user.id, 'record_growth_measurement', idempotencyKey, now);
+    if (replay) return json(200, replay);
+  }
+
+  let babyEntry = await recordByIdForOwner(db, 'babies', babyId, user.id);
+  if (!babyEntry) {
+    const legacyBaby = await recordById(db, 'babies', babyId);
+    if (legacyBaby && await babyOwnedByUser(db, legacyBaby, user.id)) babyEntry = legacyBaby;
+  }
   if (!babyEntry || !await babyOwnedByUser(db, babyEntry, user.id)) {
     return json(404, { error: 'baby_not_found' });
   }
@@ -90,7 +78,6 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
     return json(400, { error: 'measurement_required' });
   }
 
-  const now = deps.now || new Date().toISOString();
   const uuid = deps.uuid || (() => crypto.randomUUID());
   const measuredAt = input?.p_measured_at || now;
   const measurementId = uuid();
@@ -137,7 +124,23 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
     statements.splice(1, 0, recordStatement(db, 'weights', weightId, weightRecord, user.id, now));
   }
 
-  // D1 batch is transactional: measurement, optional weight history and baby's current state move together.
-  await db.batch(statements);
-  return json(200, { ...measurement, baby, weight: weightRecord });
+  const responseBody = { ...measurement, baby, weight: weightRecord };
+  if (idempotencyKey) {
+    statements.push(idempotencyInsertStatement(
+      db, user.id, 'record_growth_measurement', idempotencyKey, responseBody, now,
+    ));
+  }
+
+  // D1 batch is transactional: measurement, optional weight history, baby's current
+  // state and the idempotency claim commit or roll back together.
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    if (idempotencyKey && isIdempotencyConflict(error)) {
+      const replay = await idempotencyResponse(db, user.id, 'record_growth_measurement', idempotencyKey, now);
+      if (replay) return json(200, replay);
+    }
+    throw error;
+  }
+  return json(200, responseBody);
 }
