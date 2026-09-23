@@ -27,7 +27,7 @@
     "test:e2e:cache-upgrade": "npm run build && playwright test tests/e2e/deploy-version-upgrade.spec.mjs",
     "test:e2e:mobile": "npm run build && playwright test --config=playwright.mobile.config.mjs",
     "test:e2e:smoke": "playwright test --config=playwright.smoke.config.mjs",
-    "test:stability": "node scripts/materialize-clinical-source.mjs --write && node scripts/materialize-cloudflare-frontend.mjs --write && node scripts/harden-delivery1-integrity.mjs --write && node scripts/harden-delivery3-versioning.mjs --write && node scripts/harden-delivery4-package-billing.mjs --write && node scripts/harden-p1-frontend.mjs --write && node scripts/harden-delivery5-file-integrity.mjs --write && node --test tests/session-stability.test.mjs tests/frontend-stability.test.mjs tests/patient-edit-atomic.test.mjs tests/cloudflare-recovery-d1.test.mjs",
+    "test:stability": "node scripts/materialize-clinical-source.mjs --write && node scripts/materialize-cloudflare-frontend.mjs --write && node scripts/harden-delivery1-integrity.mjs --write && node scripts/harden-delivery3-versioning.mjs --write && node scripts/harden-delivery4-package-billing.mjs --write && node scripts/harden-p1-frontend.mjs --write && node scripts/harden-delivery5-file-integrity.mjs --write && node --test tests/session-stability.test.mjs tests/frontend-stability.test.mjs tests/patient-edit-atomic.test.mjs tests/cloudflare-recovery-d1.test.mjs tests/delivery6-regressions.test.mjs",
     "test:p1": "node --test tests/package-lifecycle-cloudflare.test.mjs tests/service-worker-update.test.mjs tests/cloudflare-password-recovery.test.mjs tests/cloudflare-recovery-d1.test.mjs tests/block-6-rpc-closure.test.mjs"
   },
   "dependencies": {
