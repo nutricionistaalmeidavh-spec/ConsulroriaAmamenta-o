@@ -90,6 +90,7 @@ test('C03 stale pending clinical upload can be reconciled without touching confi
   const runtime=await createLocalRuntime();
   try{
     const session=await login(runtime),patient=await createPatient(runtime,session),mid=patient.mother.id;
+    const files=await runtime.mf.getR2Bucket('CLINICAL_FILES');
     const stalePath=`${userId}/${mid}/stale/pending.jpg`,keepPath=`${userId}/${mid}/keep/confirmed.jpg`;
     for(const [path,op] of [[stalePath,'stale-op'],[keepPath,'keep-op']]){
       const upload=await uploadPending(runtime,session,path,op);
@@ -111,9 +112,9 @@ test('C03 stale pending clinical upload can be reconciled without touching confi
     const staleAfter=await runtime.db.prepare("SELECT r2_key FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(stalePath).first();
     const keepAfter=await runtime.db.prepare("SELECT r2_key FROM storage_objects WHERE source_bucket='clinical-media' AND source_path=?").bind(keepPath).first();
     assert.equal(staleAfter,null);
-    assert.equal(await runtime.env.CLINICAL_FILES.get(stale.r2_key),null);
+    assert.equal(await files.get(stale.r2_key),null);
     assert.equal(keepAfter.r2_key,keep.r2_key);
-    assert.ok(await runtime.env.CLINICAL_FILES.get(keep.r2_key));
+    assert.ok(await files.get(keep.r2_key));
   }finally{await runtime.close()}
 });
 
