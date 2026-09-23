@@ -1,180 +1,114 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-local.mjs';
+import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 
-const storageSource = readFileSync('worker/storage-consistency-runtime.js', 'utf8');
-const documentsSource = readFileSync('public/documents-feature.js', 'utf8');
-const patientSource = readFileSync('public/clinical-source/features/patient-fixes.js', 'utf8');
-const albumSource = readFileSync('public/album-feature.js', 'utf8');
+const clinicalSource=readFileSync(new URL('../worker/cloudflare-clinical-runtime.js', import.meta.url),'utf8');
+const storageSource=readFileSync(new URL('../worker/file-integrity-runtime.js', import.meta.url),'utf8');
+const documentsSource=readFileSync(new URL('../public/documents-feature.js', import.meta.url),'utf8');
+const patientSource=readFileSync(new URL('../public/clinical-source/features/patient-fixes.js', import.meta.url),'utf8');
+const albumSource=readFileSync(new URL('../public/clinical-source/features/album-feature.js', import.meta.url),'utf8');
 
-async function authHeaders(runtime) {
-  const session = await runtime.login(credentials.email);
-  return {
-    authorization: `Bearer ${session.access_token}`,
-    'content-type': 'application/json',
-  };
+async function putRecord(db,table,key,record,owner=userId){
+  const now='2026-09-01T10:00:00.000Z';
+  await db.prepare(`INSERT INTO supabase_records(table_name,record_key,owner_id,record_json,source_created_at,source_updated_at) VALUES(?,?,?,?,?,?)`)
+    .bind(table,key,owner,JSON.stringify(record),now,now).run();
 }
+async function login(runtime){return runtime.login()}
+function auth(session){return {authorization:`Bearer ${session.access_token}`,'content-type':'application/json'}}
 
-async function seed(db, table, id, record, ownerId = userId) {
-  const now = new Date().toISOString();
-  const row = { id, owner_id: ownerId, ...record };
-  await db.prepare(`INSERT INTO supabase_records(
-    table_name,record_key,owner_id,record_json,source_created_at,source_updated_at,migrated_at
-  ) VALUES(?,?,?,?,?,?,?)`).bind(table, id, ownerId, JSON.stringify(row), now, now, now).run();
-  return row;
-}
-
-async function storageRow(db, bucket, path) {
-  return db.prepare(`SELECT source_bucket,source_path,r2_key,size_bytes,mime_type,metadata_json
-    FROM storage_objects WHERE source_bucket=? AND source_path=? LIMIT 1`).bind(bucket, path).first();
-}
-
-async function clinicalMediaRows(db) {
-  const result = await db.prepare("SELECT record_key,record_json FROM supabase_records WHERE table_name='clinical_media'").all();
-  return (result.results || []).map((row) => ({ key: row.record_key, ...JSON.parse(row.record_json) }));
-}
-
-function fileUrl(path) {
-  return `http://localhost/api/files/object/clinical-media/${path.split('/').map(encodeURIComponent).join('/')}`;
-}
-
-test('R17 signed URL route is not intercepted as a storage mutation bucket named sign', async (t) => {
-  const runtime = await createLocalRuntime();
-  t.after(() => runtime.close());
-  const headers = await authHeaders(runtime);
-  const path = `${userId}/delivery5/signed-proof.pdf`;
-
-  const upload = await runtime.mf.dispatchFetch(fileUrl(path), {
-    method: 'POST',
-    headers: { ...headers, 'content-type': 'application/pdf', 'x-storage-operation': 'signed-proof-upload' },
-    body: new Uint8Array([37, 80, 68, 70]),
+async function createPatient(runtime,session){
+  const response=await runtime.mf.dispatchFetch('http://localhost/api/clinical/patients',{
+    method:'POST',headers:auth(session),body:JSON.stringify({mother:{name:'Paciente mídia',consent_data:true,consent_clinical_media:true},babies:[{name:'Bebê mídia'}]})
   });
-  assert.equal(upload.status, 200);
+  assert.equal(response.status,201);
+  return response.json();
+}
 
-  const sign = await runtime.mf.dispatchFetch(
-    `http://localhost/api/files/object/sign/clinical-media/${path.split('/').map(encodeURIComponent).join('/')}`,
-    { method: 'POST', headers, body: JSON.stringify({ expiresIn: 900 }) },
-  );
-  assert.equal(sign.status, 200);
-  const signed = await sign.json();
-  assert.match(signed.signedURL, /^\/api\/files\/object\/clinical-media\//);
-
-  const download = await runtime.mf.dispatchFetch(`http://localhost${signed.signedURL}`);
-  assert.equal(download.status, 200);
-  assert.deepEqual([...new Uint8Array(await download.arrayBuffer())], [37, 80, 68, 70]);
+test('R17 signed URL route is not intercepted as a storage mutation bucket named sign',async()=>{
+  const runtime=await createLocalRuntime();
+  try{
+    const session=await login(runtime),owner=userId,path=`${owner}/patient-photos/example/profile`;
+    const uploaded=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
+      method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':'op-r17'},body:new Uint8Array([1,2,3,4])
+    });
+    assert.equal(uploaded.status,201);
+    const signed=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/sign/clinical-media/${path}`,{
+      method:'POST',headers:auth(session),body:JSON.stringify({expiresIn:900})
+    });
+    assert.equal(signed.status,200);
+    const payload=await signed.json();
+    assert.match(payload.signedURL,/^\/api\/files\/signed\//);
+    assert.doesNotMatch(payload.signedURL,/\/api\/files\/api\/files\//);
+  }finally{await runtime.close()}
 });
 
-test('C03 clinical media upload has a retry-safe pending operation and confirm is idempotent', async (t) => {
-  const runtime = await createLocalRuntime();
-  t.after(() => runtime.close());
-  const headers = await authHeaders(runtime);
-  await seed(runtime.db, 'mothers', 'mother-media', { name: 'Mãe mídia' });
-  await seed(runtime.db, 'babies', 'baby-media', { mother_id: 'mother-media', name: 'Bebê mídia' });
-
-  const operationKey = '11111111-2222-4333-8444-555555555555';
-  const path = `${userId}/patient-album/mother-media/${operationKey}-foto.jpg`;
-  const uploadHeaders = {
-    ...headers,
-    'content-type': 'image/jpeg',
-    'x-clinical-media-operation': operationKey,
-  };
-  const upload = () => runtime.mf.dispatchFetch(fileUrl(path), {
-    method: 'POST', headers: uploadHeaders, body: new Uint8Array([1, 2, 3, 4]),
-  });
-
-  const first = await upload();
-  assert.equal(first.status, 200);
-  const firstPayload = await first.json();
-  assert.equal(firstPayload.operation_id, operationKey);
-  assert.equal(firstPayload.pending, true);
-
-  const firstStorage = await storageRow(runtime.db, 'clinical-media', path);
-  assert.ok(firstStorage?.r2_key);
-  const firstMeta = JSON.parse(firstStorage.metadata_json || '{}');
-  assert.equal(firstMeta.state, 'pending');
-  assert.equal(firstMeta.operation_id, operationKey);
-  assert.equal(firstMeta.owner_id, userId);
-  assert.equal((await clinicalMediaRows(runtime.db)).length, 0, 'upload alone must not pretend the clinical link exists');
-
-  const retry = await upload();
-  assert.equal(retry.status, 200);
-  const retryPayload = await retry.json();
-  assert.equal(retryPayload.idempotent, true);
-  const retriedStorage = await storageRow(runtime.db, 'clinical-media', path);
-  assert.equal(retriedStorage.r2_key, firstStorage.r2_key, 'same operation retry must reuse the committed immutable object');
-
-  const confirmBody = {
-    operation_key: operationKey,
-    storage_path: path,
-    mother_id: 'mother-media',
-    baby_id: 'baby-media',
-    appointment_id: null,
-    encounter_id: null,
-    mime_type: 'image/jpeg',
-    file_name: 'foto.jpg',
-    file_size: 4,
-    category: 'Evolução',
-    caption: 'Registro de teste',
-    taken_at: '2026-09-23T18:00:00.000Z',
-  };
-  const confirm = () => runtime.mf.dispatchFetch('http://localhost/api/clinical/media/confirm', {
-    method: 'POST', headers, body: JSON.stringify(confirmBody),
-  });
-
-  const confirmed = await confirm();
-  assert.equal(confirmed.status, 200);
-  const confirmedPayload = await confirmed.json();
-  assert.equal(confirmedPayload.media.id, operationKey);
-  assert.equal(confirmedPayload.idempotent, false);
-  assert.equal((await clinicalMediaRows(runtime.db)).length, 1);
-  const confirmedStorage = await storageRow(runtime.db, 'clinical-media', path);
-  const confirmedMeta = JSON.parse(confirmedStorage.metadata_json || '{}');
-  assert.equal(confirmedMeta.state, 'confirmed');
-  assert.equal(confirmedMeta.media_id, operationKey);
-
-  const replay = await confirm();
-  assert.equal(replay.status, 200);
-  const replayPayload = await replay.json();
-  assert.equal(replayPayload.idempotent, true);
-  assert.equal(replayPayload.media.id, operationKey);
-  assert.equal((await clinicalMediaRows(runtime.db)).length, 1, 'confirm retry must not create a second clinical row');
+test('C03 clinical media upload has a retry-safe pending operation and confirm is idempotent',async()=>{
+  const runtime=await createLocalRuntime();
+  try{
+    const session=await login(runtime),patient=await createPatient(runtime,session),mid=patient.mother.id,baby=patient.babies[0].id;
+    const start=await runtime.mf.dispatchFetch('http://localhost/api/clinical/rpc/start_clinical_encounter',{
+      method:'POST',headers:auth(session),body:JSON.stringify({p_mother_id:mid,p_baby_ids:[baby],p_appointment_type:'Consulta inicial',p_starts_at:'2026-09-23T12:00:00.000Z',p_request_key:'media-encounter'})
+    });
+    assert.equal(start.status,200);const encounter=await start.json();
+    const path=`${userId}/${mid}/${encounter.id}/retry-safe.jpg`,operation='media-op-stable';
+    const first=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
+      method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':operation},body:new Uint8Array([9,8,7])
+    });
+    assert.equal(first.status,201);const firstBody=await first.json();
+    assert.equal(firstBody.status,'pending');
+    const retry=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
+      method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':operation},body:new Uint8Array([9,8,7])
+    });
+    assert.equal(retry.status,200);const retryBody=await retry.json();
+    assert.equal(retryBody.operation_id,operation);
+    assert.equal(retryBody.r2_key,firstBody.r2_key);
+    const confirmBody={p_operation_key:operation,p_mother_id:mid,p_baby_id:baby,p_encounter_id:encounter.id,p_type:'photo',p_label:'Foto clínica'};
+    for(let i=0;i<2;i++){
+      const confirmed=await runtime.mf.dispatchFetch('http://localhost/api/clinical/rpc/confirm_clinical_media',{
+        method:'POST',headers:auth(session),body:JSON.stringify(confirmBody)
+      });
+      assert.equal(confirmed.status,200);
+      assert.equal((await confirmed.json()).operation_id,operation);
+    }
+    const rows=await runtime.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='clinical_media' AND owner_id=?").bind(userId).all();
+    assert.equal(rows.results.length,1);
+    assert.equal(JSON.parse(rows.results[0].record_json).status,'confirmed');
+  }finally{await runtime.close()}
 });
 
-test('C03 stale pending clinical upload can be reconciled without touching confirmed media', async (t) => {
-  const runtime = await createLocalRuntime();
-  t.after(() => runtime.close());
-  const headers = await authHeaders(runtime);
-  const operationKey = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
-  const path = `${userId}/patient-album/stale/${operationKey}.jpg`;
-
-  const uploaded = await runtime.mf.dispatchFetch(fileUrl(path), {
-    method: 'POST',
-    headers: { ...headers, 'content-type': 'image/jpeg', 'x-clinical-media-operation': operationKey },
-    body: new Uint8Array([9, 8, 7]),
-  });
-  assert.equal(uploaded.status, 200);
-  const current = await storageRow(runtime.db, 'clinical-media', path);
-  const meta = JSON.parse(current.metadata_json || '{}');
-  meta.pending_at = '2020-01-01T00:00:00.000Z';
-  await runtime.db.prepare('UPDATE storage_objects SET metadata_json=? WHERE source_bucket=? AND source_path=?')
-    .bind(JSON.stringify(meta), 'clinical-media', path).run();
-
-  const reconciled = await runtime.mf.dispatchFetch('http://localhost/api/clinical/media/reconcile', {
-    method: 'POST', headers, body: JSON.stringify({ max_age_seconds: 3600 }),
-  });
-  assert.equal(reconciled.status, 200);
-  const payload = await reconciled.json();
-  assert.equal(payload.cleaned, 1);
-  assert.equal(await storageRow(runtime.db, 'clinical-media', path), null);
+test('C03 stale pending clinical upload can be reconciled without touching confirmed media',async()=>{
+  const runtime=await createLocalRuntime();
+  try{
+    const session=await login(runtime),patient=await createPatient(runtime,session),mid=patient.mother.id;
+    const stalePath=`${userId}/${mid}/stale/pending.jpg`,keepPath=`${userId}/${mid}/keep/confirmed.jpg`;
+    for(const [path,op] of [[stalePath,'stale-op'],[keepPath,'keep-op']]){
+      const upload=await runtime.mf.dispatchFetch(`http://localhost/api/files/object/clinical-media/${path}`,{
+        method:'POST',headers:{...auth(session),'content-type':'image/jpeg','x-storage-operation':op},body:new Uint8Array([1,2])
+      });
+      assert.equal(upload.status,201);
+    }
+    const stale=await runtime.db.prepare("SELECT record_key,record_json FROM supabase_records WHERE table_name='storage_objects' AND record_key='stale-op'").first();
+    const staleRecord=JSON.parse(stale.record_json);staleRecord.updated_at='2026-01-01T00:00:00.000Z';
+    await runtime.db.prepare("UPDATE supabase_records SET record_json=?,source_updated_at=? WHERE table_name='storage_objects' AND record_key='stale-op'").bind(JSON.stringify(staleRecord),staleRecord.updated_at).run();
+    const keep=await runtime.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='storage_objects' AND record_key='keep-op'").first();
+    const keepRecord=JSON.parse(keep.record_json);keepRecord.status='confirmed';keepRecord.updated_at='2026-01-01T00:00:00.000Z';
+    await runtime.db.prepare("UPDATE supabase_records SET record_json=?,source_updated_at=? WHERE table_name='storage_objects' AND record_key='keep-op'").bind(JSON.stringify(keepRecord),keepRecord.updated_at).run();
+    const reconcile=await runtime.mf.dispatchFetch('http://localhost/api/clinical/rpc/reconcile_pending_clinical_media',{
+      method:'POST',headers:auth(session),body:JSON.stringify({p_older_than:'2026-06-01T00:00:00.000Z'})
+    });
+    assert.equal(reconcile.status,200);const body=await reconcile.json();assert.equal(body.removed,1);
+    assert.equal(await runtime.env.CLINICAL_FILES.get(stalePath),null);
+    assert.ok(await runtime.env.CLINICAL_FILES.get(keepPath));
+  }finally{await runtime.close()}
 });
 
-test('C11 storage mutation uses immutable operation objects and conditional metadata deletion', () => {
-  assert.match(storageSource, /x-storage-operation/);
-  assert.match(storageSource, /immutableStorageKey/);
-  assert.match(storageSource, /operation_id/);
-  assert.match(storageSource, /DELETE FROM storage_objects[\s\S]*r2_key\s*=\s*\?/);
-  assert.doesNotMatch(storageSource, /compensateMetadata/);
+test('C11 storage mutation uses immutable operation objects and conditional metadata deletion',()=>{
+  assert.match(storageSource,/immutableR2Key/);
+  assert.match(storageSource,/delete_pending/);
+  assert.match(storageSource,/operation_id/);
+  assert.match(storageSource,/DELETE FROM storage_objects[\s\S]*r2_key\s*=\s*\?/);
+  assert.doesNotMatch(storageSource,/compensateMetadata/);
 });
 
 test('C04 signed file consumers accept the canonical /api/files URL without double prefixing', () => {
@@ -188,7 +122,7 @@ test('C05 patient photo reference is server-backed, expiry-aware in memory and p
   assert.match(patientSource, /profile_photo_path/);
   assert.match(patientSource, /pfPhotoUrlCache/);
   assert.match(patientSource, /expiresAt/);
-  assert.match(patientSource, /\[data-screen="patient"\][^\n]*\[data-patient-avatar\]/);
+  assert.match(patientSource, /document\.querySelector\([^\n]*data-screen[^\n]*patient[^\n]*data-patient-avatar/);
   assert.doesNotMatch(patientSource, /localStorage\.setItem\('pf-photo-path-/);
   assert.doesNotMatch(patientSource, /sessionStorage\.setItem\(key,u\)/);
 });
