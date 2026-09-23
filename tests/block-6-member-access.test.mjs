@@ -12,12 +12,20 @@ class FakeD1 {
   constructor() { this.records = new Map(); }
   prepare(sql) { return new FakeStatement(this, sql); }
   seed(table, key, ownerId, record) { this.records.set(`${table}:${key}`, { table, key, ownerId, record: { ...record } }); }
+  rows(rows) { return { results: rows.map((row) => ({ record_key: row.key, owner_id: row.ownerId, record_json: JSON.stringify(row.record) })) }; }
   async all(sql, args) {
-    if (/SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?/i.test(sql)) {
+    const values = [...this.records.values()];
+    if (/table_name\s*=\s*'member_portal_access'[\s\S]+member_user_id/i.test(sql)) {
+      return this.rows(values.filter((row) => row.table === 'member_portal_access' && String(row.record?.member_user_id || '') === String(args[0] || '')));
+    }
+    if (/table_name\s*=\s*'member_portal_access'[\s\S]+lower\(trim\(json_extract\(record_json,'\$\.email'\)\)\)/i.test(sql)) {
+      const email = String(args[0] || '').trim().toLowerCase();
+      return this.rows(values.filter((row) => row.table === 'member_portal_access' && String(row.record?.email || '').trim().toLowerCase() === email));
+    }
+    if (/SELECT record_key,owner_id,record_json FROM supabase_records[\s\S]+WHERE table_name = \?/i.test(sql)) {
       const table = String(args[0]);
-      return { results: [...this.records.values()].filter((row) => row.table === table).map((row) => ({
-        record_key: row.key, owner_id: row.ownerId, record_json: JSON.stringify(row.record),
-      })) };
+      const ownerId = String(args[1] || '');
+      return this.rows(values.filter((row) => row.table === table && (String(row.ownerId || '') === ownerId || (!row.ownerId && String(row.record?.owner_id || '') === ownerId))));
     }
     throw new Error(`unexpected all SQL: ${sql}`);
   }
