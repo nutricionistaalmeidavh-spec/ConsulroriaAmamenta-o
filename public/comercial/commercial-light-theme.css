@@ -42,7 +42,12 @@ body.sales-v2-active .sales-v2 {
   box-shadow: 0 10px 24px rgba(196, 163, 212, .20);
 }
 
-.sales-v2 .sales-kicker,
+.sales-v2 .sales-kicker {
+  color: var(--brand-accent);
+  border-color: rgba(169, 155, 207, .52);
+  background: linear-gradient(90deg, rgba(169, 155, 207, .16), rgba(243, 191, 209, .16));
+}
+
 .sales-v2 .sales-purchase-card.is-secondary .sales-kicker {
   color: var(--brand-accent);
   border-color: rgba(169, 155, 207, .52);
