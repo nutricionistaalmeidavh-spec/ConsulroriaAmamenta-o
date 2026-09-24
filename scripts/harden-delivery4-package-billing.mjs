@@ -7,6 +7,7 @@ const BILLING_PATH=resolve(ROOT,'public/billing-v2.js');
 const MODE=process.argv.includes('--write')?'write':'check';
 const REQUEST_KEY_MARKER="p_request_key:s.mode==='package_new'?'package-new:'+appointmentId:null";
 const PACKAGE_NEW_REMOUNT_MARKER="!packages.length||selection.mode==='package_new'";
+const GUARANTEED_SCHEDULE_MARKER='function bvSchedule(){if(bvTimer)return;bvTimer=setTimeout(()=>{bvTimer=null;';
 
 export function transformDelivery4Billing(source){
   let next=String(source);
@@ -22,6 +23,12 @@ export function transformDelivery4Billing(source){
     if(!next.includes(oldOptions))throw new Error('delivery 4 package-new remount target not found');
     next=next.replace(oldOptions,newOptions);
   }
+  if(!next.includes(GUARANTEED_SCHEDULE_MARKER)){
+    const oldSchedule="function bvSchedule(){clearTimeout(bvTimer);bvTimer=setTimeout(()=>{bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}";
+    const newSchedule="function bvSchedule(){if(bvTimer)return;bvTimer=setTimeout(()=>{bvTimer=null;bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}";
+    if(!next.includes(oldSchedule))throw new Error('delivery 12 billing scheduler target not found');
+    next=next.replace(oldSchedule,newSchedule);
+  }
   if(!/bvSchedule\(\);\s*$/.test(next))next=next.replace(/\s*$/,'\nbvSchedule();\n');
   return next;
 }
@@ -31,6 +38,7 @@ export function runDelivery4BillingHardening(){
   const next=transformDelivery4Billing(source);
   if(!next.includes(REQUEST_KEY_MARKER))throw new Error('delivery 4 stable package-new request key missing');
   if(!next.includes(PACKAGE_NEW_REMOUNT_MARKER))throw new Error('delivery 4 package-new remount preservation missing');
+  if(!next.includes(GUARANTEED_SCHEDULE_MARKER))throw new Error('delivery 12 billing scheduler can still be starved by DOM mutations');
   if(!/bvSchedule\(\);\s*$/.test(next))throw new Error('delivery 4 initial billing mount schedule missing');
   if(MODE==='check'&&next!==source)throw new Error('delivery 4 package billing hardening ainda não materializado');
   if(MODE==='write'&&next!==source)writeFileSync(BILLING_PATH,next,'utf8');
