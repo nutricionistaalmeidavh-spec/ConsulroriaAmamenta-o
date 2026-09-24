@@ -101,8 +101,14 @@ function enhanceAll(){
     if(host.querySelector('.gf-weight-change-row'))render(host);
   });
 }
-let timer;
-function schedule(){clearTimeout(timer);timer=setTimeout(enhanceAll,60)}
+let timer=null;
+function schedule(){
+  if(timer!==null)return;
+  timer=setTimeout(()=>{
+    timer=null;
+    enhanceAll();
+  },60);
+}
 new MutationObserver(schedule).observe(document.documentElement,{subtree:true,childList:true});
 window.addEventListener('hashchange',()=>setTimeout(enhanceAll,160));
 enhanceAll();
