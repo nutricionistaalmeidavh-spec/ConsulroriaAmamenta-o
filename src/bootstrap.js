@@ -228,10 +228,11 @@ async function ensureClinicalPhaseLoaders() {
 }
 
 async function ensureClinicalAdditiveFeatures() {
-  // The outer entry imports this feature before the canonical document is replaced.
+  // The outer entry imports care-flow before the canonical document is replaced.
   // Re-import under a distinct module URL after document.close() so its observer and
   // initial mount bind to the live clinical DOM instead of the discarded placeholder.
   await importPublicModule('/clinical-care-flow-feature.js?canonical-runtime=1');
+  await importPublicModule('/billing-service-consistency.js');
 }
 
 async function boot() {
