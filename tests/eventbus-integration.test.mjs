@@ -52,3 +52,13 @@ test('patient summary and records hub use keyed single-flight plus post-await co
   assert.match(hub,/DOC\.currentMotherId\(\)!==motherId/);
   assert.match(hub,/afterAwait=screen\.querySelector\('\[data-prh-card\]'\)/);
 });
+
+test('patient records hub has a non-postponing route/DOM fallback mount',()=>{
+  const hub=readFileSync('public/patient-records-hub.js','utf8');
+  assert.match(hub,/let currentMother='',expectedMother='',refreshTimer=null/);
+  assert.match(hub,/function scheduleRefresh\(\)\{\s*if\(refreshTimer!==null\)return;/);
+  assert.match(hub,/refreshTimer=null;\s*refresh\(\);/);
+  assert.match(hub,/new MutationObserver\(scheduleRefresh\)/);
+  assert.match(hub,/window\.addEventListener\('hashchange',scheduleRefresh\)/);
+  assert.doesNotMatch(hub,/function scheduleRefresh\(\)[\s\S]*clearTimeout\(refreshTimer\)/);
+});
