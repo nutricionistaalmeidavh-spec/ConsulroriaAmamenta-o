@@ -55,10 +55,19 @@ test('patient summary and records hub use keyed single-flight plus post-await co
 
 test('patient records hub has a non-postponing route/DOM fallback mount',()=>{
   const hub=readFileSync('public/patient-records-hub.js','utf8');
-  assert.match(hub,/let currentMother='',expectedMother='',refreshTimer=null/);
+  assert.match(hub,/let currentMother='',expectedMother='',failedMother='',refreshTimer=null/);
   assert.match(hub,/function scheduleRefresh\(\)\{\s*if\(refreshTimer!==null\)return;/);
   assert.match(hub,/refreshTimer=null;\s*refresh\(\);/);
   assert.match(hub,/new MutationObserver\(scheduleRefresh\)/);
-  assert.match(hub,/window\.addEventListener\('hashchange',scheduleRefresh\)/);
+  assert.match(hub,/window\.addEventListener\('hashchange'/);
   assert.doesNotMatch(hub,/function scheduleRefresh\(\)[\s\S]*clearTimeout\(refreshTimer\)/);
+});
+
+test('patient records hub surfaces one read failure and blocks mutation-driven retry storms until an explicit retry or route change',()=>{
+  const hub=readFileSync('public/patient-records-hub.js','utf8');
+  assert.match(hub,/if\(!force&&failedMother===motherId\)return/);
+  assert.match(hub,/failedMother=motherId/);
+  assert.match(hub,/function retryRefresh\(\)\{failedMother='';return refresh\(\{force:true\}\)\}/);
+  assert.match(hub,/motherId!==failedMother\)mount\(motherId\)/);
+  assert.match(hub,/DeboraPatientRecordsHub=\{refresh:retryRefresh\}/);
 });
