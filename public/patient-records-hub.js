@@ -1,7 +1,7 @@
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
-let currentMother='',expectedMother='';
+let currentMother='',expectedMother='',refreshTimer=null;
 const mountFlight=createSingleFlight();
 
 async function safeCount(path){
@@ -64,9 +64,18 @@ async function mount(motherId){
   });
 }
 function refresh(){const motherId=DOC.currentMotherId();if(motherId)mount(motherId);else resetHub()}
+function scheduleRefresh(){
+  if(refreshTimer!==null)return;
+  refreshTimer=setTimeout(()=>{
+    refreshTimer=null;
+    refresh();
+  },60);
+}
 window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else resetHub()});
 window.addEventListener('debora:clinical-document-finalized',refresh);
 window.addEventListener('debora:record-exported',refresh);
+window.addEventListener('hashchange',scheduleRefresh);
 for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,refresh);
+new MutationObserver(scheduleRefresh).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden']});
 window.DeboraPatientRecordsHub={refresh};
 queueMicrotask(refresh);
