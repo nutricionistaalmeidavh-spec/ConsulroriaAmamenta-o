@@ -121,7 +121,7 @@ test('final materialized build completes the critical clinical flow through real
   expect(media[0].baby_id).toBe(patient.babies[0].id);
   expect(media[0].encounter_id).toBe(encounterId);
 
-  await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]`).click();
+  await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]:visible`).click();
   await expect(page.locator('#cn-overlay')).toBeVisible();
   await expect(page.locator('#cn-overlay')).toContainText(motherName);
   await expect(page.locator('#cn-note')).toHaveValue(clinicalNote);
