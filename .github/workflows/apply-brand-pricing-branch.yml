@@ -1,0 +1,329 @@
+name: Apply brand and pricing update on branch
+
+on:
+  push:
+    branches:
+      - feat/brand-pricing-99-999
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[pricing-update-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/brand-pricing-99-999
+          fetch-depth: 0
+
+      - name: Apply scoped pricing and brand changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, min_count=1):
+              p = Path(path)
+              data = p.read_bytes()
+              old_b = old.encode('utf-8')
+              new_b = new.encode('utf-8')
+              count = data.count(old_b)
+              if count < min_count:
+                  raise SystemExit(f'{path}: expected at least {min_count} occurrence(s) of {old!r}, found {count}')
+              p.write_bytes(data.replace(old_b, new_b))
+              print(f'{path}: replaced {count} occurrence(s)')
+
+          # Commercial UI price surfaces.
+          ui_price_files = [
+              'public/comercial/index.html',
+              'public/comercial/plano.html',
+              'public/comercial/landing.js',
+              'public/comercial/mobile-sales-v2.js',
+              'public/comercial/sandbox-teste.html',
+          ]
+          for path in ui_price_files:
+              replace_exact(path, 'R$ 79,90', 'R$ 99,90')
+              replace_exact(path, 'R$ 799,90', 'R$ 999,90')
+
+          # Cache-bust changed legacy commercial assets.
+          replace_exact('public/comercial/index.html', './styles.css"', './styles.css?v=20260924-brand"')
+          replace_exact('public/comercial/index.html', './landing.js?v=20260922-pricing1', './landing.js?v=20260924-pricing')
+          replace_exact('public/comercial/plano.html', './styles.css"', './styles.css?v=20260924-brand"')
+
+          # SEO structured data and edge-injected asset versions.
+          replace_exact('worker/commercial-seo.js', "price: '79.90'", "price: '99.90'")
+          replace_exact('worker/commercial-seo.js', "price: '799.90'", "price: '999.90'")
+          replace_exact('worker/commercial-seo.js', 'commercial-light-theme.css?v=20260921-contrast', 'commercial-light-theme.css?v=20260924-brand-pricing')
+          replace_exact('worker/commercial-seo.js', 'mobile-sales-v2.js?v=20260922-pricing', 'mobile-sales-v2.js?v=20260924-pricing')
+
+          # Canonical D1 seed data used by deploy and runtime bootstrap.
+          for path in ['cloudflare/billing-schema.sql', 'cloudflare/runtime-schema.sql']:
+              replace_exact(path, "('pro_monthly','Plano Pro mensal','month',7990,'BRL',1,1)", "('pro_monthly','Plano Pro mensal','month',9990,'BRL',1,1)")
+              replace_exact(path, "('pro_annual','Plano Pro anual','year',79990,'BRL',12,1)", "('pro_annual','Plano Pro anual','year',99990,'BRL',12,1)")
+
+          # Provider-neutral legacy bootstrap remains aligned if it is ever used for rollback.
+          replace_exact('supabase/phase-saas-billing.sql', "'pro_monthly', 'Pro mensal', 'monthly', 4990, 'BRL', 1, true", "'pro_monthly', 'Pro mensal', 'monthly', 9990, 'BRL', 1, true")
+          replace_exact('supabase/phase-saas-billing.sql', "'pro_annual', 'Pro anual', 'annual', 49900, 'BRL', 12, true", "'pro_annual', 'Pro anual', 'annual', 99990, 'BRL', 12, true")
+
+          # Explicit safety fallback in the legacy Worker path.
+          replace_exact(
+              'worker/index.js',
+              "const defaultPriceCents = planCode === 'pro_monthly' ? 4990 : 49900;",
+              "const defaultPriceCents = planCode === 'pro_monthly' ? 9990 : 99990;",
+          )
+
+          # Legacy commercial button surface: use the official logo gradient without changing text/accent tokens.
+          replace_exact(
+              'public/comercial/styles.css',
+              """.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--brand);
+  border-radius: 14px;
+  color: #fff;
+  background: var(--brand);
+  font-weight: 780;
+  box-shadow: 0 9px 25px rgba(107,63,80,.18);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+.button:hover { transform: translateY(-2px); background: var(--brand-strong); box-shadow: 0 14px 30px rgba(107,63,80,.23); }
+""",
+              """.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid rgba(169,155,207,.62);
+  border-radius: 14px;
+  color: #2f3833;
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  font-weight: 780;
+  box-shadow: 0 9px 25px rgba(196,163,212,.24);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease, filter .18s ease;
+}
+.button:hover { transform: translateY(-2px); background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%); filter: brightness(.97); box-shadow: 0 14px 30px rgba(196,163,212,.30); }
+""",
+          )
+          replace_exact('public/comercial/styles.css', '.button.secondary:hover { background: var(--brand-soft); }', '.button.secondary:hover { background: var(--brand-soft); filter: none; }')
+          replace_exact(
+              'public/comercial/styles.css',
+              '.button.light { color: var(--brand); background: #fff; border-color: #fff; box-shadow: 0 12px 30px rgba(34,25,29,.12); }\n.button.full',
+              '.button.light { color: var(--brand); background: #fff; border-color: #fff; box-shadow: 0 12px 30px rgba(34,25,29,.12); }\n.button.light:hover { background: #fff; filter: brightness(.98); }\n.button.full',
+          )
+
+          # Sales V2 active landing buttons: exact official logo gradient.
+          replace_exact(
+              'public/comercial/commercial-light-theme.css',
+              """.sales-v2 .sales-button {
+  color: #ffffff;
+  border-color: rgba(107, 63, 80, .18);
+  background: #6b3f50;
+  box-shadow: 0 12px 28px rgba(107, 63, 80, .16);
+}
+
+.sales-v2 .sales-button--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #6b3f50, #8a5368);
+  box-shadow: 0 14px 32px var(--sales-glow);
+}
+""",
+              """.sales-v2 .sales-button {
+  color: #2f3833;
+  border-color: rgba(169, 155, 207, .62);
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  box-shadow: 0 12px 28px rgba(196, 163, 212, .24);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+.sales-v2 .sales-button--primary {
+  color: #2f3833;
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  box-shadow: 0 14px 32px rgba(196, 163, 212, .28);
+}
+
+.sales-v2 .sales-button:not(.sales-button--ghost):hover {
+  transform: translateY(-1px);
+  filter: brightness(.97);
+}
+
+.sales-v2 .sales-button:not(.sales-button--ghost):focus-visible {
+  outline: 3px solid rgba(169, 155, 207, .45);
+  outline-offset: 3px;
+}
+""",
+          )
+
+          # Existing test expectations follow the new commercial contract.
+          for path in [
+              'scripts/test-saas-plans.mjs',
+              'scripts/test-billing-scaffold.mjs',
+              'scripts/test-commercial-landing.mjs',
+              'scripts/test-cloudflare-billing-d1.mjs',
+              'scripts/test-commercial-mobile-first.mjs',
+          ]:
+              p = Path(path)
+              data = p.read_bytes()
+              data = data.replace(b'r$ 79,90', b'r$ 99,90').replace(b'r$ 799,90', b'r$ 999,90')
+              data = data.replace(b'R\\$ 79,90', b'R\\$ 99,90').replace(b'R\\$ 799,90', b'R\\$ 999,90')
+              data = data.replace(b'R$ 79,90', b'R$ 99,90').replace(b'R$ 799,90', b'R$ 999,90')
+              p.write_bytes(data)
+
+          replace_exact('scripts/test-billing-scaffold.mjs', "  '7990',\n  '79990',", "  '9990',\n  '99990',")
+          replace_exact('scripts/test-cloudflare-billing-d1.mjs', "79990,'BRL',12,1", "99990,'BRL',12,1")
+          replace_exact('scripts/test-cloudflare-billing-d1.mjs', "7990,'BRL',1,1", "9990,'BRL',1,1")
+
+          # Partner pricing regression uses the current monthly list price.
+          p = Path('scripts/test-cloudflare-billing-d1.mjs')
+          data = p.read_text(encoding='utf-8')
+          for old, new in [
+              ('price_cents: 7990', 'price_cents: 9990'),
+              ('offer.subtotalCents, 7990', 'offer.subtotalCents, 9990'),
+              ('offer.discountCents, 1598', 'offer.discountCents, 1998'),
+              ('offer.totalCents, 6392', 'offer.totalCents, 7992'),
+              ('offer.commissionCents, 639', 'offer.commissionCents, 799'),
+              ('floor.discountCents, 7989', 'floor.discountCents, 9989'),
+              ('payload.items[0].value, 63.92', 'payload.items[0].value, 79.92'),
+          ]:
+              if old not in data:
+                  raise SystemExit(f'scripts/test-cloudflare-billing-d1.mjs: missing expected test fragment {old!r}')
+              data = data.replace(old, new)
+          p.write_text(data, encoding='utf-8')
+
+          # Explicitly guard the legacy Worker fallback from drifting again.
+          replace_exact(
+              'scripts/test-cloudflare-billing-d1.mjs',
+              "const runtime = read('worker/cloudflare-billing-runtime.js');\n",
+              "const runtime = read('worker/cloudflare-billing-runtime.js');\nconst legacyWorker = read('worker/index.js');\n",
+          )
+          replace_exact(
+              'scripts/test-cloudflare-billing-d1.mjs',
+              "assert.match(planHtml, /R\\$ 999,90/);\n",
+              "assert.match(planHtml, /R\\$ 999,90/);\nassert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \\? 9990 : 99990/);\nassert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \\? 4990 : 49900/);\n",
+          )
+
+          # Mobile/SEO tests cover price, cache busting and official logo gradient.
+          replace_exact('scripts/test-commercial-mobile-first.mjs', '20260921-contrast', '20260924-brand-pricing')
+          replace_exact('scripts/test-commercial-mobile-first.mjs', '20260922-pricing', '20260924-pricing')
+          replace_exact('scripts/test-commercial-mobile-first.mjs', "price: '79\\.90'", "price: '99\\.90'")
+          replace_exact('scripts/test-commercial-mobile-first.mjs', "price: '799\\.90'", "price: '999\\.90'")
+          replace_exact(
+              'scripts/test-commercial-mobile-first.mjs',
+              "assert.match(lightCss, /--sales-purple:\\s*#6b3f50/i, 'commercial accents must use the canonical brand token');\n",
+              "assert.match(lightCss, /--sales-purple:\\s*#6b3f50/i, 'commercial accents must use the canonical brand token');\nassert.match(lightCss, /linear-gradient\\(45deg,\\s*#a99bcf 0%,\\s*#c4a3d4 48%,\\s*#f3bfd1 100%\\)/i, 'filled sales buttons must use the official logo gradient');\nassert.doesNotMatch(lightCss, /\\.sales-v2 \\.sales-button\\s*\\{[^}]*background:\\s*#6b3f50/is, 'filled sales buttons must not retain the old brown background');\n",
+          )
+
+          replace_exact(
+              'scripts/test-commercial-landing.mjs',
+              "if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');\n",
+              "if (!css.includes('--brand: #6b3f50;')) fail('existing commercial palette must be preserved');\nif (!css.includes('linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%)')) fail('filled legacy commercial buttons must use the official logo gradient');\n",
+          )
+
+          # Long-lived, cross-layer pricing drift guard.
+          Path('scripts/test-pro-pricing-contract.mjs').write_text(r'''import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const MONTHLY_DISPLAY = 'R$ 99,90';
+const ANNUAL_DISPLAY = 'R$ 999,90';
+const uiFiles = [
+  'public/comercial/index.html',
+  'public/comercial/plano.html',
+  'public/comercial/landing.js',
+  'public/comercial/mobile-sales-v2.js',
+  'public/comercial/sandbox-teste.html',
+];
+
+for (const path of uiFiles) {
+  const source = read(path);
+  assert.match(source, /R\$ 99,90/, `${path} must expose the current monthly price`);
+  assert.match(source, /R\$ 999,90/, `${path} must expose the current annual price`);
+  assert.doesNotMatch(source, /R\$ 79,90/, `${path} still contains the former monthly price`);
+  assert.doesNotMatch(source, /R\$ 799,90/, `${path} still contains the former annual price`);
+}
+
+for (const path of ['cloudflare/billing-schema.sql', 'cloudflare/runtime-schema.sql']) {
+  const sql = read(path);
+  assert.match(sql, /\('pro_monthly','Plano Pro mensal','month',9990,'BRL',1,1\)/, `${path} monthly D1 seed must be 9990 cents`);
+  assert.match(sql, /\('pro_annual','Plano Pro anual','year',99990,'BRL',12,1\)/, `${path} annual D1 seed must be 99990 cents`);
+  assert.doesNotMatch(sql, /\('pro_monthly','Plano Pro mensal','month',7990,'BRL',1,1\)/, `${path} still contains the former monthly D1 seed`);
+  assert.doesNotMatch(sql, /\('pro_annual','Plano Pro anual','year',79990,'BRL',12,1\)/, `${path} still contains the former annual D1 seed`);
+}
+
+const legacySql = read('supabase/phase-saas-billing.sql');
+assert.match(legacySql, /'pro_monthly', 'Pro mensal', 'monthly', 9990, 'BRL'/);
+assert.match(legacySql, /'pro_annual', 'Pro anual', 'annual', 99990, 'BRL'/);
+
+const legacyWorker = read('worker/index.js');
+assert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 9990 : 99990/);
+assert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 4990 : 49900/);
+
+const seo = read('worker/commercial-seo.js');
+assert.match(seo, /name: 'Pro mensal', price: '99\.90'/);
+assert.match(seo, /name: 'Pro anual', price: '999\.90'/);
+assert.doesNotMatch(seo, /name: 'Pro mensal', price: '79\.90'/);
+assert.doesNotMatch(seo, /name: 'Pro anual', price: '799\.90'/);
+
+const logoGradient = 'linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%)';
+const baseCss = read('public/comercial/styles.css');
+const lightCss = read('public/comercial/commercial-light-theme.css');
+assert.ok(baseCss.includes(logoGradient), 'legacy filled buttons must use the official logo gradient');
+assert.ok(lightCss.includes(logoGradient), 'Sales V2 filled buttons must use the official logo gradient');
+assert.doesNotMatch(lightCss, /\.sales-v2 \.sales-button\s*\{[^}]*background:\s*#6b3f50/is, 'Sales V2 button block still uses the old brown fill');
+
+assert.equal(MONTHLY_DISPLAY, 'R$ 99,90');
+assert.equal(ANNUAL_DISPLAY, 'R$ 999,90');
+console.log('Pro pricing contract: UI, SEO, D1, fallback and official logo button gradient OK');
+''', encoding='utf-8')
+
+          replace_exact(
+              'package.json',
+              '"test:billing": "node scripts/test-cloudflare-billing-d1.mjs"',
+              '"test:billing": "node scripts/test-cloudflare-billing-d1.mjs && node scripts/test-pro-pricing-contract.mjs"',
+          )
+          PY
+
+      - name: Verify targeted contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check worker/index.js
+          node --check worker/commercial-seo.js
+          node --check public/comercial/landing.js
+          node --check public/comercial/mobile-sales-v2.js
+          node --check scripts/test-pro-pricing-contract.mjs
+          node scripts/test-pro-pricing-contract.mjs
+          node scripts/test-commercial-landing.mjs
+          node scripts/test-commercial-mobile-first.mjs
+          node scripts/test-saas-plans.mjs
+          node scripts/test-billing-scaffold.mjs
+          node scripts/test-cloudflare-billing-d1.mjs
+
+      - name: Ensure scoped diff only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git diff --check
+          if git diff --name-only | grep -Ev '^(public/comercial/(index\.html|plano\.html|landing\.js|mobile-sales-v2\.js|sandbox-teste\.html|styles\.css|commercial-light-theme\.css)|worker/(commercial-seo\.js|index\.js)|cloudflare/(billing-schema\.sql|runtime-schema\.sql)|supabase/phase-saas-billing\.sql|scripts/(test-saas-plans\.mjs|test-billing-scaffold\.mjs|test-commercial-landing\.mjs|test-cloudflare-billing-d1\.mjs|test-commercial-mobile-first\.mjs|test-pro-pricing-contract\.mjs)|package\.json)$'; then
+            echo 'Unexpected file outside the authorized change surface.' >&2
+            exit 1
+          fi
+
+      - name: Commit verified branch changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/comercial/index.html public/comercial/plano.html public/comercial/landing.js public/comercial/mobile-sales-v2.js public/comercial/sandbox-teste.html public/comercial/styles.css public/comercial/commercial-light-theme.css worker/commercial-seo.js worker/index.js cloudflare/billing-schema.sql cloudflare/runtime-schema.sql supabase/phase-saas-billing.sql scripts/test-saas-plans.mjs scripts/test-billing-scaffold.mjs scripts/test-commercial-landing.mjs scripts/test-cloudflare-billing-d1.mjs scripts/test-commercial-mobile-first.mjs scripts/test-pro-pricing-contract.mjs package.json
+          git commit -m 'feat: align brand buttons and Pro pricing [pricing-update-applied]'
+          git push origin HEAD:feat/brand-pricing-99-999
