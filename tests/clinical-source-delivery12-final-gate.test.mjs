@@ -84,6 +84,22 @@ test('Stage 12 patient album reads the canonical clinical_media table used by up
   assert.doesNotMatch(workspace, /DOC\.rest\(`media\?mother_id=/, 'album must not read a different media table');
 });
 
+test('Stage 12 wizard media upload uses the same pending-confirmed clinical_media protocol as the album', () => {
+  const mediaService = read('public/clinical-source/core/lib/media-service.js');
+  const hardener = read('scripts/harden-delivery5-file-integrity.mjs');
+  const flow = read(e2ePath);
+  assert.match(mediaService, /x-clinical-media-operation/,
+    'wizard upload must create a retry-safe pending storage operation');
+  assert.match(mediaService, /workerRequest\('\/api\/clinical\/media\/confirm'/,
+    'wizard upload must confirm metadata through the canonical clinical_media endpoint');
+  assert.doesNotMatch(mediaService, /client\.rest\('media'/,
+    'wizard upload must not create a second legacy media source of truth');
+  assert.match(hardener, /clinical-media-service/,
+    'Delivery 5 hardener must restore the canonical wizard media service after source materialization');
+  assert.match(flow, /records\(page, 'clinical_media'/,
+    'final browser gate must verify the canonical clinical_media row, not a legacy alias');
+});
+
 test('Stage 12 note handoff cancels a pending wizard autosave before flushing the shared encounter', () => {
   const materialized = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
   assert.match(
