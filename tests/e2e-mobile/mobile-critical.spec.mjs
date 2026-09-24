@@ -9,6 +9,46 @@ async function expectNoHorizontalOverflow(page) {
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
 }
 
+async function expectWizardControlsClearOfFooter(page) {
+  const controls = page.locator('[data-wizard-step]:visible .field input:not([type="hidden"]), [data-wizard-step]:visible .field select, [data-wizard-step]:visible .field textarea, [data-wizard-step]:visible .media-drop, [data-wizard-step]:visible .final-actions .ui-button');
+  const count = await controls.count();
+  expect(count).toBeGreaterThan(0);
+
+  for (let index = 0; index < count; index += 1) {
+    const control = controls.nth(index);
+    await control.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+    await page.waitForTimeout(25);
+    const geometry = await control.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const footer = document.querySelector('.wizard-footer')?.getBoundingClientRect() || null;
+      return {
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+        footerTop: footer?.top ?? null,
+        footerBottom: footer?.bottom ?? null,
+        overlapsFooter: Boolean(footer && rect.bottom > footer.top - 8 && rect.top < footer.bottom + 8),
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(geometry.width).toBeGreaterThanOrEqual(88);
+    expect(geometry.height).toBeGreaterThanOrEqual(38);
+    expect(geometry.left).toBeGreaterThanOrEqual(-1);
+    expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.overlapsFooter).toBeFalsy();
+  }
+}
+
+async function advanceWizard(page) {
+  await page.locator('[data-wizard-next]:visible').click();
+  const note = page.locator('#cn-overlay');
+  if (await note.isVisible({ timeout: 750 }).catch(() => false)) {
+    await page.locator('[data-cn-continue]:visible').click();
+  }
+}
+
 function clinicTodayAt(hour) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -93,6 +133,19 @@ test('mobile critical path supports login, patient, atendimento, agenda and logo
   await expect(page.locator('[data-screen=appointment]')).toBeVisible();
   await expect(page.locator('[data-appointment-patient]')).toHaveValue(patient.mother.id);
   await expectNoHorizontalOverflow(page);
+
+  const valueInput = page.locator('[data-encounter-field="value"]:visible');
+  await valueInput.fill('150');
+  await expect(valueInput).toHaveValue('150');
+  const valueWidth = await valueInput.evaluate((element) => element.getBoundingClientRect().width);
+  expect(valueWidth).toBeGreaterThanOrEqual(120);
+
+  for (let step = 1; step <= 7; step += 1) {
+    await expect(page.locator(`[data-wizard-step="${step}"]`)).toBeVisible();
+    await expectWizardControlsClearOfFooter(page);
+    if (step < 7) await advanceWizard(page);
+  }
+
   await page.locator('[data-wizard-close]:visible').click();
 
   await page.locator('[data-mobile-target=more]:visible').click();
