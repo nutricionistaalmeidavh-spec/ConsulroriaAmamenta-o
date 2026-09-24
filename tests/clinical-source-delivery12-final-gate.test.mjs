@@ -75,13 +75,13 @@ test('Stage 12 billing remount preserves package_new for the appointment that ju
   );
 });
 
-test('Stage 12 patient album reads the canonical media table used by upload persistence', () => {
+test('Stage 12 patient album reads the canonical clinical_media table used by upload persistence', () => {
   const hub = read('public/patient-records-hub.js');
   const workspace = read('public/patient-workspace.js');
-  assert.match(hub, /safeCount\(`media\?mother_id=/, 'patient records hub must count canonical media rows');
-  assert.doesNotMatch(hub, /clinical_media\?mother_id=/, 'hub must not read the retired clinical_media table');
-  assert.match(workspace, /DOC\.rest\(`media\?mother_id=/, 'album must read the canonical media table');
-  assert.doesNotMatch(workspace, /DOC\.rest\(`clinical_media\?mother_id=/, 'album must not read the retired clinical_media table');
+  assert.match(hub, /safeCount\(`clinical_media\?mother_id=/, 'patient records hub must count canonical clinical_media rows');
+  assert.match(workspace, /DOC\.rest\(`clinical_media\?mother_id=/, 'album must read the canonical clinical_media table');
+  assert.doesNotMatch(hub, /safeCount\(`media\?mother_id=/, 'hub must not read a different media table');
+  assert.doesNotMatch(workspace, /DOC\.rest\(`media\?mother_id=/, 'album must not read a different media table');
 });
 
 test('Stage 12 note handoff cancels a pending wizard autosave before flushing the shared encounter', () => {
