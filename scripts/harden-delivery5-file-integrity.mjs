@@ -49,22 +49,33 @@ if(target('public/clinical-source/index.html',source=>{
   return before+patient.replace(match[0],tagged);
 }))changed.push('patient-avatar');
 
+const canonicalMediaService=readFileSync(resolve(ROOT,'patch-source/cloudflare-license-authority/core/lib/media-service.js'),'utf8');
+if(target('public/clinical-source/core/lib/media-service.js',source=>source===canonicalMediaService?source:canonicalMediaService))changed.push('clinical-media-service');
+const materializedMedia=readFileSync(resolve(ROOT,'public/clinical-source/core/lib/media-service.js'),'utf8');
+if(!materializedMedia.includes("client.workerRequest('/api/clinical/media/confirm'")||!materializedMedia.includes("'x-clinical-media-operation': operationKey")||materializedMedia.includes("client.rest('media'"))throw new Error('media-service: protocolo canônico clinical_media ausente');
+
 const docs=readFileSync(resolve(ROOT,'public/documents-feature.js'),'utf8');
 if(!docs.includes('function resolveSignedFileUrl(')||!docs.includes('confirmClinicalMedia')||!docs.includes('x-clinical-media-operation'))throw new Error('documents-feature: contrato Delivery 5 ausente');
 const album=readFileSync(resolve(ROOT,'public/album-feature.js'),'utf8');
 if(!album.includes('operationKey')||!album.includes('confirmClinicalMedia')||album.includes('deleteClinicalMedia(storagePath).catch'))throw new Error('album-feature: contrato Delivery 5 ausente');
 
 const manifestPath=resolve(ROOT,'public/clinical-source/manifest.json');
-const patientPath=resolve(ROOT,'public/clinical-source/features/patient-fixes.js');
 const manifest=JSON.parse(readFileSync(manifestPath,'utf8'));
-const entry=manifest?.modules?.['features/patient-fixes.js'];
-if(!entry)throw new Error('clinical manifest: patient-fixes ausente');
-const hash=sha256(readFileSync(patientPath,'utf8'));
-if(entry.sha256!==hash){
-  if(MODE==='check')throw new Error('clinical manifest: hash patient-fixes desatualizado');
-  entry.sha256=hash;
-  if(!String(entry.source||'').includes('+delivery5-file-integrity'))entry.source=`${entry.source||'patient-fixes'}+delivery5-file-integrity`;
-  writeFileSync(manifestPath,`${JSON.stringify(manifest,null,2)}\n`,'utf8');changed.push('clinical-manifest');
+const manifestTargets=[
+  ['features/patient-fixes.js','public/clinical-source/features/patient-fixes.js','patient-fixes'],
+  ['core/lib/media-service.js','public/clinical-source/core/lib/media-service.js','media-service']
+];
+for(const [key,path,fallback] of manifestTargets){
+  const entry=manifest?.modules?.[key];
+  if(!entry)throw new Error(`clinical manifest: ${key} ausente`);
+  const hash=sha256(readFileSync(resolve(ROOT,path),'utf8'));
+  if(entry.sha256!==hash){
+    if(MODE==='check')throw new Error(`clinical manifest: hash ${key} desatualizado`);
+    entry.sha256=hash;
+    if(!String(entry.source||'').includes('+delivery5-file-integrity'))entry.source=`${entry.source||fallback}+delivery5-file-integrity`;
+    changed.push(`manifest:${key}`);
+  }
 }
+if(MODE==='write'&&changed.some(item=>item.startsWith('manifest:')))writeFileSync(manifestPath,`${JSON.stringify(manifest,null,2)}\n`,'utf8');
 
 console.log(`Delivery 5 file integrity ${MODE}: ${changed.length?changed.join(', '):'already hardened'}`);
