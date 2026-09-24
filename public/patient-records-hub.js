@@ -1,7 +1,7 @@
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
-let currentMother='',expectedMother='';
+let currentMother='',expectedMother='',failedMother='',refreshTimer=null;
 const mountFlight=createSingleFlight();
 
 async function safeCount(path){
@@ -17,7 +17,7 @@ async function counts(motherId){
   return {terms:consents.length,referrals:referrals.length,media,finalized:referrals.filter(row=>row.status==='finalized').length};
 }
 function clearHub(){document.querySelectorAll('[data-prh-card]').forEach(node=>node.parentNode?.removeChild(node))}
-function resetHub(){expectedMother='';currentMother='';clearHub()}
+function resetHub(){expectedMother='';currentMother='';failedMother='';clearHub()}
 function cardMarkup(motherId,data){
   return `<section class="prh-card" data-prh-card data-prh-mother="${motherId}">
     <div class="prh-head"><div><small>PRONTUÁRIO</small><h2>Registros e documentos</h2><p>Acesso rápido aos registros da paciente sem alongar a ficha.</p></div><button type="button" class="prh-more" data-prh-more>Mais ações</button></div>
@@ -37,20 +37,21 @@ function openMoreActions(){
   setTimeout(()=>document.querySelector('[data-pw-quick="more"]')?.click(),120);
   return false;
 }
-async function mount(motherId){
+async function mount(motherId,{force=false}={}){
   if(!motherId)return;
+  if(!force&&failedMother===motherId)return;
   expectedMother=motherId;
   const screen=document.querySelector('[data-screen="patient"]');
   if(!screen)return;
   const existing=screen.querySelector('[data-prh-card]');
-  if(existing?.dataset.prhMother===motherId){currentMother=motherId;return}
+  if(existing?.dataset.prhMother===motherId){currentMother=motherId;failedMother='';return}
   return mountFlight(motherId,async()=>{
     try{
       const data=await counts(motherId);
       const currentScreen=document.querySelector('[data-screen="patient"]');
       if(expectedMother!==motherId||DOC.currentMotherId()!==motherId||currentScreen!==screen||!screen.isConnected)return;
       const afterAwait=screen.querySelector('[data-prh-card]');
-      if(afterAwait?.dataset.prhMother===motherId){currentMother=motherId;return}
+      if(afterAwait?.dataset.prhMother===motherId){currentMother=motherId;failedMother='';return}
       clearHub();
       const wrap=document.createElement('div');wrap.innerHTML=cardMarkup(motherId,data);const card=wrap.firstElementChild;
       const firstRecords=screen.querySelector('[data-df-terms-card], [data-af-card], [data-rf-card], [data-rx-card]');
@@ -59,13 +60,28 @@ async function mount(motherId){
       card.querySelector('[data-prh-target="export"]').addEventListener('click',event=>window.DeboraRecordExport?.open(motherId,event.currentTarget).catch(error=>DOC.toast(error.message||'Não foi possível abrir a exportação.','error')));
       card.querySelector('[data-prh-more]').addEventListener('click',()=>openMoreActions());
       currentMother=motherId;
+      failedMother='';
       window.DeboraPatientWorkspace?.refresh?.();
-    }catch(error){if(!/Sessão não encontrada/.test(error.message||''))DOC.toast(error.message||'Não foi possível organizar os registros.','error')}
+    }catch(error){
+      failedMother=motherId;
+      if(!/Sessão não encontrada/.test(error.message||''))DOC.toast(error.message||'Não foi possível organizar os registros.','error');
+    }
   });
 }
-function refresh(){const motherId=DOC.currentMotherId();if(motherId)mount(motherId);else resetHub()}
-window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId)mount(motherId);else resetHub()});
-window.addEventListener('debora:clinical-document-finalized',refresh);
-window.addEventListener('debora:record-exported',refresh);
-for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,refresh);
-window.DeboraPatientRecordsHub={refresh};
+function refresh({force=false}={}){const motherId=DOC.currentMotherId();if(motherId)mount(motherId,{force});else resetHub()}
+function retryRefresh(){failedMother='';return refresh({force:true})}
+function scheduleRefresh(){
+  if(refreshTimer!==null)return;
+  refreshTimer=setTimeout(()=>{
+    refreshTimer=null;
+    refresh();
+  },60);
+}
+window.addEventListener('debora:patient-context',event=>{const motherId=event.detail?.motherId;if(motherId){if(motherId!==failedMother)mount(motherId)}else resetHub()});
+window.addEventListener('debora:clinical-document-finalized',retryRefresh);
+window.addEventListener('debora:record-exported',retryRefresh);
+window.addEventListener('hashchange',()=>{failedMother='';scheduleRefresh()});
+for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,retryRefresh);
+new MutationObserver(scheduleRefresh).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden']});
+window.DeboraPatientRecordsHub={refresh:retryRefresh};
+queueMicrotask(refresh);

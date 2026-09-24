@@ -227,6 +227,14 @@ async function ensureClinicalPhaseLoaders() {
   await phase68.startPhase68?.();
 }
 
+async function ensureClinicalAdditiveFeatures() {
+  // The outer entry imports care-flow before the canonical document is replaced.
+  // Re-import under a distinct module URL after document.close() so its observer and
+  // initial mount bind to the live clinical DOM instead of the discarded placeholder.
+  await importPublicModule('/clinical-care-flow-feature.js?canonical-runtime=1');
+  await importPublicModule('/billing-service-consistency.js');
+}
+
 async function boot() {
   if (await cleanupLegacyServiceWorkers()) return;
 
@@ -267,7 +275,7 @@ async function boot() {
     .replace('<script type="module" src="./app-shell.js"></script>', '')
     .replace(
       '</head>',
-      `<meta name="theme-color" content="#fbf7f4"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-512.png?v=1.12.1"><link rel="icon" type="image/png" href="/icon-192.png?v=1.12.1"><link rel="stylesheet" href="/growth-feature.css"><link rel="stylesheet" href="/member-feature.css"><link rel="stylesheet" href="/library-disabled.css"><link rel="stylesheet" href="/template-gallery.css"><link rel="stylesheet" href="/interaction-ui.css"><link rel="stylesheet" href="/improvements-v2.css"><link rel="stylesheet" href="/billing-v2.css"><link rel="stylesheet" href="/phase8-design.css"><style>${runtime['features/clinical-note-feature.css']}</style><style>${runtime['features/patient-fixes.css']}</style></head>`,
+      `<meta name="theme-color" content="#fbf7f4"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-512.png?v=1.12.1"><link rel="icon" type="image/png" href="/icon-192.png?v=1.12.1"><link rel="stylesheet" href="/growth-feature.css"><link rel="stylesheet" href="/member-feature.css"><link rel="stylesheet" href="/library-disabled.css"><link rel="stylesheet" href="/template-gallery.css"><link rel="stylesheet" href="/interaction-ui.css"><link rel="stylesheet" href="/improvements-v2.css"><link rel="stylesheet" href="/billing-v2.css"><link rel="stylesheet" href="/phase8-design.css"><link rel="stylesheet" href="/mobile-layout-integrity.css"><style>${runtime['features/clinical-note-feature.css']}</style><style>${runtime['features/patient-fixes.css']}</style></head>`,
     )
     .replace(
       '</body>',
@@ -278,6 +286,7 @@ async function boot() {
   document.write(html);
   document.close();
   await ensureClinicalPhaseLoaders();
+  await ensureClinicalAdditiveFeatures();
 }
 
 boot().catch((error) => {

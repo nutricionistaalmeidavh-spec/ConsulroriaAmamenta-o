@@ -43,6 +43,15 @@ test('bootstrap explicitly re-arms clinical phase loaders after replacing the do
   }
 });
 
+test('bootstrap re-arms clinical care flow against the live document after canonical replacement',()=>{
+  const bootstrap=read('src/bootstrap.js');
+  const closeAt=bootstrap.indexOf('document.close();');
+  const additiveAt=bootstrap.indexOf('await ensureClinicalAdditiveFeatures();');
+  assert.ok(closeAt>=0,'bootstrap must replace the placeholder document');
+  assert.ok(additiveAt>closeAt,'additive care features must bind only after document.close()');
+  assert.match(bootstrap,/clinical-care-flow-feature\.js\?canonical-runtime=1/);
+});
+
 test('async album and referral mounts cancel stale renders and stay singleton',()=>{
   for(const [file,card] of [['public/album-feature.js','af'],['public/referrals-feature.js','rf']]){
     const source=read(file);

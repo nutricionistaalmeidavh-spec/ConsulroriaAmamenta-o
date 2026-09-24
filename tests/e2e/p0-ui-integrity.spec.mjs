@@ -106,3 +106,31 @@ test('clinical note save failure keeps the note open and preserves unsaved text'
   await expect(page.locator('#cn-note')).toHaveValue(unsaved);
   await expect(page.locator('#cn-save-status')).toHaveAttribute('data-tone', 'error');
 });
+
+test('clinical note persists after save, close, reopen and full page reload', async ({ page }) => {
+  await login(page);
+  const headers = await authHeaders(page);
+  const patient = await createPatient(page.request, headers, 'Clinical note persistence');
+  const encounter = await startEncounter(page.request, headers, patient, { occurredAt: '2026-09-22T15:00:00.000Z' });
+  const persisted = uniqueLabel('Nota clínica persistida');
+
+  const openEncounter = async () => {
+    await page.waitForFunction(() => Boolean(window.DeboraClinicalNote?.openEncounter));
+    await page.evaluate(id => window.DeboraClinicalNote.openEncounter(id, { direction: 'history' }), encounter.id);
+    await expect(page.locator('#cn-overlay')).toBeVisible();
+  };
+
+  await openEncounter();
+  await page.locator('#cn-note').fill(persisted);
+  await page.locator('#cn-overlay [data-cn-close]').click();
+  await expect(page.locator('#cn-overlay')).toBeHidden();
+
+  await openEncounter();
+  await expect(page.locator('#cn-note')).toHaveValue(persisted);
+  await page.locator('#cn-overlay [data-cn-close]').click();
+  await expect(page.locator('#cn-overlay')).toBeHidden();
+
+  await page.reload();
+  await openEncounter();
+  await expect(page.locator('#cn-note')).toHaveValue(persisted);
+});
