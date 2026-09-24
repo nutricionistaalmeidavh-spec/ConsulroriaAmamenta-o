@@ -41,12 +41,14 @@ async function expectWizardControlsClearOfFooter(page) {
   }
 }
 
-async function advanceWizard(page) {
+async function advanceWizard(page, step) {
   await page.locator('[data-wizard-next]:visible').click();
-  const note = page.locator('#cn-overlay');
-  if (await note.isVisible({ timeout: 750 }).catch(() => false)) {
+  if (step === 2) {
+    const note = page.locator('#cn-overlay');
+    await expect(note).toBeVisible();
     await page.locator('[data-cn-continue]:visible').click();
   }
+  await expect(page.locator(`[data-wizard-step="${step + 1}"]`)).toBeVisible();
 }
 
 function clinicTodayAt(hour) {
@@ -143,7 +145,7 @@ test('mobile critical path supports login, patient, atendimento, agenda and logo
   for (let step = 1; step <= 7; step += 1) {
     await expect(page.locator(`[data-wizard-step="${step}"]`)).toBeVisible();
     await expectWizardControlsClearOfFooter(page);
-    if (step < 7) await advanceWizard(page);
+    if (step < 7) await advanceWizard(page, step);
   }
 
   await page.locator('[data-wizard-close]:visible').click();
