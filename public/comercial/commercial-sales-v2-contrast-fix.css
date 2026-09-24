@@ -13,7 +13,10 @@
 }
 
 .phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-hero h1 em {
-  color: #6b3f50;
+  background: var(--brand-gradient);
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .phase2-visual body.conversion-page.sales-v2-active .sales-v2 .sales-feature-grid p,
