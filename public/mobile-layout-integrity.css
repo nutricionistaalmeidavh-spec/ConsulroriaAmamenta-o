@@ -2,7 +2,7 @@
    Keep critical form controls readable and reserve room for the sticky wizard footer. */
 
 .unit-input:has([data-encounter-field="value"]){
-  grid-template-columns:42px minmax(0,1fr);
+  grid-template-columns:42px minmax(120px,1fr);
 }
 .unit-input:has([data-encounter-field="value"])>b{
   grid-column:1;
@@ -11,7 +11,8 @@
 .unit-input:has([data-encounter-field="value"])>[data-encounter-field="value"]{
   grid-column:2;
   grid-row:1;
-  min-width:0;
+  width:100%;
+  min-width:120px;
 }
 
 @media(max-width:760px){
@@ -20,7 +21,7 @@
   }
 
   .appointment-screen{
-    padding-bottom:calc(96px + env(safe-area-inset-bottom));
+    padding-bottom:calc(112px + env(safe-area-inset-bottom));
   }
 
   .appointment-screen .wizard-footer{
@@ -28,6 +29,6 @@
   }
 
   .appointment-screen [data-wizard-step]{
-    scroll-margin-bottom:96px;
+    scroll-margin-bottom:calc(118px + env(safe-area-inset-bottom));
   }
 }
