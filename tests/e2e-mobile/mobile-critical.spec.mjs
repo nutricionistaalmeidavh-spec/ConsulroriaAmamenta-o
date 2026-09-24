@@ -138,7 +138,7 @@ test('mobile critical path supports login, patient, atendimento, agenda and logo
 
   const valueInput = page.locator('[data-encounter-field="value"]:visible');
   await valueInput.fill('150');
-  await expect(valueInput).toHaveValue('150');
+  await expect.poll(async () => Number(await valueInput.inputValue())).toBe(150);
   const valueWidth = await valueInput.evaluate((element) => element.getBoundingClientRect().width);
   expect(valueWidth).toBeGreaterThanOrEqual(120);
 
