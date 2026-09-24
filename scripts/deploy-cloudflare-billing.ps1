@@ -55,7 +55,7 @@ function Assert-AntiStaleHeaders([string]$Origin, [string]$GitSha) {
     $response = Invoke-WebRequest -Method Get -Uri $probe -Headers @{ 'cache-control' = 'no-cache'; 'pragma' = 'no-cache' } -UseBasicParsing
     $cacheControl = [string]$response.Headers['Cache-Control']
     if ($cacheControl -notmatch '(?i)(^|,)\s*no-store(?:\s*,|$)') {
-      throw "Header anti-stale inválido em $path: Cache-Control='$cacheControl'. Esperado no-store."
+      throw "Header anti-stale inválido em ${path}: Cache-Control='$cacheControl'. Esperado no-store."
     }
     if ($path -eq '/sw.js') {
       $allowed = [string]$response.Headers['Service-Worker-Allowed']
@@ -99,7 +99,7 @@ try {
 }
 
 $DeployLockKey = 'production_deploy_lock'
-$DeployLockHolder = "$([Environment]::MachineName):$PID:$LocalSha"
+$DeployLockHolder = "$([Environment]::MachineName):${PID}:${LocalSha}"
 $escapedHolder = Escape-SqlLiteral $DeployLockHolder
 $LockAcquired = $false
 $DeployVersionOriginal = [IO.File]::ReadAllText($DeployVersionFile)
