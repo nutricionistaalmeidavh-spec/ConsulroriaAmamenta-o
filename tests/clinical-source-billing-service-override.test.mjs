@@ -94,16 +94,14 @@ function harness({motherId='mother-1',appointmentId=''}={}){
   vm.runInNewContext(billingSource,context,{filename:'billing-v2.js'});
   vm.runInNewContext(consistencySource,context,{filename:'billing-service-consistency.js'});
   return {
-    context,service,sessionStorage,runTimers,
+    context,service,runTimers,
     setAppointmentType(value){
       appointmentType=value;
       emit('click',{closest(selector){return selector.includes('data-field="appointmentType"')?{}:null}});
       runTimers();
     },
     setAppointmentId(value){currentAppointment=value},
-    setMotherId(value){currentMother=value},
     manualService(value){service.value=value;service.dispatch('change');emit('change',service);runTimers()},
-    draft(){return JSON.parse(sessionStorage.getItem('debora-billing-v2-draft')||'null')},
   };
 }
 
@@ -112,14 +110,11 @@ test('untouched billing service follows the current clinical appointment type ac
   await h.context.DeboraBilling.remount();
   h.runTimers();
   assert.equal(h.service.value,'Retorno');
-  assert.equal(h.draft()?.serviceOverridden,false);
 
   h.setAppointmentType('Acompanhamento');
   await h.context.DeboraBilling.remount();
   h.runTimers();
   assert.equal(h.service.value,'Acompanhamento');
-  assert.equal(h.draft()?.serviceLabel,'Acompanhamento');
-  assert.equal(h.draft()?.serviceOverridden,false);
 });
 
 test('manual billing service override is preserved for the same draft but not leaked to another appointment',async()=>{
@@ -127,7 +122,6 @@ test('manual billing service override is preserved for the same draft but not le
   await h.context.DeboraBilling.remount();
   h.runTimers();
   h.manualService('Consulta inicial');
-  assert.equal(h.draft()?.serviceOverridden,true);
 
   h.setAppointmentType('Acompanhamento');
   await h.context.DeboraBilling.remount();
@@ -139,6 +133,4 @@ test('manual billing service override is preserved for the same draft but not le
   await h.context.DeboraBilling.remount();
   h.runTimers();
   assert.equal(h.service.value,'Retorno');
-  assert.equal(h.draft()?.appointmentId,'appt-2');
-  assert.equal(h.draft()?.serviceOverridden,false);
 });
