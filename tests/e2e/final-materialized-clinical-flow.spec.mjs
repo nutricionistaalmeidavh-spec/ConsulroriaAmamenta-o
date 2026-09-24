@@ -140,7 +140,8 @@ test('final materialized build completes the critical clinical flow through real
   await page.locator('[data-pw-close]').click();
 
   await page.locator('[data-nav-target="patients"]:visible').first().click();
-  await expect(page.locator(`[data-action="open-patient"][data-patient-id="${patient.mother.id}"]`)).toBeVisible();
-  await page.locator(`[data-action="open-patient"][data-patient-id="${patient.mother.id}"]`).click();
+  const patientCard = page.locator(`[data-action="open-patient"][data-patient-id="${patient.mother.id}"]:visible`).first();
+  await expect(patientCard).toBeVisible();
+  await patientCard.click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
 });
