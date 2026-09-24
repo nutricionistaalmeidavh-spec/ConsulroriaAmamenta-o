@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -42,13 +42,28 @@ assert.doesNotMatch(js, /R\$ 49,90/, 'old monthly price must not return to the m
 assert.doesNotMatch(js, /R\$ 499(?:<|\/)/, 'old annual price must not return to the mobile landing');
 assert.match(css, /@media\s*\(min-width:\s*768px\)/, 'mobile-first CSS needs tablet enhancement');
 assert.match(css, /@media\s*\(min-width:\s*1100px\)/, 'mobile-first CSS needs desktop enhancement');
+
 assert.match(lightCss, /--sales-bg:\s*#f5edf0/i, 'commercial background must use the canonical brand-soft palette');
 assert.match(lightCss, /--sales-text:\s*#2f3833/i, 'commercial text must use the canonical ink token');
-assert.match(lightCss, /--sales-purple:\s*#6b3f50/i, 'commercial accents must use the canonical brand token');
-assert.match(lightCss, /linear-gradient\(45deg,\s*#a99bcf 0%,\s*#c4a3d4 48%,\s*#f3bfd1 100%\)/i, 'filled sales buttons must use the official logo gradient');
-assert.doesNotMatch(lightCss, /\.sales-v2 \.sales-button\s*\{[^}]*background:\s*#6b3f50/is, 'filled sales buttons must not retain the old brown background');
+assert.match(lightCss, /--brand-lilac:\s*#a99bcf/i, 'commercial palette must reuse the logo lilac');
+assert.match(lightCss, /--brand-lilac-mid:\s*#c4a3d4/i, 'commercial palette must reuse the logo middle lilac');
+assert.match(lightCss, /--brand-pink:\s*#f3bfd1/i, 'commercial palette must reuse the logo pink');
+assert.match(lightCss, /--brand-accent:\s*#76639d/i, 'commercial text accents need an accessible lilac derivative');
+assert.match(lightCss, /--brand-gradient:\s*linear-gradient\(45deg,\s*#a99bcf 0%,\s*#c4a3d4 48%,\s*#f3bfd1 100%\)/i, 'commercial palette must expose the official logo gradient as a token');
+assert.doesNotMatch(lightCss, /#6b3f50/i, 'legacy brown must not remain in the commercial light theme');
+assert.doesNotMatch(lightCss, /#8a5368/i, 'legacy burgundy must not remain in the commercial light theme');
+
+assert.match(lightCss, /\.sales-v2 \.sales-button\s*\{[^}]*background:\s*var\(--brand-gradient\)/is, 'filled sales buttons must use the official logo gradient');
+assert.match(lightCss, /\.sales-v2 \.sales-button--primary\s*\{[^}]*background:\s*var\(--brand-gradient\)/is, 'primary sales buttons must use the official logo gradient');
+assert.match(lightCss, /\.sales-v2 \.sales-button--ghost\s*\{[^}]*background:\s*var\(--brand-gradient\)/is, 'secondary sales buttons must not fall back to white');
+assert.match(lightCss, /\.sales-v2 \.sales-login\s*\{[^}]*background:\s*var\(--brand-gradient\)/is, 'login button must use the brand gradient');
+assert.match(lightCss, /\.sales-v2 \.sales-kicker\s*\{[^}]*color:\s*var\(--brand-accent\)/is, 'commercial badges must use the lilac brand accent');
+assert.match(lightCss, /\.sales-v2 \.sales-steps li > span\s*\{[^}]*background:\s*var\(--brand-gradient\)/is, 'flow step circles must use the brand gradient');
+assert.match(lightCss, /\.sales-v2 \.sales-plan-card li::before\s*\{[^}]*color:\s*var\(--brand-accent\)/is, 'plan checks must use the lilac brand accent');
+assert.match(lightCss, /\.sales-v2 \.sales-text-link\s*\{[^}]*color:\s*var\(--brand-accent\)/is, 'text CTA must use the lilac brand accent');
+assert.match(lightCss, /\.sales-v2 \.sales-hero h1 em\s*\{[^}]*background:\s*var\(--brand-gradient\)[^}]*color:\s*transparent/is, 'hero emphasis must use the logo gradient');
+
 assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1', '#2f3833', 'hero title must remain readable on the light background');
-assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1 em', '#6b3f50', 'hero emphasis must use the canonical brand color');
 assertSelectorColor(lightCss, '.sales-v2 .sales-section-head h2', '#2f3833', 'section titles must use dark ink');
 assertSelectorColor(lightCss, '.sales-v2 .sales-section-head p', '#525b56', 'section descriptions must use readable secondary ink');
 assertSelectorColor(lightCss, '.sales-v2 .sales-feature-grid h3', '#2f3833', 'feature titles must use dark ink');
@@ -56,11 +71,15 @@ assertSelectorColor(lightCss, '.sales-v2 .sales-feature-grid p', '#727a75', 'fea
 assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card h3', '#2f3833', 'plan prices must use dark ink');
 assertSelectorColor(lightCss, '.sales-v2 .sales-plan-card p', '#525b56', 'plan descriptions must remain readable');
 assertSelectorColor(lightCss, '.sales-v2 .sales-faq summary', '#2f3833', 'FAQ questions must use dark ink');
+
 assert.match(contrastFixCss, /body\.conversion-page\.sales-v2-active/, 'Sales V2 contrast fix must only apply after the new landing activates');
 assert.match(contrastFixCss, /\.sales-v2 main h2/, 'Sales V2 contrast fix must outrank legacy phase2 heading colors');
 assert.match(contrastFixCss, /\.sales-v2 main p/, 'Sales V2 contrast fix must outrank legacy phase2 paragraph colors');
 assert.match(contrastFixCss, /color:\s*#2f3833/i, 'Sales V2 contrast fix must force dark heading ink');
 assert.match(contrastFixCss, /color:\s*#525b56/i, 'Sales V2 contrast fix must force readable paragraph ink');
+assert.doesNotMatch(contrastFixCss, /#6b3f50/i, 'specificity isolation must not repaint hero emphasis brown');
+assert.match(contrastFixCss, /\.sales-hero h1 em\s*\{[^}]*background:\s*var\(--brand-gradient\)[^}]*color:\s*transparent/is, 'specificity isolation must preserve the hero brand gradient');
+
 assert.match(js, /<img src="\/icon\.svg" alt="">/, 'commercial header/footer must use the canonical SVG logo');
 assert.match(logo, /<svg\b/i, 'canonical logo must remain vector');
 assert.doesNotMatch(logo, /<image\b/i, 'canonical logo must not embed a raster image');
@@ -73,9 +92,9 @@ assert.match(assetFix, /sales-finance-demo/i, 'finance card must render a saniti
 assert.doesNotMatch(assetFix, /\['Financeiro',\s*'\/comercial\/assets\/screens\/financeiro\.webp'\]/, 'commercial landing must not expose the real finance screenshot');
 assert.match(seo, /mobile-sales-v2\.css/);
 assert.match(seo, /brand-mark\.css\?v=20260921/, 'commercial edge markup must load the vector brand rendering fix');
-assert.match(seo, /commercial-light-theme\.css\?v=20260924-brand-pricing/, 'commercial edge markup must cache-bust the contrast fix');
-assert.match(seo, /commercial-sales-v2-contrast-fix\.css\?v=20260921-2/, 'commercial edge markup must load the specificity isolation fix');
-assert.match(seo, /mobile-sales-v2\.js\?v=20260924-pricing/, 'commercial edge markup must cache-bust the pricing update');
+assert.match(seo, /commercial-light-theme\.css\?v=20260924-brand-palette/, 'commercial edge markup must cache-bust the palette update');
+assert.match(seo, /commercial-sales-v2-contrast-fix\.css\?v=20260924-brand-palette/, 'commercial edge markup must cache-bust the specificity palette update');
+assert.match(seo, /mobile-sales-v2\.js\?v=20260924-pricing/, 'commercial edge markup must preserve the current sales markup version');
 assert.match(seo, /price: '99\.90'/, 'SEO structured data must use the current monthly price');
 assert.match(seo, /price: '999\.90'/, 'SEO structured data must use the current annual price');
 assert.match(seo, /mobile-assets-fix\.js\?v=20260921/, 'commercial edge markup must load the privacy-safe finance preview');
