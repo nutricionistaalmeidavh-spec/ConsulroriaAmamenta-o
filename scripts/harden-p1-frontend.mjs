@@ -89,10 +89,8 @@ if (syncClinicalManifest()) changed.push('clinical-manifest');
 
 if (writeTarget('public/patient-records-hub.js', (source) => source
   .replace('DOC.consents(motherId).catch(()=>[])', 'DOC.consents(motherId)')
-  .replace("DOC.listDocuments(motherId,'referral').catch(()=>[])", "DOC.listDocuments(motherId,'referral')")
-  .replace('clinical_media?mother_id=eq.', 'media?mother_id=eq.'))) changed.push('patient-records-hub');
+  .replace("DOC.listDocuments(motherId,'referral').catch(()=>[])", "DOC.listDocuments(motherId,'referral')"))) changed.push('patient-records-hub');
 
-if (writeTarget('public/patient-workspace.js', (source) => source
-  .replace('DOC.rest(`clinical_media?mother_id=eq.', 'DOC.rest(`media?mother_id=eq.'))) changed.push('patient-workspace');
+if (writeTarget('public/patient-workspace.js', (source) => source)) changed.push('patient-workspace');
 
 console.log(`P1 frontend ${MODE}: ${changed.length ? changed.join(', ') : 'already hardened'}`);
