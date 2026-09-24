@@ -208,12 +208,16 @@ function New-GeneratedWrangler([string]$RepoRoot, [string]$D1Id, [string]$D1Name
   return $generated
 }
 
-function Get-Health([string]$Url) {
+function Get-Health([string]$Url, [string]$ExpectedSha) {
   $last = $null
   for ($attempt = 1; $attempt -le 8; $attempt++) {
     try {
-      $last = Invoke-RestMethod -Method Get -Uri $Url -Headers @{ 'cache-control' = 'no-cache' }
-      if ($last) { return $last }
+      $separator = if ($Url.Contains('?')) { '&' } else { '?' }
+      $probe = "$Url$separator`deploy_sha=$ExpectedSha&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+      $last = Invoke-RestMethod -Method Get -Uri $probe -Headers @{ 'cache-control' = 'no-cache' }
+      $props = @($last.PSObject.Properties.Name)
+      if ($props -contains 'ok' -and $props -contains 'gitSha' -and $last.ok -eq $true -and $last.gitSha -eq $ExpectedSha) { return $last }
+      throw "Health de producao invalido ou versao divergente: $($last | ConvertTo-Json -Compress)"
     } catch {
       if ($attempt -eq 8) { throw }
       Start-Sleep -Seconds 3
@@ -232,6 +236,8 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $RuntimeSchema = Join-Path $RepoRoot 'cloudflare\runtime-schema.sql'
 $LicenseSyncScript = Join-Path $PSScriptRoot 'sync-license-authority-secret.ps1'
 $GeneratedConfig = $null
+$ExpectedSha = (& git -C $RepoRoot rev-parse HEAD | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $ExpectedSha -notmatch '^[0-9a-f]{40}$') { throw 'Nao foi possivel identificar o commit do deploy.' }
 
 if (-not (Test-Path $RuntimeSchema)) { throw "Schema runtime ausente: $RuntimeSchema" }
 if (-not (Test-Path $LicenseSyncScript)) { throw "Sincronizador de licenciamento ausente: $LicenseSyncScript" }
@@ -295,19 +301,21 @@ try {
   } finally { Pop-Location }
 
   Step 'Validando produção'
-  $health = Get-Health $HealthUrl
-  if (-not $health.ok -or $health.backend -ne 'cloudflare-d1-r2' -or -not $health.d1 -or -not $health.r2 -or -not $health.authSecret) {
-    throw "Health check do cutover não confirmou D1/R2/auth: $($health | ConvertTo-Json -Compress)"
-  }
-  if ([int64]$health.validatedMigrations -lt 1 -or [int64]$health.records -lt $recordsBefore -or [int64]$health.authUsers -lt $usersBefore) {
-    throw "Contagens de produção divergentes: $($health | ConvertTo-Json -Compress)"
+  $health = Get-Health $HealthUrl $ExpectedSha
+  # The public probe intentionally exposes only availability and release identity.
+  # Read private counts through authenticated D1, never through the public API.
+  $validatedAfter = D1-Scalar $NpxCmd $d1.Id "SELECT COUNT(*) AS n FROM migration_runs WHERE status='validated';" 'n'
+  $recordsAfter = D1-Scalar $NpxCmd $d1.Id 'SELECT COUNT(*) AS n FROM supabase_records;' 'n'
+  $usersAfter = D1-Scalar $NpxCmd $d1.Id 'SELECT COUNT(*) AS n FROM auth_users;' 'n'
+  if ($validatedAfter -lt 1 -or $recordsAfter -lt $recordsBefore -or $usersAfter -lt $usersBefore) {
+    throw "Contagens de producao divergentes: validated=$validatedAfter, records=$recordsAfter, users=$usersAfter"
   }
 
   Write-Host "`nCUTOVER CLOUDFLARE CONCLUÍDO" -ForegroundColor Green
   Write-Host "Backend clínico: D1 $D1Database"
   Write-Host "Arquivos: R2 $R2Bucket"
-  Write-Host "Usuários migrados: $($health.authUsers)"
-  Write-Host "Registros disponíveis: $($health.records)"
+  Write-Host "Usuários migrados: $usersAfter"
+  Write-Host "Registros disponíveis: $recordsAfter"
   Write-Host 'Licenciamento: painel Artisys e D1 central sincronizados.'
   Write-Host 'Supabase clínico: preservado como rollback e ponte temporária para sessões/senhas antigas; novas leituras e gravações clínicas usam Cloudflare.'
   Write-Host 'Usuários existentes podem entrar com a senha atual; no primeiro login ela é migrada automaticamente para o D1.'
