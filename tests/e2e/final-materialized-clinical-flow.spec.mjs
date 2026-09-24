@@ -39,6 +39,17 @@ test('final materialized build completes the critical clinical flow through real
   await expect(page.locator('[data-wizard-step="1"]')).toBeVisible();
   await expect(page.locator('[data-billing-v2]')).toBeVisible();
 
+  await page.locator('[data-encounter-choice][data-field="appointmentType"][data-value="Acompanhamento"]').click();
+  await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]').click();
+  await expect(page.locator('[data-ccf-context-meta]')).toContainText('Acompanhamento · Online');
+  await expect(page.locator('[data-bv-service]')).toHaveValue('Acompanhamento');
+
+  await page.locator('[data-bv-service]').selectOption({ label: 'Consulta inicial' });
+  await page.locator('[data-encounter-choice][data-field="appointmentType"][data-value="Retorno"]').click();
+  await page.locator('[data-encounter-choice][data-field="appointmentType"][data-value="Acompanhamento"]').click();
+  await expect(page.locator('[data-ccf-context-meta]')).toContainText('Acompanhamento · Online');
+  await expect(page.locator('[data-bv-service]')).toHaveValue('Consulta inicial');
+
   await page.locator('[data-bv-mode]').selectOption('package_new');
   await page.locator('[data-bv-total]').fill('600.00');
   await page.locator('[data-bv-sessions]').fill('3');
@@ -95,6 +106,8 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.mother_id).toBe(patient.mother.id);
   expect(encounter?.baby_id).toBe(patient.babies[0].id);
   expect(encounter?.appointment_id).toBe(appointmentId);
+  expect(encounter?.identification?.appointmentType).toBe('Acompanhamento');
+  expect(encounter?.identification?.format).toBe('Online');
   expect(encounter?.chief_complaint?.notes).toBe(complaint);
   expect(encounter?.clinical_note).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
@@ -103,6 +116,7 @@ test('final materialized build completes the critical clinical flow through real
   const [appointment] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
   expect(appointment?.status).toBe('Realizado');
   expect(appointment?.billing_mode).toBe('package_new');
+  expect(appointment?.service_label).toBe('Consulta inicial');
 
   const packages = await records(page, 'care_packages', `mother_id=eq.${encodeURIComponent(patient.mother.id)}`);
   expect(packages).toHaveLength(1);
@@ -124,6 +138,8 @@ test('final materialized build completes the critical clinical flow through real
   await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]:visible`).first().click();
   await expect(page.locator('#cn-overlay')).toBeVisible();
   await expect(page.locator('#cn-overlay')).toContainText(motherName);
+  await expect(page.locator('#cn-overlay')).toContainText('Acompanhamento');
+  await expect(page.locator('#cn-overlay')).toContainText('Online');
   await expect(page.locator('#cn-note')).toHaveValue(clinicalNote);
   await page.locator('#cn-overlay [data-cn-close]').click();
   await expect(page.locator('#cn-overlay')).toHaveCount(0);
