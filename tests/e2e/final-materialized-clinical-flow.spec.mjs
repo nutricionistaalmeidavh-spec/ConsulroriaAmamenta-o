@@ -115,8 +115,11 @@ test('final materialized build completes the critical clinical flow through real
   expect(packageCharges).toHaveLength(1);
   expect(Number(packageCharges[0].amount_cents)).toBe(60000);
 
-  const media = await records(page, 'media', `encounter_id=eq.${encodeURIComponent(encounterId)}`);
+  const media = await records(page, 'clinical_media', `encounter_id=eq.${encodeURIComponent(encounterId)}`);
   expect(media).toHaveLength(1);
+  expect(media[0].mother_id).toBe(patient.mother.id);
+  expect(media[0].baby_id).toBe(patient.babies[0].id);
+  expect(media[0].encounter_id).toBe(encounterId);
 
   await page.locator(`[data-action="open-clinical-note"][data-encounter-id="${encounterId}"]`).click();
   await expect(page.locator('#cn-overlay')).toBeVisible();
@@ -127,6 +130,7 @@ test('final materialized build completes the critical clinical flow through real
 
   await expect(page.locator('[data-prh-card]')).toBeVisible();
   await page.locator('[data-prh-target="album"]').click();
+  await expect(page.locator('.pw-photo')).toHaveCount(1);
   await expect(page.locator('.pw-photo img')).toHaveCount(1);
   const signedSrc = await page.locator('.pw-photo img').getAttribute('src');
   expect(signedSrc).toBeTruthy();
