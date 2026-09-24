@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 
 const billingSource=readFileSync('public/billing-v2.js','utf8');
+const consistencySource=readFileSync('public/billing-service-consistency.js','utf8').replace(/^export\s+/gm,'');
 
 function storage(seed={}){
   const map=new Map(Object.entries(seed));
@@ -23,6 +24,7 @@ function select(value='',values=[]){
     options:values.map(v=>({value:v})),
     addEventListener(type,fn){listeners.set(type,fn)},
     dispatch(type){listeners.get(type)?.({target:this})},
+    matches(selector){return selector==='[data-bv-service]'},
     toggleAttribute(){},
   };
 }
@@ -32,6 +34,8 @@ function harness({motherId='mother-1',appointmentId=''}={}){
   let currentAppointment=appointmentId;
   let appointmentType='Retorno';
   let host=null;
+  const timers=[];
+  const documentListeners=new Map();
   const service=select('', ['Consulta inicial','Retorno','Acompanhamento','Pré-natal']);
   const mode=select('individual',['individual']);
   const payment=select('',['','Pix','Dinheiro','Cartão','Transferência']);
@@ -41,7 +45,6 @@ function harness({motherId='mother-1',appointmentId=''}={}){
     dispatchEvent(){},
   };
   const anchor={insertAdjacentElement(_where,node){host=node}};
-  const documentListeners=new Map();
   const document={
     documentElement:{},body:{appendChild(){}},
     querySelector(selector){
@@ -63,6 +66,8 @@ function harness({motherId='mother-1',appointmentId=''}={}){
       const items=documentListeners.get(type)||[];items.push(fn);documentListeners.set(type,items);
     },
   };
+  function emit(type,target){for(const fn of documentListeners.get(type)||[])fn({target,preventDefault(){}})}
+  function runTimers(){while(timers.length){const fn=timers.shift();fn()}}
   const sessionStorage=storage({'debora-runtime-access-token':'a.b.c'});
   const context={
     console,document,sessionStorage,localStorage:storage(),
@@ -71,7 +76,7 @@ function harness({motherId='mother-1',appointmentId=''}={}){
     DeboraEncounter:{getAppointmentId(){return currentAppointment}},
     DeboraRuntimeClient:{getSession(){return{access_token:'a.b.c'}}},
     MutationObserver:class{constructor(fn){this.fn=fn}observe(){}},
-    setTimeout(){return 1},clearTimeout(){},
+    setTimeout(fn){timers.push(fn);return timers.length},clearTimeout(){},
     addEventListener(){},confirm(){return true},
     Event:class{constructor(type,opt={}){this.type=type;this.bubbles=!!opt.bubbles}},
     crypto:{randomUUID(){return '00000000-0000-4000-8000-000000000001'}},
@@ -87,11 +92,17 @@ function harness({motherId='mother-1',appointmentId=''}={}){
   };
   context.window=context;context.globalThis=context;
   vm.runInNewContext(billingSource,context,{filename:'billing-v2.js'});
+  vm.runInNewContext(consistencySource,context,{filename:'billing-service-consistency.js'});
   return {
-    context,service,sessionStorage,
-    setAppointmentType(value){appointmentType=value},
+    context,service,sessionStorage,runTimers,
+    setAppointmentType(value){
+      appointmentType=value;
+      emit('click',{closest(selector){return selector.includes('data-field="appointmentType"')?{}:null}});
+      runTimers();
+    },
     setAppointmentId(value){currentAppointment=value},
     setMotherId(value){currentMother=value},
+    manualService(value){service.value=value;service.dispatch('change');emit('change',service);runTimers()},
     draft(){return JSON.parse(sessionStorage.getItem('debora-billing-v2-draft')||'null')},
   };
 }
@@ -99,11 +110,13 @@ function harness({motherId='mother-1',appointmentId=''}={}){
 test('untouched billing service follows the current clinical appointment type across remounts',async()=>{
   const h=harness();
   await h.context.DeboraBilling.remount();
+  h.runTimers();
   assert.equal(h.service.value,'Retorno');
   assert.equal(h.draft()?.serviceOverridden,false);
 
   h.setAppointmentType('Acompanhamento');
   await h.context.DeboraBilling.remount();
+  h.runTimers();
   assert.equal(h.service.value,'Acompanhamento');
   assert.equal(h.draft()?.serviceLabel,'Acompanhamento');
   assert.equal(h.draft()?.serviceOverridden,false);
@@ -112,17 +125,19 @@ test('untouched billing service follows the current clinical appointment type ac
 test('manual billing service override is preserved for the same draft but not leaked to another appointment',async()=>{
   const h=harness({appointmentId:'appt-1'});
   await h.context.DeboraBilling.remount();
-  h.service.value='Consulta inicial';
-  h.service.dispatch('change');
+  h.runTimers();
+  h.manualService('Consulta inicial');
   assert.equal(h.draft()?.serviceOverridden,true);
 
   h.setAppointmentType('Acompanhamento');
   await h.context.DeboraBilling.remount();
+  h.runTimers();
   assert.equal(h.service.value,'Consulta inicial');
 
   h.setAppointmentId('appt-2');
   h.setAppointmentType('Retorno');
   await h.context.DeboraBilling.remount();
+  h.runTimers();
   assert.equal(h.service.value,'Retorno');
   assert.equal(h.draft()?.appointmentId,'appt-2');
   assert.equal(h.draft()?.serviceOverridden,false);
