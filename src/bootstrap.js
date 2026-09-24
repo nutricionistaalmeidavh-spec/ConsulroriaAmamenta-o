@@ -227,6 +227,13 @@ async function ensureClinicalPhaseLoaders() {
   await phase68.startPhase68?.();
 }
 
+async function ensureClinicalAdditiveFeatures() {
+  // The outer entry imports this feature before the canonical document is replaced.
+  // Re-import under a distinct module URL after document.close() so its observer and
+  // initial mount bind to the live clinical DOM instead of the discarded placeholder.
+  await importPublicModule('/clinical-care-flow-feature.js?canonical-runtime=1');
+}
+
 async function boot() {
   if (await cleanupLegacyServiceWorkers()) return;
 
@@ -278,6 +285,7 @@ async function boot() {
   document.write(html);
   document.close();
   await ensureClinicalPhaseLoaders();
+  await ensureClinicalAdditiveFeatures();
 }
 
 boot().catch((error) => {
