@@ -5,19 +5,25 @@ body.sales-v2-active {
 }
 
 body.sales-v2-active .sales-v2 {
+  --brand-lilac: #a99bcf;
+  --brand-lilac-mid: #c4a3d4;
+  --brand-pink: #f3bfd1;
+  --brand-accent: #76639d;
+  --brand-gradient: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  --brand-ink: #2f3833;
   --sales-bg: #f5edf0;
   --sales-bg-2: #fbf7f8;
   --sales-card: #ffffff;
   --sales-card-2: #fbf6f7;
-  --sales-line: rgba(107, 63, 80, .16);
+  --sales-line: rgba(169, 155, 207, .30);
   --sales-text: #2f3833;
   --sales-muted: #727a75;
-  --sales-pink: #8a5368;
-  --sales-purple: #6b3f50;
-  --sales-glow: rgba(107, 63, 80, .18);
+  --sales-pink: var(--brand-accent);
+  --sales-purple: var(--brand-lilac);
+  --sales-glow: rgba(196, 163, 212, .24);
   background:
-    radial-gradient(circle at 92% 5%, rgba(107, 63, 80, .10), transparent 28rem),
-    radial-gradient(circle at 5% 24%, rgba(185, 154, 216, .11), transparent 24rem),
+    radial-gradient(circle at 92% 5%, rgba(243, 191, 209, .16), transparent 28rem),
+    radial-gradient(circle at 5% 24%, rgba(169, 155, 207, .14), transparent 24rem),
     var(--sales-bg);
   color: var(--sales-text);
 }
@@ -30,46 +36,50 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-login {
-  color: #6b3f50;
-  background: #ffffff;
-  border-color: rgba(107, 63, 80, .20);
+  color: var(--brand-ink);
+  background: var(--brand-gradient);
+  border-color: rgba(169, 155, 207, .62);
+  box-shadow: 0 10px 24px rgba(196, 163, 212, .20);
 }
 
-.sales-v2 .sales-kicker {
-  color: #6b3f50;
-  border-color: rgba(107, 63, 80, .20);
-  background: rgba(107, 63, 80, .07);
+.sales-v2 .sales-kicker,
+.sales-v2 .sales-purchase-card.is-secondary .sales-kicker {
+  color: var(--brand-accent);
+  border-color: rgba(169, 155, 207, .52);
+  background: linear-gradient(90deg, rgba(169, 155, 207, .16), rgba(243, 191, 209, .16));
 }
 
 .sales-v2 .sales-button {
-  color: #2f3833;
+  color: var(--brand-ink);
   border-color: rgba(169, 155, 207, .62);
-  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  background: var(--brand-gradient);
   box-shadow: 0 12px 28px rgba(196, 163, 212, .24);
   transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
 }
 
 .sales-v2 .sales-button--primary {
-  color: #2f3833;
-  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  color: var(--brand-ink);
+  background: var(--brand-gradient);
   box-shadow: 0 14px 32px rgba(196, 163, 212, .28);
 }
 
-.sales-v2 .sales-button:not(.sales-button--ghost):hover {
+.sales-v2 .sales-button--ghost {
+  color: var(--brand-ink);
+  border-color: rgba(169, 155, 207, .62);
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 24px rgba(196, 163, 212, .18);
+}
+
+.sales-v2 .sales-button:hover,
+.sales-v2 .sales-login:hover {
   transform: translateY(-1px);
   filter: brightness(.97);
 }
 
-.sales-v2 .sales-button:not(.sales-button--ghost):focus-visible {
+.sales-v2 .sales-button:focus-visible,
+.sales-v2 .sales-login:focus-visible {
   outline: 3px solid rgba(169, 155, 207, .45);
   outline-offset: 3px;
-}
-
-.sales-v2 .sales-button--ghost {
-  color: #6b3f50;
-  border-color: rgba(107, 63, 80, .34);
-  background: #ffffff;
-  box-shadow: none;
 }
 
 .sales-v2 .sales-trust-row span,
@@ -88,7 +98,7 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-hero-shot {
-  border-color: rgba(107, 63, 80, .16);
+  border-color: rgba(169, 155, 207, .28);
   background: #ffffff;
   box-shadow: 0 22px 56px rgba(66, 48, 56, .12);
 }
@@ -107,13 +117,13 @@ body.sales-v2-active .sales-v2 {
 .sales-v2 .sales-purchase-card,
 .sales-v2 .sales-purchase-card.is-secondary {
   color: var(--sales-text);
-  border-color: rgba(107, 63, 80, .18);
+  border-color: rgba(169, 155, 207, .30);
   background: linear-gradient(145deg, #ffffff, #fbf6f7 76%);
   box-shadow: 0 16px 42px rgba(66, 48, 56, .08);
 }
 
 .sales-v2 .sales-purchase-card::after {
-  background: radial-gradient(circle, rgba(107, 63, 80, .10), transparent 68%);
+  background: radial-gradient(circle, rgba(196, 163, 212, .15), transparent 68%);
 }
 
 .sales-v2 .sales-purchase-card p,
@@ -129,25 +139,29 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-feature-grid article > span {
-  color: #6b3f50;
-  background: #f5edf0;
+  color: var(--brand-accent);
+  background: linear-gradient(145deg, rgba(169, 155, 207, .18), rgba(243, 191, 209, .18));
 }
 
 .sales-v2 .sales-steps li > span {
-  color: #ffffff;
-  background: #6b3f50;
+  color: var(--brand-ink);
+  background: var(--brand-gradient);
+  box-shadow: 0 8px 18px rgba(196, 163, 212, .22);
 }
 
 .sales-v2 .sales-plan-card.is-featured {
   color: var(--sales-text);
-  border-color: rgba(107, 63, 80, .34);
-  background: linear-gradient(155deg, #fff, #f3e6ea);
-  box-shadow: 0 16px 40px rgba(107, 63, 80, .10);
+  border-color: rgba(169, 155, 207, .56);
+  background: linear-gradient(155deg, #fff, rgba(243, 191, 209, .16));
+  box-shadow: 0 16px 40px rgba(169, 155, 207, .14);
 }
 
-.sales-v2 .sales-plan-card > span,
+.sales-v2 .sales-plan-card > span {
+  color: var(--brand-accent);
+}
+
 .sales-v2 .sales-text-link {
-  color: #6b3f50;
+  color: var(--brand-accent);
 }
 
 .sales-v2 .sales-plan-card ul {
@@ -165,7 +179,10 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-hero h1 em {
-  color: #6b3f50;
+  background: var(--brand-gradient);
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .sales-v2 .sales-hero-copy > p {
@@ -200,7 +217,7 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-plan-card li::before {
-  color: #8a5368;
+  color: var(--brand-accent);
 }
 
 .sales-v2 .sales-faq summary {
@@ -268,8 +285,8 @@ body.sales-v2-active .sales-v2 {
 .sales-v2 .sales-finance-demo__badge {
   padding: 6px 8px;
   border-radius: 999px;
-  color: #6b3f50;
-  background: #f0e1e6;
+  color: var(--brand-accent);
+  background: linear-gradient(90deg, rgba(169, 155, 207, .16), rgba(243, 191, 209, .16));
   font-size: 9px;
   font-weight: 900;
   letter-spacing: .08em;
@@ -284,7 +301,7 @@ body.sales-v2-active .sales-v2 {
 
 .sales-v2 .sales-finance-demo__metrics > div,
 .sales-v2 .sales-finance-demo__section {
-  border: 1px solid #e6d9de;
+  border: 1px solid rgba(169, 155, 207, .24);
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 8px 22px rgba(66, 48, 56, .05);
@@ -297,7 +314,7 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-finance-demo__metrics strong {
-  color: #6b3f50;
+  color: var(--brand-accent);
   font-size: 15px;
 }
 
@@ -315,7 +332,7 @@ body.sales-v2-active .sales-v2 {
 
 .sales-v2 .sales-finance-demo__payment {
   padding: 12px 0;
-  border-top: 1px solid #eee5e8;
+  border-top: 1px solid rgba(169, 155, 207, .18);
 }
 
 .sales-v2 .sales-finance-demo__avatar {
@@ -325,8 +342,8 @@ body.sales-v2-active .sales-v2 {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  color: #ffffff;
-  background: #6b3f50;
+  color: var(--brand-ink);
+  background: var(--brand-gradient);
   font-size: 10px;
   font-weight: 900;
 }
