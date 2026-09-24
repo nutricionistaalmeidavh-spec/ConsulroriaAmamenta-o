@@ -6,10 +6,10 @@ export function billingScopeMatches(record,{motherId='',appointmentId=''}={}){
   return String(record.appointmentId||'')===String(appointmentId||'');
 }
 
-export function shouldFollowBillingService({appointmentId='',previousAppointmentId='',overridden=false}={}){
+export function shouldFollowBillingService({appointmentId='',previousAppointmentId='',sameMotherContext=false,overridden=false}={}){
   if(overridden)return false;
   if(!appointmentId)return true;
-  return previousAppointmentId===''&&appointmentId!=='';
+  return sameMotherContext&&previousAppointmentId===''&&appointmentId!=='';
 }
 
 const browser=typeof window!=='undefined'&&typeof document!=='undefined';
@@ -67,9 +67,10 @@ if(browser){
     lastContext=ctx;
   }
 
+  function clearOverride(){remove(BILLING_OVERRIDE_KEY)}
   function clearWhenOutsideAppointment(){
     if(String(location.hash||'').startsWith('#/appointment'))return false;
-    remove(BILLING_OVERRIDE_KEY);
+    clearOverride();
     lastContext={motherId:'',appointmentId:''};
     return true;
   }
@@ -80,14 +81,15 @@ if(browser){
     const select=serviceSelect();
     if(!ctx.motherId||!select){lastContext=ctx;return}
     const override=currentOverride(ctx);
-    const previousAppointmentId=lastContext.motherId===ctx.motherId?lastContext.appointmentId:'';
+    const sameMotherContext=lastContext.motherId===ctx.motherId&&Boolean(ctx.motherId);
+    const previousAppointmentId=sameMotherContext?lastContext.appointmentId:'';
     if(override){
       if(optionExists(select,override.serviceLabel)&&select.value!==override.serviceLabel)select.value=override.serviceLabel;
       mergeDraft(ctx,{serviceLabel:override.serviceLabel||select.value,serviceOverridden:true});
       lastContext=ctx;
       return;
     }
-    if(shouldFollowBillingService({appointmentId:ctx.appointmentId,previousAppointmentId,overridden:false})){
+    if(shouldFollowBillingService({appointmentId:ctx.appointmentId,previousAppointmentId,sameMotherContext,overridden:false})){
       const wanted=appointmentType();
       if(optionExists(select,wanted)){
         select.value=wanted;
@@ -107,6 +109,7 @@ if(browser){
     else if(event.target?.matches?.('[data-appointment-patient]'))schedule();
   });
   document.addEventListener('click',event=>{
+    if(event.target?.closest?.('[data-wizard-close]'))clearOverride();
     if(event.target?.closest?.('[data-encounter-choice][data-field="appointmentType"]'))schedule();
   });
   new MutationObserver(schedule).observe(document.documentElement,{subtree:true,childList:true});
