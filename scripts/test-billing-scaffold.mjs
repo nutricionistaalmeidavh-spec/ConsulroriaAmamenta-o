@@ -28,7 +28,7 @@ const js = fs.readFileSync(files.planJs, 'utf8').toLowerCase();
 const sql = fs.readFileSync(files.schema, 'utf8').toLowerCase();
 const runtime = fs.readFileSync(files.runtime, 'utf8').toLowerCase();
 
-for (const required of ['meu plano', 'r$ 79,90', 'r$ 799,90', 'pro_monthly', 'pro_annual']) {
+for (const required of ['meu plano', 'r$ 99,90', 'r$ 999,90', 'pro_monthly', 'pro_annual']) {
   if (!html.includes(required)) fail(`My Plan UI missing ${required}`);
 }
 const frontendCheckoutPath = usingBuiltArtifact ? '/api/billing/checkout' : '/api/asaas/checkout';
@@ -42,8 +42,8 @@ for (const required of [
   'subscriptions',
   "'pro_monthly'",
   "'pro_annual'",
-  '7990',
-  '79990',
+  '9990',
+  '99990',
 ]) {
   if (!sql.includes(required)) fail(`D1 billing schema missing ${required}`);
 }

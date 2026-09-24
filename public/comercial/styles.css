@@ -75,21 +75,22 @@ img { display: block; max-width: 100%; }
   gap: 8px;
   min-height: 48px;
   padding: 0 22px;
-  border: 1px solid var(--brand);
+  border: 1px solid rgba(169,155,207,.62);
   border-radius: 14px;
-  color: #fff;
-  background: var(--brand);
+  color: #2f3833;
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
   font-weight: 780;
-  box-shadow: 0 9px 25px rgba(107,63,80,.18);
-  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  box-shadow: 0 9px 25px rgba(196,163,212,.24);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease, filter .18s ease;
 }
-.button:hover { transform: translateY(-2px); background: var(--brand-strong); box-shadow: 0 14px 30px rgba(107,63,80,.23); }
+.button:hover { transform: translateY(-2px); background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%); filter: brightness(.97); box-shadow: 0 14px 30px rgba(196,163,212,.30); }
 .button:focus-visible, input:focus-visible, select:focus-visible, .link-button:focus-visible, .text-action:focus-visible, a:focus-visible, summary:focus-visible { outline: none; box-shadow: var(--focus); }
 .button.small { min-height: 38px; padding: 0 16px; border-radius: 11px; font-size: 12px; }
 .button-large { min-height: 54px; padding-inline: 25px; }
 .button.secondary { color: var(--brand); background: rgba(255,255,255,.76); border-color: #d9cbd1; box-shadow: none; }
-.button.secondary:hover { background: var(--brand-soft); }
+.button.secondary:hover { background: var(--brand-soft); filter: none; }
 .button.light { color: var(--brand); background: #fff; border-color: #fff; box-shadow: 0 12px 30px rgba(34,25,29,.12); }
+.button.light:hover { background: #fff; filter: brightness(.98); }
 .button.full { width: 100%; }
 .text-cta { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; color: var(--brand); background: transparent; font-weight: 800; }
 .text-cta span { transition: transform .18s ease; }
