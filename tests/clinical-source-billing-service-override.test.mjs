@@ -74,7 +74,11 @@ function harness({motherId='mother-1',appointmentId=''}={}){
     location:{hash:'#/appointment/new',origin:'https://example.test'},
     DEBORA_APP_CONFIG:{API_BASE_URL:'https://example.test',CLIENT_RUNTIME_KEY:'test'},
     DeboraEncounter:{getAppointmentId(){return currentAppointment}},
-    DeboraRuntimeClient:{getSession(){return{access_token:'a.b.c'}}},
+    DeboraRuntimeClient:{
+      getSession(){return{access_token:'a.b.c'}},
+      async rest(){return[]},
+      async rpc(){return{}},
+    },
     MutationObserver:class{constructor(fn){this.fn=fn}observe(){}},
     setTimeout(fn){timers.push(fn);return timers.length},clearTimeout(){},
     addEventListener(){},confirm(){return true},
