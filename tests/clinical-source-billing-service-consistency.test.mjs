@@ -13,13 +13,14 @@ test('billing service override is scoped to the same mother and appointment draf
   assert.equal(billingScopeMatches(record,{motherId:'mother-a',appointmentId:'appointment-b'}),false);
 });
 
-test('untouched billing follows appointment type only before persistence or during the same live start transition',()=>{
+test('untouched billing follows appointment type before persistence and when the same patient changes appointment context',()=>{
   assert.equal(shouldFollowBillingService({appointmentId:'',previousAppointmentId:'',sameMotherContext:false,overridden:false}),true);
   assert.equal(shouldFollowBillingService({appointmentId:'appointment-a',previousAppointmentId:'',sameMotherContext:true,overridden:false}),true);
+  assert.equal(shouldFollowBillingService({appointmentId:'appointment-b',previousAppointmentId:'appointment-a',sameMotherContext:true,overridden:false}),true);
   assert.equal(shouldFollowBillingService({appointmentId:'appointment-a',previousAppointmentId:'',sameMotherContext:false,overridden:false}),false);
   assert.equal(shouldFollowBillingService({appointmentId:'appointment-a',previousAppointmentId:'appointment-a',sameMotherContext:true,overridden:false}),false);
   assert.equal(shouldFollowBillingService({appointmentId:'',previousAppointmentId:'',sameMotherContext:true,overridden:true}),false);
-  assert.equal(shouldFollowBillingService({appointmentId:'appointment-a',previousAppointmentId:'',sameMotherContext:true,overridden:true}),false);
+  assert.equal(shouldFollowBillingService({appointmentId:'appointment-b',previousAppointmentId:'appointment-a',sameMotherContext:true,overridden:true}),false);
 });
 
 test('canonical bootstrap wires billing consistency only after the live clinical document exists',()=>{
