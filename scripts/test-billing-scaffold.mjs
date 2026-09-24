@@ -3,9 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
+const builtPlanHtml = path.join(root, 'dist', 'comercial', 'plano.html');
+const builtPlanJs = path.join(root, 'dist', 'comercial', 'plan.js');
+const usingBuiltArtifact = fs.existsSync(builtPlanHtml) && fs.existsSync(builtPlanJs);
 const files = {
-  planHtml: path.join(root, 'public', 'comercial', 'plano.html'),
-  planJs: path.join(root, 'public', 'comercial', 'plan.js'),
+  planHtml: usingBuiltArtifact ? builtPlanHtml : path.join(root, 'public', 'comercial', 'plano.html'),
+  planJs: usingBuiltArtifact ? builtPlanJs : path.join(root, 'public', 'comercial', 'plan.js'),
   schema: path.join(root, 'cloudflare', 'billing-schema.sql'),
   runtime: path.join(root, 'worker', 'cloudflare-billing-runtime.js'),
 };
@@ -28,7 +31,8 @@ const runtime = fs.readFileSync(files.runtime, 'utf8').toLowerCase();
 for (const required of ['meu plano', 'r$ 79,90', 'r$ 799,90', 'pro_monthly', 'pro_annual']) {
   if (!html.includes(required)) fail(`My Plan UI missing ${required}`);
 }
-if (!js.includes('/api/asaas/checkout')) fail('My Plan must call the authenticated Cloudflare checkout route');
+const frontendCheckoutPath = usingBuiltArtifact ? '/api/billing/checkout' : '/api/asaas/checkout';
+if (!js.includes(frontendCheckoutPath)) fail(`My Plan must call the authenticated Cloudflare checkout route ${frontendCheckoutPath}`);
 if (js.includes('functions/v1/saas-checkout')) fail('My Plan must not call the legacy checkout Edge Function');
 
 for (const required of [
@@ -44,6 +48,7 @@ for (const required of [
   if (!sql.includes(required)) fail(`D1 billing schema missing ${required}`);
 }
 
+// The Worker keeps the public compatibility aliases while the built browser uses owned /api/billing/* paths.
 for (const required of [
   '/api/asaas/checkout',
   '/api/webhooks/asaas',
@@ -60,4 +65,4 @@ if (runtime.includes('/functions/v1/saas-checkout') || runtime.includes('/functi
 }
 if (runtime.includes('supabase_service_role_key')) fail('Cloudflare billing runtime must not require a Supabase service-role key');
 
-if (!process.exitCode) console.log('PASS: My Plan and Cloudflare D1/Asaas billing scaffold are present');
+if (!process.exitCode) console.log(`PASS: My Plan and Cloudflare D1/Asaas billing scaffold are present (${usingBuiltArtifact ? 'materialized owned billing path' : 'source alias'})`);

@@ -25,8 +25,8 @@
     },
     "core/lib/backup-service.js": {
       "promoted": true,
-      "source": "base:lib/backup-service.js",
-      "sha256": "457f27e9d7f87394b44e74da09afa1f1eef306a6fe53f442c3951fb38c5b8ef7"
+      "source": "cloudflare-license-authority:core/lib/backup-service.js",
+      "sha256": "df4be868c353b1e78f3042486d59d76e2846d325826b295eea144b3d676eab8d"
     },
     "core/lib/encounter-form.js": {
       "promoted": true,
@@ -60,8 +60,8 @@
     },
     "features/clinical-note-feature.js": {
       "promoted": true,
-      "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover",
-      "sha256": "734c56adc0e326b3089a44b762928ea085fc566805c1e04d738677748825b8ec"
+      "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover+delivery3-versioning",
+      "sha256": "9400de2e91d560bf8c2500074146f08e109141ccc3fc8c7dfb2da254b0e44f66"
     },
     "features/patient-fixes.css": {
       "promoted": true,

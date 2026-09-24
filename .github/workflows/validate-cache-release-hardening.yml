@@ -1,0 +1,87 @@
+name: Validate cache release hardening
+
+on:
+  push:
+    branches:
+      - main
+      - fix/cache-staleness-p0
+    paths:
+      - 'public/**'
+      - 'src/**'
+      - 'worker/**'
+      - 'scripts/deploy-cloudflare-billing.ps1'
+      - 'scripts/cutover-cloudflare-runtime.ps1'
+      - 'tests/cache-staleness-p0.test.mjs'
+      - 'tests/deploy-hardening-p01.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/e2e/cache-staleness.spec.mjs'
+      - 'tests/e2e/deploy-version-upgrade.spec.mjs'
+      - 'tests/e2e/server.mjs'
+      - 'tests/helpers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.mjs'
+      - '.github/workflows/validate-cache-release-hardening.yml'
+  pull_request:
+    paths:
+      - 'public/**'
+      - 'src/**'
+      - 'worker/**'
+      - 'scripts/deploy-cloudflare-billing.ps1'
+      - 'scripts/cutover-cloudflare-runtime.ps1'
+      - 'tests/cache-staleness-p0.test.mjs'
+      - 'tests/deploy-hardening-p01.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/e2e/cache-staleness.spec.mjs'
+      - 'tests/e2e/deploy-version-upgrade.spec.mjs'
+      - 'tests/e2e/server.mjs'
+      - 'tests/helpers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.mjs'
+      - '.github/workflows/validate-cache-release-hardening.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: validate-cache-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cache-release:
+    name: Chromium cache release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Validate deploy and cache contracts
+        run: npm run test:deploy-safety
+      - name: Build current release
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify version N to N+1 and stale-cache recovery
+        run: npx playwright test tests/e2e/deploy-version-upgrade.spec.mjs tests/e2e/cache-staleness.spec.mjs
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cache-release-failure-${{ github.run_id }}
+          path: |
+            artifacts/e2e-results
+            artifacts/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

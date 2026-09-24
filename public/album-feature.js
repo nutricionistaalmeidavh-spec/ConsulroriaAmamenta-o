@@ -7,7 +7,7 @@ const VIDEO_EXTENSIONS=new Set(['mp4','mov','webm']);
 const MIME_BY_EXTENSION=Object.freeze({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif',mp4:'video/mp4',mov:'video/quicktime',webm:'video/webm'});
 const IMAGE_MAX_BYTES=12*1024*1024;
 const VIDEO_MAX_BYTES=50*1024*1024;
-let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
+let currentMother='',layer=null,lastTrigger=null,mountRevision=0,reconcileStarted=false;
 
 const fmtDate=value=>{
   if(!value)return 'Sem data';
@@ -18,6 +18,7 @@ const safeFileName=value=>String(value||'arquivo').normalize('NFD').replace(/[\u
 const byId=(items,id)=>items.find(item=>item.id===id)||null;
 const extOf=name=>String(name||'').toLowerCase().split('.').pop()||'';
 const isVideoRow=row=>String(row?.mime_type||'').toLowerCase().startsWith('video/');
+const operationUuid=()=>globalThis.crypto?.randomUUID?.()||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&3|8);return v.toString(16)});
 
 function resolvedMediaMime(file){
   const raw=String(file?.type||'').trim().toLowerCase(),fallback=MIME_BY_EXTENSION[extOf(file?.name)]||'';
@@ -55,19 +56,14 @@ function sheet(title,body){
   layer.innerHTML=`<div class="af-backdrop" data-af-close></div><section class="af-sheet" role="dialog" aria-modal="true" aria-labelledby="af-title"><header><div><small>BIBLIOTECA CLÍNICA</small><h2 id="af-title">${DOC.escapeHTML(title)}</h2></div><button type="button" class="af-close" data-af-close aria-label="Fechar">×</button></header>${body}</section>`;
   document.body.appendChild(layer);layer.addEventListener('keydown',trap);layer.querySelectorAll('[data-af-close]').forEach(x=>x.addEventListener('click',close));requestAnimationFrame(()=>layer.querySelector('.af-close')?.focus());return layer.querySelector('.af-sheet');
 }
-async function mediaRows(motherId){
-  return await DOC.rest(`clinical_media?mother_id=eq.${encodeURIComponent(motherId)}&select=*&order=taken_at.desc,created_at.desc&limit=100`)||[];
-}
-async function signed(storagePath){
-  try{return await DOC.signedClinicalMediaUrl(storagePath,900)}catch{return ''}
-}
+async function mediaRows(motherId){return await DOC.rest(`clinical_media?mother_id=eq.${encodeURIComponent(motherId)}&select=*&order=taken_at.desc,created_at.desc&limit=100`)||[]}
+async function signed(storagePath){try{return await DOC.signedClinicalMediaUrl(storagePath,900)}catch{return ''}}
 function thumbMedia(row,url){
   if(isVideoRow(row))return `<span class="af-video-frame">${url?`<video src="${DOC.escapeHTML(url)}" preload="metadata" muted playsinline aria-hidden="true"></video>`:'<span class="af-media-placeholder">Vídeo clínico</span>'}<span class="af-play" aria-hidden="true">▶</span></span>`;
   return url?`<img src="${DOC.escapeHTML(url)}" alt="">`:'<span class="af-media-placeholder">Imagem clínica</span>';
 }
 async function cardMarkup(motherId,rows){
-  const recent=rows.slice(0,6);
-  const thumbs=await Promise.all(recent.map(async row=>({row,url:await signed(row.storage_path)})));
+  const recent=rows.slice(0,6),thumbs=await Promise.all(recent.map(async row=>({row,url:await signed(row.storage_path)})));
   return `<section class="af-card" data-af-card data-af-mother="${motherId}">
     <div class="af-head"><div><small>REGISTROS</small><h2>Biblioteca clínica</h2><p>Fotos e vídeos privados vinculados à paciente, bebê e atendimento quando houver contexto clínico.</p></div><button type="button" class="af-primary" data-af-add>Adicionar foto ou vídeo</button></div>
     ${thumbs.length?`<div class="af-grid">${thumbs.map(({row,url})=>`<button type="button" class="af-thumb" data-af-open="${row.id}" aria-label="Abrir ${DOC.escapeHTML(row.category||'mídia clínica')}">${thumbMedia(row,url)}<b>${DOC.escapeHTML(row.category||'Outro')}</b><small>${isVideoRow(row)?'Vídeo · ':'Foto · '}${DOC.escapeHTML(fmtDate(row.taken_at||row.created_at))}</small></button>`).join('')}</div>`:`<div class="af-empty"><strong>Nenhuma mídia clínica registrada</strong><span>Fotos e vídeos serão organizados por data e contexto do atendimento.</span></div>`}
@@ -83,8 +79,7 @@ async function openDetail(motherId,id,trigger){
   sheet(row.category||'Mídia clínica',`<div class="af-detail">${preview}<dl><div><dt>Tipo</dt><dd>${video?'Vídeo':'Foto'}</dd></div><div><dt>Paciente</dt><dd>${DOC.escapeHTML(context.mother.name)}</dd></div><div><dt>Bebê</dt><dd>${DOC.escapeHTML(baby?.name||'Não vinculado')}</dd></div><div><dt>Data</dt><dd>${DOC.escapeHTML(fmtDate(row.taken_at||row.created_at))}</dd></div><div><dt>Atendimento</dt><dd>${DOC.escapeHTML(row.encounter_id?`${row.encounter_id.slice(0,8)}…`:'Não vinculado')}</dd></div><div><dt>Arquivo</dt><dd>${DOC.escapeHTML(row.file_name||'Sem nome')}</dd></div></dl>${row.caption?`<p>${DOC.escapeHTML(row.caption)}</p>`:''}</div>`);
 }
 async function requireClinicalMediaConsent(motherId,kind='image'){
-  const rows=await DOC.consents(motherId);
-  const consent=rows.find(row=>row.consent_type==='clinical_media');
+  const rows=await DOC.consents(motherId),consent=rows.find(row=>row.consent_type==='clinical_media');
   if(!consent?.granted||consent?.revoked_at)throw new Error('A autorização para fotos, vídeos e documentos clínicos não está ativa. Atualize o consentimento em Editar cadastro antes de adicionar mídia.');
   if(kind==='video'&&consent.version!=='1.1')throw new Error('A autorização atual não inclui vídeos. Em Editar cadastro, confirme novamente “Fotos, vídeos e documentos clínicos” antes de enviar o vídeo.');
   return consent;
@@ -93,8 +88,7 @@ async function openUploader(motherId,trigger){
   lastTrigger=trigger||document.activeElement;
   const context=await DOC.patientContext(motherId);if(!context)throw new Error('Paciente não encontrada.');
   await requireClinicalMediaConsent(motherId,'image');
-  const active=context.activeBabyId||context.babies[0]?.id||'';
-  const latest=await DOC.latestEncounter(motherId,active).catch(()=>null);
+  const active=context.activeBabyId||context.babies[0]?.id||'',latest=await DOC.latestEncounter(motherId,active).catch(()=>null);
   const form=sheet('Adicionar foto ou vídeo',`<form class="af-form" data-af-form>
     <label><span>Foto ou vídeo clínico</span><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm,.mov" required data-af-file><small class="af-help">Fotos: até 12 MB. Vídeos: MP4, MOV ou WebM, até 50 MB. Arquivos maiores são bloqueados antes do envio.</small></label>
     <label><span>Categoria</span><select data-af-category>${CATEGORIES.map(item=>`<option>${DOC.escapeHTML(item)}</option>`).join('')}</select></label>
@@ -107,45 +101,40 @@ async function openUploader(motherId,trigger){
   form.querySelectorAll('[data-af-close]').forEach(x=>x.addEventListener('click',close));
   form.addEventListener('submit',async event=>{
     event.preventDefault();
-    const button=form.querySelector('button[type="submit"]'),file=form.querySelector('[data-af-file]').files?.[0];
-    let media;
+    const button=form.querySelector('button[type="submit"]'),file=form.querySelector('[data-af-file]').files?.[0];let media;
     try{media=validateMediaFile(file);await requireClinicalMediaConsent(motherId,media.kind)}catch(error){DOC.toast(error.message,'error');return}
     button.disabled=true;button.textContent='Preparando…';
-    const owner=DOC.userId(),babyId=form.querySelector('[data-af-baby]').value||null;
-    let encounter=latest;
+    const owner=DOC.userId(),babyId=form.querySelector('[data-af-baby]').value||null;let encounter=latest;
     if(babyId&&babyId!==active)encounter=await DOC.latestEncounter(motherId,babyId).catch(()=>null);
     if(!form.querySelector('[data-af-link-encounter]').checked)encounter=null;
-    const storagePath=`${owner}/patient-album/${motherId}/${Date.now()}-${safeFileName(file.name)}`;
+    const operationKey=form.dataset.afOperationKey||(form.dataset.afOperationKey=operationUuid());
+    const storagePath=`${owner}/patient-album/${motherId}/${operationKey}-${safeFileName(file.name)}`;
     const progress=form.querySelector('[data-af-progress]'),bar=form.querySelector('[data-af-progress-bar]'),progressText=form.querySelector('[data-af-progress-text]');
     try{
       progress.hidden=false;
       await DOC.uploadClinicalMedia(storagePath,file,value=>{
         const pct=Math.max(0,Math.min(100,Number(value)||0));
         bar.style.width=`${pct}%`;progressText.textContent=`Enviando ${media.kind==='video'?'vídeo':'foto'}… ${pct}%`;button.textContent=`Enviando… ${pct}%`;
-      },media.mime);
-      try{
-        await DOC.rest('clinical_media',{method:'POST',headers:{Prefer:'return=representation'},body:{
-          mother_id:motherId,baby_id:babyId,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,
-          storage_path:storagePath,mime_type:media.mime,file_name:file.name||(media.kind==='video'?'video':'imagem'),file_size:file.size,
-          category:form.querySelector('[data-af-category]').value||'Outro',caption:form.querySelector('[data-af-caption]').value.trim(),taken_at:new Date().toISOString()
-        }});
-      }catch(error){await DOC.deleteClinicalMedia(storagePath).catch(()=>{});throw error}
+      },media.mime,operationKey);
+      await DOC.confirmClinicalMedia(operationKey,storagePath,{
+        mother_id:motherId,baby_id:babyId,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,
+        mime_type:media.mime,file_name:file.name||(media.kind==='video'?'video':'imagem'),file_size:file.size,
+        category:form.querySelector('[data-af-category]').value||'Outro',caption:form.querySelector('[data-af-caption]').value.trim(),taken_at:new Date().toISOString()
+      });
       close();DOC.toast(media.kind==='video'?'Vídeo adicionado à biblioteca.':'Foto adicionada à biblioteca.');currentMother='';await mount(motherId);
     }catch(error){DOC.toast(error.message||'Não foi possível salvar a mídia.','error');button.disabled=false;button.textContent='Salvar na biblioteca';progress.hidden=true}
   });
 }
 async function mount(motherId){
-  const revision=++mountRevision;
-  if(!motherId)return;
+  const revision=++mountRevision;if(!motherId)return;
+  if(!reconcileStarted){reconcileStarted=true;DOC.reconcileClinicalMediaUploads?.(3600).catch(()=>{})}
   if(motherId===currentMother&&document.querySelector('[data-af-card]'))return;
   currentMother=motherId;document.querySelectorAll('[data-af-card]').forEach(x=>x.remove());
   const screen=document.querySelector('[data-screen="patient"]');if(!screen)return;
   try{
     const [rows,context]=await Promise.all([mediaRows(motherId),DOC.patientContext(motherId)]);
-    if(revision!==mountRevision)return;
-    if(!context)return;
-    const markup=await cardMarkup(motherId,rows);
-    if(revision!==mountRevision)return;
+    if(revision!==mountRevision)return;if(!context)return;
+    const markup=await cardMarkup(motherId,rows);if(revision!==mountRevision)return;
     document.querySelectorAll('[data-af-card]').forEach(x=>x.remove());
     const wrap=document.createElement('div');wrap.innerHTML=markup;const card=wrap.firstElementChild;
     const terms=screen.querySelector('[data-df-terms-card]'),target=terms||screen.querySelector('[data-pf-prontuario]')||screen.querySelector('.patient-detail-grid')||screen.lastElementChild;

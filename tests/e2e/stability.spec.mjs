@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {credentials} from '../helpers/cloudflare-local.mjs';
 
 async function login(page) {
@@ -48,7 +48,7 @@ test('double submit and lost create response reuse one key and create one patien
   await expect(page.locator('[data-patient-title]')).toHaveText('Retry synthetic patient + Retry synthetic baby');
   expect(attempts.length).toBe(2);
   expect(attempts[0]).toBeTruthy();expect(attempts[1]).toBe(attempts[0]);
-  expect(page.url()).toContain(savedId);
+  await expect(page).toHaveURL(new RegExp(savedId));
   const session=await page.evaluate(()=>JSON.parse(localStorage.getItem('debora-lactacao-session')));
   const rows=await (await page.request.get('/api/clinical/records/mothers?name=eq.Retry%20synthetic%20patient',{headers:{authorization:`Bearer ${session.access_token}`}})).json();
   expect(rows.length).toBe(1);

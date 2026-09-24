@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [pkgRaw, pipeline, cutover, billingDeploy] = await Promise.all([
+const [pkgRaw, cutover, billingDeploy] = await Promise.all([
   readFile(new URL('../package.json', import.meta.url), 'utf8'),
-  readFile(new URL('../.woodpecker/debora-lactacao.yaml', import.meta.url), 'utf8'),
   readFile(new URL('./cutover-cloudflare-runtime.ps1', import.meta.url), 'utf8'),
   readFile(new URL('./deploy-cloudflare-billing.ps1', import.meta.url), 'utf8'),
 ]);
@@ -20,13 +19,13 @@ assert.match(billingDeploy, /cutover-cloudflare-runtime\.ps1/i);
 assert.match(billingDeploy, /billing_backend/i);
 
 assert.doesNotMatch(
-  pipeline,
-  /wrangler@4\s+deploy\s+--config\s+wrangler\.jsonc/i,
-  'Woodpecker must not deploy the base wrangler.jsonc directly because it has no clinical D1/R2 bindings',
+  deployScript,
+  /wrangler(?:@4)?\s+deploy\s+--config\s+wrangler\.jsonc/i,
+  'deploy:production must not bypass the guarded cutover by deploying base wrangler.jsonc directly',
 );
-assert.match(pipeline, /npm\s+run\s+deploy:production/i,
-  'Woodpecker must use the guarded production deploy entrypoint');
 
+assert.match(cutover, /wrangler@4['",\s]+deploy/i,
+  'guarded cutover must contain the Cloudflare deploy command');
 for (const marker of ['CLINICAL_DB', 'CLINICAL_FILES', 'wrangler.cutover.generated.json']) {
   assert.ok(cutover.includes(marker), `cutover script must preserve ${marker}`);
 }

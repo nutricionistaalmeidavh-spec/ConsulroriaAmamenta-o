@@ -21,6 +21,140 @@ function parseRecord(row) {
   }
 }
 
+function safeField(value) {
+  const field = String(value || '');
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(field) ? field : '';
+}
+
+function jsonField(field) {
+  return `json_extract(record_json,'$.${field}')`;
+}
+
+function parseFilter(raw) {
+  const value = String(raw || '');
+  const dot = value.indexOf('.');
+  if (dot <= 0) return { operator: 'eq', expected: value };
+  return { operator: value.slice(0, dot), expected: value.slice(dot + 1) };
+}
+
+function parseInValues(expected) {
+  return String(expected || '')
+    .replace(/^\(|\)$/g, '')
+    .split(',')
+    .map((item) => decodeURIComponent(item.trim().replace(/^"|"$/g, '')))
+    .filter((item) => item !== '');
+}
+
+export function buildOwnedRecordPageQuery(table, ownerId, url) {
+  if (!safeField(table) || !ownerId || !url) return null;
+  const where = ['table_name = ?', 'owner_id = ?'];
+  const bindings = [String(table), String(ownerId)];
+
+  for (const [rawField, rawValue] of url.searchParams.entries()) {
+    if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(rawField) || rawField === 'or') continue;
+    const field = safeField(rawField);
+    if (!field) return null;
+    const expression = jsonField(field);
+    const { operator, expected } = parseFilter(rawValue);
+
+    if (operator === 'eq') {
+      where.push(`${expression} = ?`);
+      bindings.push(expected);
+    } else if (operator === 'neq') {
+      where.push(`${expression} != ?`);
+      bindings.push(expected);
+    } else if (operator === 'is' && expected === 'null') {
+      where.push(`${expression} IS NULL`);
+    } else if (operator === 'is') {
+      where.push(`${expression} = ?`);
+      bindings.push(expected);
+    } else if (operator === 'not' && expected === 'is.null') {
+      where.push(`${expression} IS NOT NULL`);
+    } else if (operator === 'not') {
+      where.push(`${expression} != ?`);
+      bindings.push(expected);
+    } else if (operator === 'in') {
+      const values = parseInValues(expected);
+      if (!values.length) return null;
+      where.push(`${expression} IN (${values.map(() => '?').join(',')})`);
+      bindings.push(...values);
+    } else if (operator === 'like') {
+      where.push(`CAST(${expression} AS TEXT) LIKE ?`);
+      bindings.push(expected);
+    } else if (operator === 'ilike') {
+      where.push(`lower(CAST(${expression} AS TEXT)) LIKE lower(?)`);
+      bindings.push(expected);
+    } else if (['gt', 'gte', 'lt', 'lte'].includes(operator)) {
+      const symbols = { gt: '>', gte: '>=', lt: '<', lte: '<=' };
+      where.push(`${expression} ${symbols[operator]} ?`);
+      bindings.push(expected);
+    } else {
+      return null;
+    }
+  }
+
+  const orderClauses = [];
+  const order = String(url.searchParams.get('order') || '').trim();
+  if (order) {
+    for (const part of order.split(',')) {
+      const [rawField, rawDirection = 'asc'] = part.split('.');
+      const field = safeField(rawField);
+      const direction = String(rawDirection || 'asc').toLowerCase();
+      if (!field || !['asc', 'desc'].includes(direction)) return null;
+      orderClauses.push(`${jsonField(field)} ${direction.toUpperCase()}`);
+    }
+  }
+
+  const rawOffset = Number(url.searchParams.get('offset') || 0);
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.trunc(rawOffset) : 0;
+  const limitParam = url.searchParams.get('limit');
+  const rawLimit = limitParam === null ? Number.NaN : Number(limitParam);
+  const limit = Number.isFinite(rawLimit) && rawLimit >= 0 ? Math.trunc(rawLimit) : null;
+  const whereSql = where.join(' AND ');
+  const countBindings = [...bindings];
+  let sql = `SELECT record_key,owner_id,record_json,COUNT(*) OVER() AS __total FROM supabase_records WHERE ${whereSql}`;
+  if (orderClauses.length) sql += ` ORDER BY ${orderClauses.join(', ')}`;
+  if (limit !== null) {
+    sql += ' LIMIT ? OFFSET ?';
+    bindings.push(limit, offset);
+  } else if (offset > 0) {
+    sql += ' LIMIT -1 OFFSET ?';
+    bindings.push(offset);
+  }
+
+  return {
+    sql,
+    bindings,
+    countSql: `SELECT COUNT(*) AS n FROM supabase_records WHERE ${whereSql}`,
+    countBindings,
+    offset,
+    limit,
+  };
+}
+
+export async function queryOwnedRecordPage(db, table, ownerId, url) {
+  if (!db) return null;
+  const built = buildOwnedRecordPageQuery(table, ownerId, url);
+  if (!built) return null;
+  const result = await db.prepare(built.sql).bind(...built.bindings).all();
+  const rawRows = result.results || [];
+  const entries = rawRows.map(parseRecord).filter(Boolean);
+  let total = Number(rawRows[0]?.__total || 0);
+  if (!rawRows.length && built.offset > 0) {
+    const row = await db.prepare(built.countSql).bind(...built.countBindings).first();
+    total = Number(row?.n || 0);
+  }
+  return { entries, total, offset: built.offset, limit: built.limit };
+}
+
+export async function hasUnownedRows(db, table) {
+  if (!db || !table) return false;
+  const row = await db.prepare(
+    'SELECT 1 AS found FROM supabase_records WHERE table_name = ? AND owner_id IS NULL LIMIT 1',
+  ).bind(table).first();
+  return Boolean(row?.found);
+}
+
 export async function ownerRows(db, table, ownerId) {
   if (!db || !table || !ownerId) return [];
   const result = await db.prepare(

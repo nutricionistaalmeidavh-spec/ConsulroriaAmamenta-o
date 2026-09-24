@@ -1,0 +1,105 @@
+name: Validate E2E
+
+on:
+  push:
+    branches:
+      - main
+      - test/p0-e2e-hardening
+    paths:
+      - 'app/**'
+      - 'public/**'
+      - 'worker/**'
+      - 'cloudflare/**'
+      - 'src/**'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'scripts/materialize-cloudflare-frontend.mjs'
+      - 'scripts/normalize-growth-runtime.mjs'
+      - 'tests/e2e/**'
+      - 'tests/e2e-mobile/**'
+      - 'tests/helpers/**'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/block-6-rpc-closure.test.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - 'playwright.config.mjs'
+      - 'playwright.mobile.config.mjs'
+      - 'playwright.smoke.config.mjs'
+      - '.github/workflows/validate-e2e.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'public/**'
+      - 'worker/**'
+      - 'cloudflare/**'
+      - 'src/**'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'scripts/materialize-cloudflare-frontend.mjs'
+      - 'scripts/normalize-growth-runtime.mjs'
+      - 'tests/e2e/**'
+      - 'tests/e2e-mobile/**'
+      - 'tests/helpers/**'
+      - 'tests/package-lifecycle-cloudflare.test.mjs'
+      - 'tests/service-worker-update.test.mjs'
+      - 'tests/cloudflare-password-recovery.test.mjs'
+      - 'tests/cloudflare-recovery-d1.test.mjs'
+      - 'tests/block-6-rpc-closure.test.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - 'playwright.config.mjs'
+      - 'playwright.mobile.config.mjs'
+      - 'playwright.smoke.config.mjs'
+      - '.github/workflows/validate-e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: validate-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Chromium browser gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Run stability contracts
+        run: npm run test:stability
+      - name: Run P1 resilience contracts
+        run: npm run test:p1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser E2E suite
+        run: npm run test:e2e
+      - name: Run P2 mobile smoke
+        run: npm run test:e2e:mobile
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.run_id }}
+          path: |
+            artifacts/e2e-results
+            artifacts/playwright-report
+            artifacts/e2e-mobile-results
+            artifacts/playwright-mobile-report
+          if-no-files-found: ignore
+          retention-days: 7

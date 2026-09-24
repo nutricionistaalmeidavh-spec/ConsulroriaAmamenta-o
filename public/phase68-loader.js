@@ -2,9 +2,9 @@ import './package-card-singleton-guard.js';
 
 let phase68Started=false;
 function css(href,key){if(document.querySelector(`link[data-${key}]`))return;const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.setAttribute(`data-${key}`,'1');document.head.appendChild(link)}
-async function start(){
+export async function startPhase68(){
   if(phase68Started)return;
-  if(!window.DeboraDocuments||!window.DeboraReferrals||!window.DeboraAlbum||!document.querySelector('[data-app-root]')){setTimeout(start,100);return}
+  if(!window.DeboraDocuments||!window.DeboraReferrals||!window.DeboraAlbum||!document.querySelector('[data-app-root]')){setTimeout(startPhase68,100);return}
   phase68Started=true;
   try{
     css('/record-export-feature.css','phase68-export');
@@ -16,6 +16,6 @@ async function start(){
     await import('./patient-workspace.js');
     await import('./patient-records-hub.js');
     await import('./package-audit-feature.js');
-  }catch(error){phase68Started=false;console.error('Falha ao carregar fases clínicas 6-8',error);setTimeout(start,1000)}
+  }catch(error){phase68Started=false;console.error('Falha ao carregar fases clínicas 6-8',error);setTimeout(startPhase68,1000)}
 }
-start();
+startPhase68();

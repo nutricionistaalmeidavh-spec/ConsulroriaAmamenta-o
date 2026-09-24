@@ -8,7 +8,9 @@ const demoSource = readFileSync(new URL('../public/demo-feature.js', import.meta
 const bootstrapSource = readFileSync(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
 const clinicalNoteSource = readFileSync(new URL('../public/clinical-source/features/clinical-note-feature.js', import.meta.url), 'utf8');
 const clinicalManifest = JSON.parse(readFileSync(new URL('../public/clinical-source/manifest.json', import.meta.url), 'utf8'));
-const packageSource = readFileSync(new URL('../worker/package-lifecycle-runtime.js', import.meta.url), 'utf8');
+const packageFacadeSource = readFileSync(new URL('../worker/package-session-atomic-runtime.js', import.meta.url), 'utf8');
+const packageIntegritySource = readFileSync(new URL('../worker/package-integrity-atomic-runtime.js', import.meta.url), 'utf8');
+const packageSource = `${packageFacadeSource}\n${packageIntegritySource}`;
 const billingSource = readFileSync(new URL('../public/billing-v2.js', import.meta.url), 'utf8');
 const appDataSource = readFileSync(new URL('../public/clinical-source/core/lib/app-data.js', import.meta.url), 'utf8');
 
@@ -26,14 +28,26 @@ class FakeD1 {
     this.records.set(`${table}:${key}`, { table, key, ownerId, record: { ...record } });
   }
   table(table) { return [...this.records.values()].filter((row) => row.table === table).map((row) => row.record); }
+  result(rows) {
+    return { results: rows.map((row) => ({
+      record_key: row.key,
+      owner_id: row.ownerId,
+      record_json: JSON.stringify(row.record),
+    })) };
+  }
   async all(sql, args) {
-    if (/SELECT record_key,owner_id,record_json FROM supabase_records WHERE table_name = \?/i.test(sql)) {
+    const values = [...this.records.values()];
+    if (/table_name\s*=\s*'member_portal_access'[\s\S]+member_user_id/i.test(sql)) {
+      return this.result(values.filter((row) => row.table === 'member_portal_access' && String(row.record?.member_user_id || '') === String(args[0] || '')));
+    }
+    if (/table_name\s*=\s*'member_portal_access'[\s\S]+lower\(trim\(json_extract\(record_json,'\$\.email'\)\)\)/i.test(sql)) {
+      const email = String(args[0] || '').trim().toLowerCase();
+      return this.result(values.filter((row) => row.table === 'member_portal_access' && String(row.record?.email || '').trim().toLowerCase() === email));
+    }
+    if (/SELECT record_key,owner_id,record_json FROM supabase_records[\s\S]+WHERE table_name = \?/i.test(sql)) {
       const table = String(args[0]);
-      return { results: [...this.records.values()].filter((row) => row.table === table).map((row) => ({
-        record_key: row.key,
-        owner_id: row.ownerId,
-        record_json: JSON.stringify(row.record),
-      })) };
+      const ownerId = String(args[1] || '');
+      return this.result(values.filter((row) => row.table === table && (String(row.ownerId || '') === ownerId || (!row.ownerId && String(row.record?.owner_id || '') === ownerId))));
     }
     throw new Error(`unexpected all SQL: ${sql}`);
   }
@@ -141,7 +155,8 @@ test('materialized clinical note hash stays in sync with the canonical manifest'
   assert.equal(clinicalManifest.modules['features/clinical-note-feature.js'].sha256, digest);
 });
 
-test('package v2 RPCs are owned by the D1 package lifecycle runtime and accept the live frontend payload', () => {
+test('package v2 RPCs are owned by the canonical atomic package runtimes and accept the live frontend payload', () => {
+  assert.match(packageFacadeSource, /handleAtomicPackageIntegrityRuntime/);
   assert.match(packageSource, /add_care_package_item_v2/);
   assert.match(packageSource, /consume_care_package_item_v2/);
   assert.match(packageSource, /p_request_key/);

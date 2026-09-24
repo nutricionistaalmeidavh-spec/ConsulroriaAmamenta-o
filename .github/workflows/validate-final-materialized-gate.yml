@@ -1,0 +1,100 @@
+name: Validate final materialized gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-final-materialized-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  final-materialized:
+    name: Final materialized build gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build final materialized artifact once
+        run: npm run build
+
+      - name: Run complete clinical regression matrix on final artifact
+        run: node --test tests/clinical-source-*.test.mjs
+
+      - name: Run accumulated runtime and integrity regressions without rebuilding
+        run: |
+          node --test \
+            tests/session-stability.test.mjs \
+            tests/frontend-stability.test.mjs \
+            tests/patient-edit-atomic.test.mjs \
+            tests/cloudflare-recovery-d1.test.mjs \
+            tests/delivery6-regressions.test.mjs \
+            tests/package-lifecycle-cloudflare.test.mjs \
+            tests/service-worker-update.test.mjs \
+            tests/cloudflare-password-recovery.test.mjs \
+            tests/block-6-rpc-closure.test.mjs \
+            tests/block-7-no-core-fallback.test.mjs \
+            tests/block-9-d1-hardening.test.mjs \
+            tests/block-10-zero-supabase-runtime.test.mjs \
+            tests/deploy-hardening-p01.test.mjs
+
+      - name: Run commercial and SaaS regression contracts without rebuilding
+        run: |
+          node scripts/test-commercial-funnel.mjs
+          node scripts/test-commercial-auth-recovery.mjs
+          node scripts/test-commercial-checkout-return.mjs
+          node scripts/test-commercial-landing.mjs
+          node scripts/test-deferred-email-flow.mjs
+          node scripts/test-preconfirm-checkout.mjs
+          node scripts/test-duplicate-signup-flow.mjs
+          node scripts/test-saas-foundation.mjs
+          node scripts/test-saas-plans.mjs
+          node scripts/test-saas-enforcement.mjs
+          node scripts/test-billing-scaffold.mjs
+          node scripts/test-cloudflare-asaas.mjs
+          node scripts/test-cloudflare-billing-d1.mjs
+
+      - name: Verify the final materialized artifact and canonical routing
+        run: |
+          node scripts/test-canonical-app-routing.mjs
+          test -f dist/index.html
+          test -f dist/app/index.html
+          test -f dist/debora/index.html
+          test -f dist/comercial/index.html
+          test -f dist/clinical-source/index.html
+          test -f dist/clinical-source/core/app-shell.js
+          test -f dist/clinical-source/core/lib/supabase-client.js
+          test -f dist/clinical-source/features/clinical-note-feature.js
+          test -f dist/clinical-source/manifest.json
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run complete desktop E2E on the same final artifact
+        run: npx playwright test
+
+      - name: Run mobile E2E on the same final artifact
+        run: npx playwright test --config=playwright.mobile.config.mjs
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-materialized-failure-${{ github.run_id }}
+          path: |
+            e2e-results
+            playwright-report
+          if-no-files-found: ignore

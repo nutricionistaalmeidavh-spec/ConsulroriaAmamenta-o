@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const runtime = readFileSync('worker/cloudflare-billing-runtime.js', 'utf8');
 const domain = readFileSync('worker/domain-entry.js', 'utf8');
 const schema = readFileSync('cloudflare/billing-schema.sql', 'utf8');
 const pendingSchema = readFileSync('cloudflare/billing-auth-schema.sql', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
-const plan = readFileSync('public/comercial/plan.js', 'utf8');
-const planHtml = readFileSync('public/comercial/plano.html', 'utf8');
+const builtPlan = 'dist/comercial/plan.js';
+const builtPlanHtml = 'dist/comercial/plano.html';
+const usingBuiltArtifact = existsSync(builtPlan) && existsSync(builtPlanHtml);
+const plan = readFileSync(usingBuiltArtifact ? builtPlan : 'public/comercial/plan.js', 'utf8');
+const planHtml = readFileSync(usingBuiltArtifact ? builtPlanHtml : 'public/comercial/plano.html', 'utf8');
 
 assert.match(wrangler, /"main"\s*:\s*"worker\/domain-entry\.js"/);
 assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
@@ -74,8 +77,9 @@ assert.match(runtime, /ON CONFLICT\(provider,external_event_id\) DO NOTHING/);
 assert.match(runtime, /external_subscription_id=\?/);
 assert.match(runtime, /renewal\s*:\s*mapped\.renewal/);
 
-assert.match(plan, /fetch\('\/api\/asaas\/checkout'/);
+const expectedPlanCheckout = usingBuiltArtifact ? /fetch\('\/api\/billing\/checkout'/ : /fetch\('\/api\/asaas\/checkout'/;
+assert.match(plan, expectedPlanCheckout);
 assert.doesNotMatch(plan, /functions\/v1\/saas-checkout/);
 assert.match(planHtml, /checkout é criado no Asaas pelo backend do Cloudflare/i);
 
-console.log('Cloudflare D1 + Asaas production/sandbox contract: OK');
+console.log(`Cloudflare D1 + Asaas production/sandbox contract: OK (${usingBuiltArtifact ? 'materialized owned billing path' : 'source alias'})`);

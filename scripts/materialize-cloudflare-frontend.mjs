@@ -86,6 +86,60 @@ function retireDestructiveClinicalDelete(source) {
     .replace(/<button type="button" class="danger" data-cn-delete>Excluir atendimento<\/button>/g, '');
 }
 
+function stabilizePatientDetailNavigation(source) {
+  const start = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;`;
+  const stableStart = `  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }\n  currentPatientId = patient.mother.id;\n  if (navigateRoute) {\n    const route = routeFor('patient', patient.mother.id);\n    if (location.hash !== route) history.pushState({}, '', route);\n  }`;
+  const finish = `  if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');`;
+  const stableFinish = `  showScreen('patient');`;
+  let next = String(source);
+  if (!next.includes(stableStart)) next = next.replace(start, stableStart);
+  return next.replace(finish, stableFinish);
+}
+
+function hardenPatientClinicalProjection(source) {
+  let next = String(source);
+  const loadMarker = `  renderBabyDetails(selectedBaby);\n  try {`;
+  const hardenedLoad = `  renderBabyDetails(selectedBaby);\n  const weightsRoot = document.querySelector('[data-patient-weights-live]');\n  const timelineRoot = document.querySelector('[data-patient-timeline-live]');\n  if (weightsRoot) weightsRoot.innerHTML = '<div class="empty-live">Carregando pesos…</div>';\n  if (timelineRoot) timelineRoot.innerHTML = '<div class="empty-live">Carregando histórico clínico…</div>';\n  try {`;
+  if (!next.includes('Carregando histórico clínico…')) next = next.replace(loadMarker, hardenedLoad);
+
+  const catchMarker = `  } catch (error) { reportError(error); }\n  showScreen('patient');`;
+  const hardenedCatch = `  } catch (error) {\n    if (weightsRoot) weightsRoot.innerHTML = '<div class="empty-live">Não foi possível carregar os pesos desta paciente.</div>';\n    if (timelineRoot) timelineRoot.innerHTML = '<div class="empty-live">Não foi possível carregar o histórico clínico desta paciente.</div>';\n    reportError(error);\n  }\n  showScreen('patient');`;
+  if (!next.includes('Não foi possível carregar o histórico clínico desta paciente.')) next = next.replace(catchMarker, hardenedCatch);
+  return next;
+}
+
+function guardPatientConsentEdit(source) {
+  let next = String(source);
+  if (!next.includes('let patientConsentLoadReady = true;')) {
+    next = next.replace('let patientSaveAttempt = null;\npatientForm?.addEventListener', 'let patientSaveAttempt = null;\nlet patientConsentLoadReady = true;\npatientForm?.addEventListener');
+  }
+
+  const submitStart = `patientForm?.addEventListener('submit', async (event) => {\n  event.preventDefault();\n  if (patientSaveBusy) return;`;
+  const guardedSubmitStart = `patientForm?.addEventListener('submit', async (event) => {\n  event.preventDefault();\n  if (editingPatientId && !patientConsentLoadReady) {\n    const blockedStatus = document.querySelector('[data-patient-form-status]');\n    if (blockedStatus) {\n      blockedStatus.textContent = 'As autorizações não foram carregadas. Reabra o cadastro antes de salvar.';\n      blockedStatus.classList.add('error');\n    }\n    return;\n  }\n  if (patientSaveBusy) return;`;
+  if (!next.includes('As autorizações não foram carregadas. Reabra o cadastro antes de salvar.')) next = next.replace(submitStart, guardedSubmitStart);
+
+  const formStart = `  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientForm.reset();`;
+  const guardedFormStart = `  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientConsentLoadReady = !motherId;\n  patientForm.reset();\n  const formSubmitButtons = [...patientForm.querySelectorAll('[type="submit"]')];\n  const formStatus = document.querySelector('[data-patient-form-status]');\n  formSubmitButtons.forEach((button) => { button.disabled = Boolean(motherId); });\n  if (formStatus) { formStatus.textContent = ''; formStatus.classList.remove('error'); }`;
+  if (!next.includes('patientConsentLoadReady = !motherId;')) next = next.replace(formStart, guardedFormStart);
+
+  const consentFinish = `      for (const [name, type] of Object.entries(pairs)) { const el = patientForm.elements.namedItem(name); if (el) el.checked = Boolean(map[type]); }\n    } catch (error) { reportError(error); }\n  }\n  if (navigateRoute)`;
+  const guardedConsentFinish = `      for (const [name, type] of Object.entries(pairs)) { const el = patientForm.elements.namedItem(name); if (el) el.checked = Boolean(map[type]); }\n      patientConsentLoadReady = true;\n    } catch (error) {\n      patientConsentLoadReady = false;\n      if (formStatus) {\n        formStatus.textContent = 'Não foi possível carregar as autorizações. O cadastro foi bloqueado para evitar alterações acidentais.';\n        formStatus.classList.add('error');\n      }\n      reportError(error);\n    } finally {\n      formSubmitButtons.forEach((button) => { button.disabled = !patientConsentLoadReady; });\n    }\n  } else {\n    formSubmitButtons.forEach((button) => { button.disabled = false; });\n  }\n  if (navigateRoute)`;
+  if (!next.includes('O cadastro foi bloqueado para evitar alterações acidentais.')) next = next.replace(consentFinish, guardedConsentFinish);
+  return next;
+}
+
+function hardenClinicalNoteSaveIntegrity(source) {
+  let next = String(source);
+  next = next.replace(
+    "async function cnFlush(){clearTimeout(cnState.saveTimer);const ta=document.querySelector('#cn-note');if(ta)await cnSave(ta.value,{force:true}).catch(()=>{})}",
+    "async function cnFlush(){clearTimeout(cnState.saveTimer);const ta=document.querySelector('#cn-note');if(ta)await cnSave(ta.value,{force:true})}"
+  );
+  const oldWire = "function cnWireOverlay(){const o=document.querySelector('#cn-overlay'),ta=o?.querySelector('#cn-note');if(!o||!ta)return;ta.addEventListener('input',()=>cnScheduleSave(ta.value));o.querySelector('[data-cn-close]').onclick=async()=>{await cnFlush();cnClose()};o.querySelector('[data-cn-back]').onclick=async()=>{await cnFlush();if(cnState.direction==='backward')cnInvoke(cnState.pendingButton);else cnClose()};o.querySelector('[data-cn-continue]').onclick=async()=>{await cnFlush();if(cnState.direction==='forward')cnInvoke(cnState.pendingButton);else cnClose()};o.querySelector('#cn-addendum-save')?.addEventListener('click',cnAddAddendum)}";
+  const newWire = "function cnWireOverlay(){const o=document.querySelector('#cn-overlay'),ta=o?.querySelector('#cn-note');if(!o||!ta)return;ta.addEventListener('input',()=>cnScheduleSave(ta.value));const guard=async(action)=>{try{await cnFlush();action()}catch(e){console.warn('Prontuário não salvo',e)}};o.querySelector('[data-cn-close]').onclick=()=>guard(cnClose);o.querySelector('[data-cn-back]').onclick=()=>guard(()=>{if(cnState.direction==='backward')cnInvoke(cnState.pendingButton);else cnClose()});o.querySelector('[data-cn-continue]').onclick=()=>guard(()=>{if(cnState.direction==='forward')cnInvoke(cnState.pendingButton);else cnClose()});o.querySelector('#cn-addendum-save')?.addEventListener('click',cnAddAddendum)}";
+  if (!next.includes("console.warn('Prontuário não salvo',e)")) next = next.replace(oldWire, newWire);
+  return next;
+}
+
 export function normalizeCloudflareFrontendSource(source, relativePath = '') {
   let next = String(source);
 
@@ -116,6 +170,13 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
 
   if (relativePath === 'public/clinical-source/features/clinical-note-feature.js') {
     next = retireDestructiveClinicalDelete(next);
+    next = hardenClinicalNoteSaveIntegrity(next);
+  }
+
+  if (relativePath === 'public/clinical-source/core/app-shell.js') {
+    next = stabilizePatientDetailNavigation(next);
+    next = hardenPatientClinicalProjection(next);
+    next = guardPatientConsentEdit(next);
   }
 
   return next;

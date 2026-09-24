@@ -1,0 +1,117 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { hardenDelivery1AppShell } from '../scripts/harden-delivery1-integrity.mjs';
+import { transformDelivery4Billing } from '../scripts/harden-delivery4-package-billing.mjs';
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+const workflowPath = '.github/workflows/validate-final-materialized-gate.yml';
+const e2ePath = 'tests/e2e/final-materialized-clinical-flow.spec.mjs';
+
+test('Stage 12 has a dedicated final gate over one materialized build', () => {
+  assert.equal(existsSync(workflowPath), true, 'Stage 12 final workflow must exist');
+  const workflow = read(workflowPath);
+  const build = workflow.indexOf('npm run build');
+  const regressions = workflow.indexOf('node --test tests/clinical-source-*.test.mjs');
+  const desktop = workflow.indexOf('npx playwright test');
+  const mobile = workflow.indexOf('playwright.mobile.config.mjs');
+  assert.ok(build >= 0, 'final gate must materialize/build first');
+  assert.ok(regressions > build, 'full clinical regressions must run after the final build');
+  assert.ok(desktop > regressions, 'desktop E2E must run after regressions on that build');
+  assert.ok(mobile > desktop, 'mobile smoke must run after desktop E2E on the same checkout/build');
+  assert.doesNotMatch(workflow, /npm run test:e2e\b/, 'final gate must not rebuild between regression and browser evidence');
+  assert.doesNotMatch(workflow, /npm run test:e2e:mobile\b/, 'final mobile gate must consume the same already-built dist');
+});
+
+test('Stage 12 browser gate serves the materialized dist artifact', () => {
+  const server = read('tests/e2e/server.mjs');
+  const runtime = read('tests/helpers/cloudflare-local.mjs');
+  assert.match(server, /createLocalRuntime\(\{\s*port:\s*4173,\s*assets:\s*true\s*\}\)/);
+  assert.match(runtime, /const root = resolve\('dist'\)/);
+});
+
+test('Stage 12 critical browser flow is UI-driven for package, start and finalize', () => {
+  assert.equal(existsSync(e2ePath), true, 'critical final browser flow must exist');
+  const source = read(e2ePath);
+  assert.match(source, /data-action=[\\"']new-patient/);
+  assert.match(source, /data-action=[\\"']new-appointment/);
+  assert.match(source, /data-bv-mode/);
+  assert.match(source, /package_new/);
+  assert.match(source, /data-wizard-next/);
+  assert.match(source, /data-clinical-media-input/);
+  assert.match(source, /data-action=[\\"']open-clinical-note/);
+  assert.match(source, /data-prh-target=[\\"']album/);
+  assert.doesNotMatch(source, /page\.request\.post\(['\"]\/api\/clinical\/rpc\/(?:start_clinical_encounter|set_appointment_billing|finalize_encounter_billing)/,
+    'critical package/start/finalize actions must be driven by UI clicks, not API shortcuts');
+});
+
+test('billing v2 materialization schedules an initial mount so early appointment navigation cannot miss initialization', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
+  assert.match(
+    materialized,
+    /bvSchedule\(\);\s*$/,
+    'materialized billing v2 must schedule one initial mount after its listeners are installed',
+  );
+});
+
+test('Stage 12 billing mount scheduler cannot be starved by continuous DOM mutations', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
+  assert.match(
+    materialized,
+    /function bvSchedule\(\)\{if\(bvTimer\)return;bvTimer=setTimeout\(\(\)=>\{bvTimer=null;/,
+    'DOM mutations must coalesce into one guaranteed billing mount instead of repeatedly resetting its timeout',
+  );
+  assert.doesNotMatch(materialized, /function bvSchedule\(\)\{clearTimeout\(bvTimer\)/,
+    'billing mount scheduler must not debounce forever while other modules mutate the DOM');
+});
+
+test('Stage 12 billing remount preserves package_new for the appointment that just created its package', () => {
+  const materialized = transformDelivery4Billing(read('public/billing-v2.js'));
+  assert.match(
+    materialized,
+    /!packages\.length\|\|selection\.mode==='package_new'/,
+    'once package_new creates an active package, remount must keep package_new selectable for that same appointment instead of downgrading to individual',
+  );
+});
+
+test('Stage 12 patient album reads the canonical clinical_media table used by upload persistence', () => {
+  const hub = read('public/patient-records-hub.js');
+  const workspace = read('public/patient-workspace.js');
+  assert.match(hub, /safeCount\(`clinical_media\?mother_id=/, 'patient records hub must count canonical clinical_media rows');
+  assert.match(workspace, /DOC\.rest\(`clinical_media\?mother_id=/, 'album must read the canonical clinical_media table');
+  assert.doesNotMatch(hub, /safeCount\(`media\?mother_id=/, 'hub must not read a different media table');
+  assert.doesNotMatch(workspace, /DOC\.rest\(`media\?mother_id=/, 'album must not read a different media table');
+});
+
+test('Stage 12 wizard media upload uses the same pending-confirmed clinical_media protocol as the album', () => {
+  const mediaService = read('public/clinical-source/core/lib/media-service.js');
+  const hardener = read('scripts/harden-delivery5-file-integrity.mjs');
+  const flow = read(e2ePath);
+  assert.match(mediaService, /x-clinical-media-operation/,
+    'wizard upload must create a retry-safe pending storage operation');
+  assert.match(mediaService, /workerRequest\('\/api\/clinical\/media\/confirm'/,
+    'wizard upload must confirm metadata through the canonical clinical_media endpoint');
+  assert.doesNotMatch(mediaService, /client\.rest\('media'/,
+    'wizard upload must not create a second legacy media source of truth');
+  assert.match(hardener, /clinical-media-service/,
+    'Delivery 5 hardener must restore the canonical wizard media service after source materialization');
+  assert.match(flow, /records\(page, 'clinical_media'/,
+    'final browser gate must verify the canonical clinical_media row, not a legacy alias');
+});
+
+test('Stage 12 note handoff cancels a pending wizard autosave before flushing the shared encounter', () => {
+  const materialized = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
+  assert.match(
+    materialized,
+    /flush:\(\)=>\{clearTimeout\(encounterAutosaveTimer\);encounterAutosaveTimer=null;return currentDraftEncounterId\?saveDraft\(\{silent:true\}\):Promise\.resolve\(null\)\}/,
+    'opening the SQL note must cancel the delayed wizard autosave before its explicit flush',
+  );
+});
+
+test('Stage 12 note save refreshes the wizard optimistic version before replaying the wizard action', () => {
+  const materializedShell = hardenDelivery1AppShell(read('public/clinical-source/core/app-shell.js'));
+  const noteHardener = read('scripts/harden-delivery3-versioning.mjs');
+  assert.match(materializedShell, /syncVersion:\(id\)=>appData\?\.getEncounter\?\.\(id\)/, 'wizard bridge must be able to refresh its cached encounter version');
+  assert.match(noteHardener, /await window\.DeboraEncounter\?\.syncVersion\?\.\(enc\.id\)/, 'note persistence must refresh the wizard version before replaying the pending button');
+});

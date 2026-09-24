@@ -3,16 +3,37 @@ import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.j
 import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
+import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
+import { handleClinicalBackupRuntime } from './clinical-backup-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
-import { handlePackageLifecycleRuntime } from './package-lifecycle-runtime.js';
+import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
+import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
+import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
 const PRIVATE_ROBOTS_PREFIXES = ['/api', '/app', '/admin', '/clinical-source'];
+const DYNAMIC_DOCUMENT_CACHE_CONTROL = 'no-store, no-cache, must-revalidate';
+const REVALIDATE_ASSET_CACHE_CONTROL = 'no-cache, must-revalidate';
+const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = `
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((key) => key.startsWith('debora-lactacao-v'))
+      .map((key) => caches.delete(key)));
+    await self.registration.unregister();
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    await Promise.all(windows.map((client) => client.navigate(client.url).catch(() => undefined)));
+  })());
+});
+`;
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
@@ -40,6 +61,50 @@ function rewriteAssetRequest(request, pathname) {
 
 function isPrivateRobotsPath(pathname) {
   return PRIVATE_ROBOTS_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isImmutableVersionedAsset(url) {
+  if (/^\/who\/v\d{4}-\d{2}-\d{2}\//.test(url.pathname)) return true;
+  return (url.pathname === '/icon-192.png' || url.pathname === '/icon-512.png') && url.searchParams.has('v');
+}
+
+function legacyServiceWorkerRetirementResponse() {
+  return new Response(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT, {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'cache-control': DYNAMIC_DOCUMENT_CACHE_CONTROL,
+      'pragma': 'no-cache',
+      'expires': '0',
+      'service-worker-allowed': '/',
+    },
+  });
+}
+
+function withAssetCachePolicy(request, url, response) {
+  const headers = new Headers(response.headers);
+  const contentType = headers.get('content-type') || '';
+  const isDocument = request.mode === 'navigate'
+    || contentType.includes('text/html')
+    || url.pathname.endsWith('.html');
+  const isCriticalBootstrap = url.pathname === '/sw.js' || url.pathname === '/manifest.webmanifest';
+
+  if (isDocument || isCriticalBootstrap) {
+    headers.set('cache-control', DYNAMIC_DOCUMENT_CACHE_CONTROL);
+    headers.set('pragma', 'no-cache');
+    headers.set('expires', '0');
+  } else if (isImmutableVersionedAsset(url)) {
+    headers.set('cache-control', IMMUTABLE_ASSET_CACHE_CONTROL);
+  } else {
+    headers.set('cache-control', REVALIDATE_ASSET_CACHE_CONTROL);
+  }
+
+  if (url.pathname === '/sw.js') headers.set('service-worker-allowed', '/');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function requiresCloudflareIdentity(request, url) {
@@ -97,6 +162,10 @@ export default {
     const publicApiRequest = incomingUrl.pathname.startsWith('/api/');
     const ownedFilesRequest = incomingUrl.pathname.startsWith('/api/files/');
 
+    if (incomingUrl.pathname === '/service-worker.js') {
+      return legacyServiceWorkerRetirementResponse();
+    }
+
     // Auth, clinical data and files stay on their public owned paths. Only billing
     // keeps a private same-process map to its Asaas-specific implementation names.
     const normalized = normalizeOwnedApiRequest(request, incomingUrl);
@@ -123,6 +192,9 @@ export default {
       }));
     }
 
+    const atomicAuthRefreshResponse = await handleAtomicAuthRefresh(request, env, url);
+    if (atomicAuthRefreshResponse) return withNoIndex(atomicAuthRefreshResponse);
+
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
 
@@ -132,6 +204,9 @@ export default {
       if (!user?.id) return cloudflareIdentityRequired(401, 'cloudflare_auth_required');
     }
 
+    const clinicalBackupResponse = await handleClinicalBackupRuntime(request, env, url);
+    if (clinicalBackupResponse) return withNoIndex(clinicalBackupResponse);
+
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
@@ -140,17 +215,30 @@ export default {
       await ensureExplicitCommercialMarker(request, env);
     }
 
+    const relationalIntegrityResponse = await handleRelationalIntegrityGuard(request, env, url);
+    if (relationalIntegrityResponse) return withNoIndex(relationalIntegrityResponse);
+
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
 
-    const packageLifecycleResponse = await handlePackageLifecycleRuntime(request, env, url);
-    if (packageLifecycleResponse) return withNoIndex(packageLifecycleResponse);
+    // Canonical package facade: integrity RPCs delegate to package-integrity-atomic-runtime,
+    // while session consumption/finalization stay here. No later package handler may
+    // reinterpret the same public RPC based on routing order.
+    const atomicPackageSessionResponse = await handleAtomicPackageSessionRuntime(request, env, url);
+    if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
 
     const block6Response = await handleBlock6RpcRuntime(request, env, url);
     if (block6Response) return withNoIndex(block6Response);
 
     const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
     if (growthResponse) return withNoIndex(growthResponse);
+
+    // The outer upsert adapter is also a generic mutation surface. Apply the same
+    // table policy before it gets a chance to consume on_conflict writes.
+    if (request.method === 'POST') {
+      const genericPostPolicyResponse = handleGenericCrudPolicy(request, url);
+      if (genericPostPolicyResponse) return withNoIndex(genericPostPolicyResponse);
+    }
 
     const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
     if (upsertResponse) return withNoIndex(upsertResponse);
@@ -166,17 +254,21 @@ export default {
         status: route.status,
         headers: {
           location: route.location,
-          'cache-control': 'public, max-age=300',
+          'cache-control': 'no-store, no-cache, must-revalidate',
+          'pragma': 'no-cache',
+          'expires': '0',
         },
       });
     }
 
     if (route.type === 'rewrite') {
-      const response = await env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      const assetResponse = await env.ASSETS.fetch(rewriteAssetRequest(request, route.pathname));
+      const response = withAssetCachePolicy(request, url, assetResponse);
       return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
     }
 
-    const response = await env.ASSETS.fetch(request);
+    const assetResponse = await env.ASSETS.fetch(request);
+    const response = withAssetCachePolicy(request, url, assetResponse);
     if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },

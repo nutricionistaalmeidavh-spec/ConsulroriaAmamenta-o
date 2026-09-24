@@ -87,6 +87,55 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+async function cleanupLegacyServiceWorkers() {
+  if (!('serviceWorker' in navigator)) return false;
+
+  let registrations;
+  try {
+    registrations = await navigator.serviceWorker.getRegistrations();
+  } catch {
+    return false;
+  }
+
+  const controllerUrl = navigator.serviceWorker.controller?.scriptURL || '';
+  let removedActiveController = false;
+
+  for (const registration of registrations) {
+    const workerUrls = [registration.installing, registration.waiting, registration.active]
+      .map((worker) => worker?.scriptURL)
+      .filter(Boolean);
+
+    const canonicalWorker = workerUrls.some((scriptUrl) => {
+      try {
+        const parsed = new URL(scriptUrl, location.href);
+        return parsed.origin === location.origin && parsed.pathname === '/sw.js';
+      } catch {
+        return false;
+      }
+    });
+    let canonicalScope = false;
+    try {
+      canonicalScope = new URL(registration.scope).pathname === '/';
+    } catch {
+      canonicalScope = false;
+    }
+    if (canonicalWorker && canonicalScope) continue;
+
+    if (controllerUrl && workerUrls.includes(controllerUrl)) removedActiveController = true;
+    try {
+      await registration.unregister();
+    } catch {
+      // A failed legacy cleanup must not prevent the current application from loading.
+    }
+  }
+
+  if (removedActiveController) {
+    location.reload();
+    return true;
+  }
+  return false;
+}
+
 async function loadCanonicalText(path) {
   try {
     const response = await fetch(`${CLINICAL_SOURCE_ROOT}/${path}`, { cache: 'no-store' });
@@ -165,7 +214,22 @@ function genericizeClinicalShell(source) {
     .replace('`debora-lactacao-backup-${new Date().toISOString().slice(0,10)}.json`', '`gestao-amamentacao-backup-${new Date().toISOString().slice(0,10)}.json`');
 }
 
+function importPublicModule(path) {
+  return import(/* @vite-ignore */ path);
+}
+
+async function ensureClinicalPhaseLoaders() {
+  const phase02 = await importPublicModule('/phase02-loader.js');
+  await phase02.startPhase02?.();
+  const phase35 = await importPublicModule('/phase35-loader.js');
+  await phase35.startPhase35?.();
+  const phase68 = await importPublicModule('/phase68-loader.js');
+  await phase68.startPhase68?.();
+}
+
 async function boot() {
+  if (await cleanupLegacyServiceWorkers()) return;
+
   if (location.hash.startsWith('#mae')) {
     memberOnly();
     return;
@@ -186,7 +250,7 @@ async function boot() {
   }
   shell = shell.replace(
     "navigator.serviceWorker.register('./service-worker.js')",
-    "navigator.serviceWorker.register('/sw.js')",
+    "navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => registration.update())",
   );
 
   const shellUrl = moduleUrl(shell);
@@ -213,6 +277,7 @@ async function boot() {
   document.open();
   document.write(html);
   document.close();
+  await ensureClinicalPhaseLoaders();
 }
 
 boot().catch((error) => {

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import vm from 'node:vm';
 import { join } from 'node:path';
-const readSource = path => readFileSync(join(process.env.SOURCE_ROOT || '.', path), 'utf8');
+const sourceRoot = process.env.SOURCE_ROOT || '.';
+const readSource = path => readFileSync(join(sourceRoot, path), 'utf8');
+const builtCommercialApp = join(sourceRoot, 'dist', 'comercial', 'app.js');
+const usingBuiltArtifact = existsSync(builtCommercialApp);
+const readCommercialApp = () => readFileSync(usingBuiltArtifact ? builtCommercialApp : join(sourceRoot, 'public', 'comercial', 'app.js'), 'utf8');
 import worker from '../worker/index.js';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -93,24 +97,25 @@ deliveryFails = false; assert.equal((await send('https://auth.test', 'key', id))
 await send('https://auth.test', 'key', id); assert.equal(mailCalls, 2, 'Duplicate payment does not resend');
 
 // Execute the actual form submit callback. Pro must never reach the public signup endpoint.
-const app = readSource('public/comercial/app.js');
+const app = readCommercialApp();
 const start = app.indexOf("document.querySelector('#signup-form').addEventListener('submit', ");
 const end = app.indexOf("\ndocument.querySelector('#login-form')", start);
 let submit; let wentToCheckout = false;
+const expectedSignupEndpoint = usingBuiltArtifact ? '/api/billing/signup' : '/api/asaas/signup';
 const formContext = vm.createContext({
   document: { querySelector: () => ({ addEventListener: (_, cb) => { submit = cb; } }) },
   FormData: class { get(key) { return ({ email: 'test@example.com', password: 'long-password', confirmPassword: 'long-password', planIntent: 'pro_monthly', partnerCode: '' })[key]; } },
   sessionStorage: { setItem() {} }, PLAN_KEY: 'plan', PENDING_SIGNUP_KEY: 'proof', selectedPlan: '',
   normalizePartnerCode: () => '', currentPartnerCode: () => '', currentAttributionSource: () => 'manual_code', rememberPartnerCode: () => '',
   generateSignupNonce: () => nonce, setBusy() {}, setMessage(text, tone) { if (tone === 'error') throw new Error(text); },
-  friendlyError: e => e.message, fetch: async url => { assert.equal(url, '/api/asaas/signup'); return reply({ userId: id, signupNonce: nonce }); },
+  friendlyError: e => e.message, fetch: async url => { assert.equal(url, expectedSignupEndpoint); return reply({ userId: id, signupNonce: nonce }); },
   startPreconfirmCheckout: async () => { wentToCheckout = true; },
   request: () => { throw new Error('Public signup must not run for Pro'); },
 });
 vm.runInContext(app.slice(start, end), formContext);
 await submit({ preventDefault() {}, currentTarget: {} });
 assert.equal(wentToCheckout, true);
-console.log('Deferred email flow: new/recovered signup, rate limits, proof, resume, paid gate, delivery retry and Pro form OK');
+console.log(`Deferred email flow: new/recovered signup, rate limits, proof, resume, paid gate, delivery retry and Pro form OK (${usingBuiltArtifact ? 'materialized owned billing path' : 'source alias'})`);
 
 // Exercise the webhook entrypoint: pending payments and sandbox never request mail;
 // a duplicate approved event retries mail without applying billing a second time.

@@ -27,6 +27,22 @@ test('clinical phase loaders use root-safe styles from /app',()=>{
   }
 });
 
+test('bootstrap explicitly re-arms clinical phase loaders after replacing the document',()=>{
+  const bootstrap=read('src/bootstrap.js');
+  const closeAt=bootstrap.indexOf('document.close();');
+  const ensureAt=bootstrap.indexOf('await ensureClinicalPhaseLoaders();');
+  assert.ok(closeAt>=0,'bootstrap must finish the canonical document replacement');
+  assert.ok(ensureAt>closeAt,'phase loaders must be re-armed after document.close()');
+  for(const [file,startName] of [
+    ['public/phase02-loader.js','startPhase02'],
+    ['public/phase35-loader.js','startPhase35'],
+    ['public/phase68-loader.js','startPhase68'],
+  ]){
+    assert.match(read(file),new RegExp(`export async function ${startName}\\(`),`${file} must expose an idempotent restart entrypoint`);
+    assert.match(bootstrap,new RegExp(`${startName}`),`bootstrap must invoke ${startName}`);
+  }
+});
+
 test('async album and referral mounts cancel stale renders and stay singleton',()=>{
   for(const [file,card] of [['public/album-feature.js','af'],['public/referrals-feature.js','rf']]){
     const source=read(file);

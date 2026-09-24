@@ -96,7 +96,8 @@ test('clinical native runtimes no longer depend on compatibility translation', (
     'worker/cloudflare-growth-runtime.js',
     'worker/cloudflare-upsert-runtime.js',
     'worker/block6-rpc-runtime.js',
-    'worker/package-lifecycle-runtime.js',
+    'worker/package-session-atomic-runtime.js',
+    'worker/package-integrity-atomic-runtime.js',
   ]) {
     const source = read(path);
     assert.doesNotMatch(source, FORBIDDEN_COMPAT_ROUTES, `${path} still uses retired route families`);

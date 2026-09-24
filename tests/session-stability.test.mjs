@@ -29,6 +29,54 @@ for (const failure of [503, 429, 'offline']) {
   });
 }
 
+test('R16 generic loser 401 waits for delayed winner response instead of clearing shared session', async () => {
+  const shared = createMemorySessionStorage();
+  const initial = {access_token:'expired-access',refresh_token:'refresh-old'};
+  shared.setItem('debora-lactacao-session', JSON.stringify(initial));
+
+  let resolveWinnerResponse;
+  let winnerCommittedResolve;
+  const winnerCommitted = new Promise(resolve => { winnerCommittedResolve = resolve; });
+  let loserRefreshStartedResolve;
+  const loserRefreshStarted = new Promise(resolve => { loserRefreshStartedResolve = resolve; });
+
+  const winner = createSupabaseClient({API_BASE_URL:'https://app.test',CLIENT_RUNTIME_KEY:'runtime'}, {
+    sessionStorage:shared,
+    fetchImpl:async url => {
+      assert.match(String(url), /refresh_token/);
+      winnerCommittedResolve();
+      return new Promise(resolve => { resolveWinnerResponse = resolve; });
+    }
+  });
+  const loser = createSupabaseClient({API_BASE_URL:'https://app.test',CLIENT_RUNTIME_KEY:'runtime'}, {
+    sessionStorage:shared,
+    fetchImpl:async url => {
+      assert.match(String(url), /refresh_token/);
+      loserRefreshStartedResolve();
+      return Response.json({message:'Sessão expirada. Entre novamente.'}, {status:401});
+    }
+  });
+
+  const winnerPromise = winner.refreshSession();
+  await winnerCommitted;
+  const loserPromise = loser.refreshSession();
+  await loserRefreshStarted;
+  await new Promise(resolve => setTimeout(resolve, 30));
+
+  resolveWinnerResponse(Response.json({
+    access_token:'access-new',
+    refresh_token:'refresh-new',
+    token_type:'bearer',
+    expires_in:3600,
+  }));
+
+  const [winnerSession, loserSession] = await Promise.all([winnerPromise, loserPromise]);
+  assert.equal(winnerSession.refresh_token, 'refresh-new');
+  assert.equal(loserSession.refresh_token, 'refresh-new');
+  assert.equal(winner.getSession().refresh_token, 'refresh-new');
+  assert.equal(loser.getSession().refresh_token, 'refresh-new');
+});
+
 test('bootstrap cannot replace renewed local session with stale commercial copy', () => {
   const fresh = JSON.stringify({access_token:'fresh',refresh_token:'rotated'});
   const stale = JSON.stringify({access_token:'old',refresh_token:'revoked'});
