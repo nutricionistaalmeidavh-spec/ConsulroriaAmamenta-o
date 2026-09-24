@@ -252,7 +252,7 @@ function checkoutPayload(planCode, requestId, origin, environment = 'production'
         expiredUrl: `${origin}/comercial/plano.html?asaas=expired${suffix}`,
       };
 
-  const defaultPriceCents = planCode === 'pro_monthly' ? 4990 : 49900;
+  const defaultPriceCents = planCode === 'pro_monthly' ? 9990 : 99990;
   const effectivePriceCents = Math.max(1, Number(plan?.effective_price_cents ?? plan?.price_cents ?? defaultPriceCents));
   const itemValue = effectivePriceCents / 100;
   const discountCents = Math.max(0, Number(plan?.discount_cents || 0));

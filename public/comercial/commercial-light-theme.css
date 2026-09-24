@@ -42,16 +42,27 @@ body.sales-v2-active .sales-v2 {
 }
 
 .sales-v2 .sales-button {
-  color: #ffffff;
-  border-color: rgba(107, 63, 80, .18);
-  background: #6b3f50;
-  box-shadow: 0 12px 28px rgba(107, 63, 80, .16);
+  color: #2f3833;
+  border-color: rgba(169, 155, 207, .62);
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  box-shadow: 0 12px 28px rgba(196, 163, 212, .24);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
 }
 
 .sales-v2 .sales-button--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #6b3f50, #8a5368);
-  box-shadow: 0 14px 32px var(--sales-glow);
+  color: #2f3833;
+  background: linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%);
+  box-shadow: 0 14px 32px rgba(196, 163, 212, .28);
+}
+
+.sales-v2 .sales-button:not(.sales-button--ghost):hover {
+  transform: translateY(-1px);
+  filter: brightness(.97);
+}
+
+.sales-v2 .sales-button:not(.sales-button--ghost):focus-visible {
+  outline: 3px solid rgba(169, 155, 207, .45);
+  outline-offset: 3px;
 }
 
 .sales-v2 .sales-button--ghost {

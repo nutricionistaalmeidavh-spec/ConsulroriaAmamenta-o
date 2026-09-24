@@ -94,7 +94,7 @@
             eyebrow: 'Plano Pro',
             title: 'Pronta para deixar planilhas e informações espalhadas para trás?',
             text: 'Pacientes ilimitados, fotos e vídeos e todos os recursos da plataforma.',
-            price: 'R$ 79,90/mês',
+            price: 'R$ 99,90/mês',
             plan: 'pro_monthly',
             cta: 'Quero o Pro',
           })}
@@ -130,7 +130,7 @@
             eyebrow: 'Mais escolhido',
             title: 'Cresça sem limite de pacientes.',
             text: 'Todos os recursos do Freemium, pacientes ilimitados e upload de fotos e vídeos.',
-            price: 'R$ 79,90/mês',
+            price: 'R$ 99,90/mês',
             plan: 'pro_monthly',
             cta: 'Assinar Pro',
           })}
@@ -162,12 +162,12 @@
               <button class="sales-button sales-button--ghost" type="button" data-sales-open="signup" data-plan="freemium">Começar grátis →</button>
             </article>
             <article class="sales-plan-card is-featured" data-purchase-card>
-              <span>Pro mensal · mais escolhido</span><h3>R$ 79,90<small>/mês</small></h3><p>Para usar sem limite de pacientes.</p>
+              <span>Pro mensal · mais escolhido</span><h3>R$ 99,90<small>/mês</small></h3><p>Para usar sem limite de pacientes.</p>
               <ul><li>Todos os recursos do Freemium</li><li>Pacientes ilimitados</li><li>Upload de fotos</li><li>Upload de vídeos</li></ul>
               <button class="sales-button sales-button--primary" type="button" data-sales-open="signup" data-plan="pro_monthly">Quero o Pro →</button>
             </article>
             <article class="sales-plan-card" data-purchase-card>
-              <span>Pro anual</span><h3>R$ 799,90<small>/ano</small></h3><p>O mesmo Pro, com economia em relação a 12 mensalidades e pagamento em até 12x no cartão.</p>
+              <span>Pro anual</span><h3>R$ 999,90<small>/ano</small></h3><p>O mesmo Pro, com economia em relação a 12 mensalidades e pagamento em até 12x no cartão.</p>
               <ul><li>Pacientes ilimitados</li><li>Fotos e vídeos</li><li>Todos os recursos</li><li>Pagamento anual em até 12x</li></ul>
               <button class="sales-button sales-button--ghost" type="button" data-sales-open="signup" data-plan="pro_annual">Quero o anual →</button>
             </article>

@@ -35,8 +35,8 @@ assert.match(css, /real-screens-sprite-small\.webp/);
 assert.match(js, /data-plan="freemium"/);
 assert.match(js, /data-plan="pro_monthly"/);
 assert.match(js, /data-plan="pro_annual"/);
-assert.match(js, /R\$ 79,90\/mês/, 'mobile sales surfaces must show the current monthly price');
-assert.match(js, /R\$ 799,90/, 'mobile sales surfaces must show the current annual price');
+assert.match(js, /R\$ 99,90\/mês/, 'mobile sales surfaces must show the current monthly price');
+assert.match(js, /R\$ 999,90/, 'mobile sales surfaces must show the current annual price');
 assert.match(js, /até 12x/i, 'annual plan must advertise installment availability');
 assert.doesNotMatch(js, /R\$ 49,90/, 'old monthly price must not return to the mobile landing');
 assert.doesNotMatch(js, /R\$ 499(?:<|\/)/, 'old annual price must not return to the mobile landing');
@@ -45,6 +45,8 @@ assert.match(css, /@media\s*\(min-width:\s*1100px\)/, 'mobile-first CSS needs de
 assert.match(lightCss, /--sales-bg:\s*#f5edf0/i, 'commercial background must use the canonical brand-soft palette');
 assert.match(lightCss, /--sales-text:\s*#2f3833/i, 'commercial text must use the canonical ink token');
 assert.match(lightCss, /--sales-purple:\s*#6b3f50/i, 'commercial accents must use the canonical brand token');
+assert.match(lightCss, /linear-gradient\(45deg,\s*#a99bcf 0%,\s*#c4a3d4 48%,\s*#f3bfd1 100%\)/i, 'filled sales buttons must use the official logo gradient');
+assert.doesNotMatch(lightCss, /\.sales-v2 \.sales-button\s*\{[^}]*background:\s*#6b3f50/is, 'filled sales buttons must not retain the old brown background');
 assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1', '#2f3833', 'hero title must remain readable on the light background');
 assertSelectorColor(lightCss, '.sales-v2 .sales-hero h1 em', '#6b3f50', 'hero emphasis must use the canonical brand color');
 assertSelectorColor(lightCss, '.sales-v2 .sales-section-head h2', '#2f3833', 'section titles must use dark ink');
@@ -71,11 +73,11 @@ assert.match(assetFix, /sales-finance-demo/i, 'finance card must render a saniti
 assert.doesNotMatch(assetFix, /\['Financeiro',\s*'\/comercial\/assets\/screens\/financeiro\.webp'\]/, 'commercial landing must not expose the real finance screenshot');
 assert.match(seo, /mobile-sales-v2\.css/);
 assert.match(seo, /brand-mark\.css\?v=20260921/, 'commercial edge markup must load the vector brand rendering fix');
-assert.match(seo, /commercial-light-theme\.css\?v=20260921-contrast/, 'commercial edge markup must cache-bust the contrast fix');
+assert.match(seo, /commercial-light-theme\.css\?v=20260924-brand-pricing/, 'commercial edge markup must cache-bust the contrast fix');
 assert.match(seo, /commercial-sales-v2-contrast-fix\.css\?v=20260921-2/, 'commercial edge markup must load the specificity isolation fix');
-assert.match(seo, /mobile-sales-v2\.js\?v=20260922-pricing/, 'commercial edge markup must cache-bust the pricing update');
-assert.match(seo, /price: '79\.90'/, 'SEO structured data must use the current monthly price');
-assert.match(seo, /price: '799\.90'/, 'SEO structured data must use the current annual price');
+assert.match(seo, /mobile-sales-v2\.js\?v=20260924-pricing/, 'commercial edge markup must cache-bust the pricing update');
+assert.match(seo, /price: '99\.90'/, 'SEO structured data must use the current monthly price');
+assert.match(seo, /price: '999\.90'/, 'SEO structured data must use the current annual price');
 assert.match(seo, /mobile-assets-fix\.js\?v=20260921/, 'commercial edge markup must load the privacy-safe finance preview');
 assert.match(seo, /defer/);
 

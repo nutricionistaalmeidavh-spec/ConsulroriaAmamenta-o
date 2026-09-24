@@ -30,8 +30,8 @@ const COMMERCIAL_STRUCTURED_DATA = Object.freeze({
       ],
       offers: [
         { '@type': 'Offer', name: 'Freemium', price: '0', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano gratuito para começar com até 3 mães/pacientes.' },
-        { '@type': 'Offer', name: 'Pro mensal', price: '79.90', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano Pro mensal com pacientes ilimitados e upload de fotos e vídeos.' },
-        { '@type': 'Offer', name: 'Pro anual', price: '799.90', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano Pro anual com pacientes ilimitados, upload de fotos e vídeos e pagamento em até 12x no cartão.' },
+        { '@type': 'Offer', name: 'Pro mensal', price: '99.90', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano Pro mensal com pacientes ilimitados e upload de fotos e vídeos.' },
+        { '@type': 'Offer', name: 'Pro anual', price: '999.90', priceCurrency: 'BRL', url: COMMERCIAL_CANONICAL_URL, description: 'Plano Pro anual com pacientes ilimitados, upload de fotos e vídeos e pagamento em até 12x no cartão.' },
       ],
     },
     {
@@ -63,9 +63,9 @@ function commercialSeoMarkup() {
     `  <meta name="twitter:description" content="${COMMERCIAL_SEO_DESCRIPTION}">`,
     '  <link rel="stylesheet" href="/comercial/mobile-sales-v2.css?v=20260917">',
     '  <link rel="stylesheet" href="/comercial/brand-mark.css?v=20260921">',
-    '  <link rel="stylesheet" href="/comercial/commercial-light-theme.css?v=20260921-contrast">',
+    '  <link rel="stylesheet" href="/comercial/commercial-light-theme.css?v=20260924-brand-pricing">',
     '  <link rel="stylesheet" href="/comercial/commercial-sales-v2-contrast-fix.css?v=20260921-2">',
-    '  <script src="/comercial/mobile-sales-v2.js?v=20260922-pricing" defer></script>',
+    '  <script src="/comercial/mobile-sales-v2.js?v=20260924-pricing" defer></script>',
     '  <script src="/comercial/mobile-assets-fix.js?v=20260921" defer></script>',
     `  <script type="application/ld+json">${structuredData}</script>`,
   ].join('\n');
