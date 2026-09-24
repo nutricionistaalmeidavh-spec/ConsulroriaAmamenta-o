@@ -10,7 +10,7 @@ async function expectNoHorizontalOverflow(page) {
 }
 
 async function expectWizardControlsClearOfFooter(page) {
-  const controls = page.locator('[data-wizard-step]:visible .field input:not([type="hidden"]), [data-wizard-step]:visible .field select, [data-wizard-step]:visible .field textarea, [data-wizard-step]:visible .media-drop, [data-wizard-step]:visible .final-actions .ui-button');
+  const controls = page.locator('[data-wizard-step]:visible .field input:not([type="hidden"]):visible, [data-wizard-step]:visible .field select:visible, [data-wizard-step]:visible .field textarea:visible, [data-wizard-step]:visible .media-drop:visible, [data-wizard-step]:visible .final-actions .ui-button:visible');
   const count = await controls.count();
   expect(count).toBeGreaterThan(0);
 
