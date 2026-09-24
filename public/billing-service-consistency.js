@@ -9,7 +9,8 @@ export function billingScopeMatches(record,{motherId='',appointmentId=''}={}){
 export function shouldFollowBillingService({appointmentId='',previousAppointmentId='',sameMotherContext=false,overridden=false}={}){
   if(overridden)return false;
   if(!appointmentId)return true;
-  return sameMotherContext&&previousAppointmentId===''&&appointmentId!=='';
+  if(!sameMotherContext)return false;
+  return String(previousAppointmentId||'')!==String(appointmentId||'');
 }
 
 const browser=typeof window!=='undefined'&&typeof document!=='undefined';
