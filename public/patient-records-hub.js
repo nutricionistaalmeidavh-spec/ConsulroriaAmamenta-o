@@ -69,3 +69,4 @@ window.addEventListener('debora:clinical-document-finalized',refresh);
 window.addEventListener('debora:record-exported',refresh);
 for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,refresh);
 window.DeboraPatientRecordsHub={refresh};
+queueMicrotask(refresh);
