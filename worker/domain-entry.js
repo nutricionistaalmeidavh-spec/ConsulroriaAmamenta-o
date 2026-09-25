@@ -13,6 +13,7 @@ import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
+import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -268,5 +269,12 @@ export default {
     const response = withAssetCachePolicy(request, url, assetResponse);
     if (isPrivateRobotsPath(url.pathname)) return withNoIndex(response);
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
+  },
+  async scheduled(_controller, env, ctx) {
+    const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    ctx.waitUntil(
+      cleanupExpiredUsageSessions(env, { beforeIso: before, limit: 200 })
+        .catch((error) => console.error('usage session cleanup failed', error)),
+    );
   },
 };
