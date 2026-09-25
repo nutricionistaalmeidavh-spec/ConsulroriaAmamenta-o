@@ -30,6 +30,13 @@ assert.match(runtime, /external_subscription_id/);
 assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 
+// The Central Artisys may administer the same D1 partner records through an internal authenticated bridge.
+assert.match(runtime, /\/api\/internal\/partners/);
+assert.match(runtime, /\/api\/internal\/partner-sales/);
+assert.match(runtime, /\/api\/internal\/partner-commission/);
+assert.match(runtime, /x-debora-partner-admin-secret/);
+assert.match(runtime, /DEBORA_PARTNER_ADMIN_SECRET/);
+
 // The domain entry must intercept billing before the local API terminal. Block 8
 // retains the public API identity while same-process compatibility paths are used internally.
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
