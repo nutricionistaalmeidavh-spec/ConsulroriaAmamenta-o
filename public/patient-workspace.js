@@ -1,7 +1,7 @@
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
-let layer=null,lastTrigger=null,current=null,summaryTimer=null,expectedSummaryKey='';
+let layer=null,lastTrigger=null,current=null,summaryTimer=null,expectedSummaryKey='',referralView=null;
 const summaryFlight=createSingleFlight();
 
 const esc=value=>DOC.escapeHTML(value??'');
@@ -10,7 +10,7 @@ const fmtDate=value=>{if(!value)return 'Sem data';const d=new Date(value);return
 const fmtDay=value=>{if(!value)return 'Sem data';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'long',year:'numeric'}).format(d)};
 const consentLabels={data_processing:'Dados pessoais e de saúde',whatsapp:'Contato por WhatsApp',clinical_media:'Fotos e documentos clínicos',public_media:'Uso público de imagem',teleconsultation:'Teleatendimento'};
 
-function close(){if(!layer)return;layer.remove();layer=null;current=null;requestAnimationFrame(()=>lastTrigger?.focus?.())}
+function close(){if(!layer)return;layer.remove();layer=null;current=null;referralView=null;requestAnimationFrame(()=>lastTrigger?.focus?.())}
 function trap(event){if(event.key==='Escape'){event.preventDefault();close();return}if(event.key!=='Tab'||!layer)return;const f=[...layer.querySelectorAll('button:not(:disabled),a[href],select:not(:disabled),input:not(:disabled)')];if(!f.length)return;const first=f[0],last=f.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}}
 function shell(kicker,title,subtitle=''){
   close();layer=document.createElement('div');layer.className='pw-layer';layer.innerHTML=`<section class="pw-page" role="dialog" aria-modal="true" aria-labelledby="pw-title"><header class="pw-top"><button type="button" class="pw-back" data-pw-close aria-label="Voltar">‹</button><div><small>${esc(kicker)}</small><h1 id="pw-title">${esc(title)}</h1>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div></header><main class="pw-content" data-pw-content><div class="pw-loading">Carregando…</div></main></section>`;document.body.appendChild(layer);layer.addEventListener('keydown',trap);layer.querySelector('[data-pw-close]').onclick=close;requestAnimationFrame(()=>layer.querySelector('[data-pw-close]')?.focus());return layer.querySelector('[data-pw-content]')
@@ -30,11 +30,13 @@ async function renderAlbum(motherId,content){
 }
 
 async function renderReferrals(motherId,content){
-  const rows=await DOC.listDocuments(motherId,'referral').catch(()=>[]);
-  content.innerHTML=`<div class="pw-toolbar"><div><strong>Encaminhamentos</strong><span>${rows.length} ${rows.length===1?'documento':'documentos'}</span></div><button type="button" class="pw-primary" data-pw-new-referral>+ Novo encaminhamento</button></div><div class="pw-filters"><label>Status<select data-pw-status><option value="">Todos</option><option value="draft">Rascunhos</option><option value="finalized">Finalizados</option></select></label></div><div class="pw-document-list" data-pw-referral-list></div>`;
-  const select=content.querySelector('[data-pw-status]'),list=content.querySelector('[data-pw-referral-list]');
-  function draw(){const filtered=rows.filter(row=>!select.value||row.status===select.value);list.innerHTML=filtered.length?filtered.map(row=>`<button type="button" data-pw-referral="${row.id}"><div><strong>${esc(row.title||'Encaminhamento')}</strong><small>${esc(fmtDate(row.updated_at||row.created_at))}${row.content?.professional_destination?` · ${esc(row.content.professional_destination)}`:''}</small></div><span class="pw-status ${row.status==='finalized'?'ok':'draft'}">${row.status==='finalized'?'Finalizado':'Rascunho'}</span><b>›</b></button>`).join(''):'<div class="pw-empty"><strong>Nenhum encaminhamento</strong><span>Crie o primeiro documento para esta paciente.</span></div>';list.querySelectorAll('[data-pw-referral]').forEach(btn=>btn.onclick=()=>{window.DeboraReferrals?.openExisting(motherId,btn.dataset.pwReferral,btn).catch(e=>DOC.toast(e.message||'Não foi possível abrir o encaminhamento.','error'));watchDialog('.rf-layer',()=>open('referrals',motherId,lastTrigger))})}
-  select.onchange=draw;content.querySelector('[data-pw-new-referral]').onclick=event=>{window.DeboraReferrals?.openNew(motherId,event.currentTarget).catch(e=>DOC.toast(e.message||'Não foi possível criar o encaminhamento.','error'));watchDialog('.rf-layer',()=>open('referrals',motherId,lastTrigger))};draw();
+  let rows=await DOC.listDocuments(motherId,'referral').catch(()=>[]);
+  content.innerHTML=`<div class="pw-toolbar"><div><strong>Encaminhamentos</strong><span data-pw-referral-count>${rows.length} ${rows.length===1?'documento':'documentos'}</span></div><button type="button" class="pw-primary" data-pw-new-referral>+ Novo encaminhamento</button></div><div class="pw-filters"><label>Status<select data-pw-status><option value="">Todos</option><option value="draft">Rascunhos</option><option value="finalized">Finalizados</option></select></label></div><div class="pw-document-list" data-pw-referral-list></div>`;
+  const select=content.querySelector('[data-pw-status]'),list=content.querySelector('[data-pw-referral-list]'),count=content.querySelector('[data-pw-referral-count]');
+  function draw(){count.textContent=`${rows.length} ${rows.length===1?'documento':'documentos'}`;const filtered=rows.filter(row=>!select.value||row.status===select.value);list.innerHTML=filtered.length?filtered.map(row=>`<button type="button" data-pw-referral="${row.id}"><div><strong>${esc(row.title||'Encaminhamento')}</strong><small>${esc(fmtDate(row.updated_at||row.created_at))}${row.content?.professional_destination?` · ${esc(row.content.professional_destination)}`:''}</small></div><span class="pw-status ${row.status==='finalized'?'ok':'draft'}">${row.status==='finalized'?'Finalizado':'Rascunho'}</span><b>›</b></button>`).join(''):'<div class="pw-empty"><strong>Nenhum encaminhamento</strong><span>Crie o primeiro documento para esta paciente.</span></div>';list.querySelectorAll('[data-pw-referral]').forEach(btn=>btn.onclick=()=>window.DeboraReferrals?.openExisting(motherId,btn.dataset.pwReferral,btn).catch(e=>DOC.toast(e.message||'Não foi possível abrir o encaminhamento.','error')))}
+  function upsert(savedDocument){if(!savedDocument?.id)return;const index=rows.findIndex(row=>row.id===savedDocument.id);if(index>=0)rows[index]=savedDocument;else rows=[savedDocument,...rows];draw()}
+  referralView={motherId,upsert};
+  select.onchange=draw;content.querySelector('[data-pw-new-referral]').onclick=event=>window.DeboraReferrals?.openNew(motherId,event.currentTarget).catch(e=>DOC.toast(e.message||'Não foi possível criar o encaminhamento.','error'));draw();
 }
 
 async function renderTerms(motherId,content){
@@ -75,7 +77,9 @@ async function mountRecent(motherId){
   });
 }
 function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId){expectedSummaryKey='';return}wireQuickActions(motherId);mountRecent(motherId).catch(()=>{})},120)}
-window.addEventListener('debora:patient-context',scheduleSummary);window.addEventListener('debora:clinical-document-finalized',scheduleSummary);window.addEventListener('debora:record-exported',scheduleSummary);new MutationObserver(scheduleSummary).observe(document.documentElement,{subtree:true,childList:true});setTimeout(scheduleSummary,250);
+window.addEventListener('debora:patient-context',scheduleSummary);
+window.addEventListener('debora:clinical-document-saved',event=>{const detail=event.detail||{};if(detail.documentType==='referral'&&detail.motherId&&referralView?.motherId===detail.motherId)referralView?.upsert(detail.document);scheduleSummary()});
+window.addEventListener('debora:clinical-document-finalized',scheduleSummary);window.addEventListener('debora:record-exported',scheduleSummary);new MutationObserver(scheduleSummary).observe(document.documentElement,{subtree:true,childList:true});setTimeout(scheduleSummary,250);
 for(const type of ['clinical.document.finalized','clinical.record.exported','clinical.encounter.saved','clinical.media.uploaded','weight.recorded'])window.DeboraEvents?.subscribe?.(type,scheduleSummary);
 
 window.DeboraPatientWorkspace={open,close,refresh:scheduleSummary};
