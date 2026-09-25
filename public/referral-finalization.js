@@ -24,26 +24,32 @@ function pdfFrom({context,baby,specialtyLabel,destination,html,finalizedAt}){
 }
 
 async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,specialtyLabel,buildPayload,onFinalized}){
-  if(!draft?.id)throw new Error('Salve o rascunho antes de finalizar.');
-  if(draft.status==='finalized')return draft;
+  if(draft?.status==='finalized')return draft;
   const payload=buildPayload();
   if(!payload?.content?.html)throw new Error('O encaminhamento está vazio.');
   const finalizedAt=new Date().toISOString();
-  const updated=await DOC.updateDocument(draft.id,{
+  const persistedFields={
     title:`Encaminhamento · ${specialtyLabel}`,
-    status:'finalized',
     finalized_at:finalizedAt,
     baby_id:babyId||null,
-    appointment_id:encounter?.appointment_id||draft.appointment_id||null,
-    encounter_id:encounter?.id||draft.encounter_id||null,
+    appointment_id:encounter?.appointment_id||draft?.appointment_id||null,
+    encounter_id:encounter?.id||draft?.encounter_id||null,
     content:{...payload.content,finalized_at:finalizedAt,updated_at:finalizedAt}
-  });
+  };
+  let finalizedDocument;
+  if(draft?.id){
+    const updated=await DOC.updateDocument(draft.id,{...persistedFields,status:'finalized'});
+    finalizedDocument=updated||{...draft,...persistedFields,status:'finalized',id:draft.id};
+  }else{
+    finalizedDocument=await DOC.saveDocument({document_type:'referral',mother_id:motherId,status:'finalized',...persistedFields});
+    if(!finalizedDocument?.id)throw new Error('Não foi possível registrar o encaminhamento finalizado.');
+  }
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:payload.content.professional_destination,html:payload.content.html,finalizedAt});
   downloadPdf(pdf,fileBase({context,baby,specialtyLabel}));
   DOC.toast('Encaminhamento finalizado e PDF gerado.');
-  onFinalized?.(updated||{...draft,status:'finalized',finalized_at:finalizedAt,content:payload.content});
-  window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:draft.id,documentType:'referral',babyId:babyId||null,encounterId:encounter?.id||draft.encounter_id||null}}));
-  return updated;
+  onFinalized?.(finalizedDocument);
+  window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:finalizedDocument.id,documentType:'referral',babyId:babyId||null,encounterId:finalizedDocument.encounter_id||encounter?.id||draft?.encounter_id||null}}));
+  return finalizedDocument;
 }
 
 async function exportFinalized({draft,context,baby,specialtyLabel,mode='download'}){
@@ -61,10 +67,10 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
 }
 
 function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specialtyLabel,buildPayload,onFinalized}){
-  if(!panel||!draft?.id)return;
+  if(!panel)return;
   const actions=panel.querySelector('.rf-actions');
   if(!actions||actions.querySelector('[data-rf-finalize], [data-rf-official-pdf]'))return;
-  if(draft.status==='finalized'){
+  if(draft?.status==='finalized'){
     const stamp=document.createElement('div');
     stamp.className='rf-finalized-stamp';
     stamp.innerHTML=`<strong>Encaminhamento finalizado</strong><span>${DOC.escapeHTML(fmtDate(draft.finalized_at||draft.content?.finalized_at)||'Documento oficial')}</span>`;
