@@ -11,6 +11,9 @@
     { "pattern": "app.deboralactacao.com", "custom_domain": true },
     { "pattern": "comercial.deboralactacao.com", "custom_domain": true }
   ],
+  "triggers": {
+    "crons": ["17 4 * * *"]
+  },
   "services": [
     {
       "binding": "ARTISYS_LICENSING",
