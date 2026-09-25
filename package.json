@@ -12,6 +12,7 @@
     "test:billing": "node scripts/test-cloudflare-billing-d1.mjs && node scripts/test-pro-pricing-contract.mjs",
     "test:deploy-safety": "node scripts/test-production-deploy-contract.mjs && node --test tests/ci-provider-cleanup.test.mjs tests/deploy-hardening-p01.test.mjs",
     "test:seo": "node --test worker/seo-*.test.mjs && node scripts/test-public-seo.mjs && node scripts/test-commercial-mobile-first.mjs",
+    "test:observability": "node --test tests/usage-observability-query-plan.test.mjs tests/usage-observability-runtime-contract.test.mjs tests/usage-observability-schema.test.mjs tests/usage-observability-security.test.mjs tests/usage-presence-frontend.test.mjs worker/usage-observability-maintenance.test.mjs worker/usage-observability-queries.test.mjs worker/usage-presence-service.test.mjs",
     "test:demo": "node --test tests/demo-account-*.test.mjs",
     "demo:seed": "node scripts/seed-demo-account.mjs",
     "demo:reset": "node scripts/reset-demo-account.mjs",
