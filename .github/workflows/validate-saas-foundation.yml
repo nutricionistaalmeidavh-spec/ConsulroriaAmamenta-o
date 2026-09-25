@@ -49,6 +49,7 @@ on:
       - 'tests/session-stability.test.mjs'
       - 'tests/frontend-stability.test.mjs'
       - 'tests/patient-edit-atomic.test.mjs'
+      - 'tests/usage-*.test.mjs'
       - 'src/bootstrap.js'
       - 'app/index.html'
       - 'index.html'
@@ -110,6 +111,7 @@ on:
       - 'tests/session-stability.test.mjs'
       - 'tests/frontend-stability.test.mjs'
       - 'tests/patient-edit-atomic.test.mjs'
+      - 'tests/usage-*.test.mjs'
       - 'src/bootstrap.js'
       - 'app/index.html'
       - 'index.html'
@@ -200,6 +202,8 @@ jobs:
         run: node --test worker/seo-*.test.mjs
       - name: Validate public SEO contract
         run: node scripts/test-public-seo.mjs
+      - name: Validate usage observability and presence
+        run: npm run test:observability
       - name: Syntax-check changed commercial runtime
         run: |
           node --check worker/index.js
@@ -216,7 +220,11 @@ jobs:
           node --check worker/d1-record-store.js
           node --check worker/commercial-license-bootstrap.js
           node --check worker/domain-entry.js
+          node --check worker/usage-observability-queries.js
+          node --check worker/usage-observability-runtime.js
+          node --check worker/usage-presence-service.js
           node --check worker/seo-search-console.js
+          node --check public/usage-presence-runtime.js
           node --check public/comercial/app.js
           node --check public/comercial/plan.js
           node --check public/comercial/parceiros.js
