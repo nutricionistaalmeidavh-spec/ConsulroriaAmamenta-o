@@ -34,6 +34,7 @@ export async function createLocalRuntime({ port = 0, assets = false } = {}) {
     'cloudflare/full-migration-schema.sql',
     'cloudflare/runtime-schema.sql',
     'cloudflare/migrations/0007-clinical-query-performance.sql',
+    'cloudflare/migrations/0008-usage-observability.sql',
   ]) {
     const sql = (await readFile(path, 'utf8')).replace(/^--.*$/gm, '');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
