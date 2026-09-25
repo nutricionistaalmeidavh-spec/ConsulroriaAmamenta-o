@@ -1,3 +1,5 @@
+import './usage-presence-runtime.js';
+
 const context = globalThis.CANONICAL_APP_CONTEXT || {};
 const config = globalThis.CANONICAL_APP_CONFIG || globalThis.DEBORA_APP_CONFIG || {};
 const productName = context.productName || 'Gestão de Amamentação';
