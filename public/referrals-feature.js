@@ -9,6 +9,10 @@ const fmtDate=value=>{
   return Number.isNaN(d.getTime())?String(value):new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(d);
 };
 const cleanText=value=>String(value??'').replace(/\s+/g,' ').trim();
+function emitSavedDocument(motherId,savedDocument){
+  if(!savedDocument?.id)return;
+  window.dispatchEvent(new CustomEvent('debora:clinical-document-saved',{detail:{motherId,document:savedDocument,documentType:'referral'}}));
+}
 function extractClinicalText(value,preferred=[]){
   if(value==null)return '';
   if(typeof value==='string'||typeof value==='number'||typeof value==='boolean')return cleanText(value);
@@ -116,15 +120,18 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
       const payload=buildPayload();
       if(!cleanText(editor.textContent)){button.disabled=false;button.textContent='Salvar rascunho';return DOC.toast('O encaminhamento está vazio.','error')}
       try{
-        if(draft?.id)await DOC.updateDocument(draft.id,{title:`Encaminhamento · ${base.specialtyLabel}`,baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
-        else await DOC.saveDocument({document_type:'referral',title:`Encaminhamento · ${base.specialtyLabel}`,status:'draft',baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
+        let savedDocument;
+        if(draft?.id)savedDocument=await DOC.updateDocument(draft.id,{title:`Encaminhamento · ${base.specialtyLabel}`,baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
+        else savedDocument=await DOC.saveDocument({document_type:'referral',title:`Encaminhamento · ${base.specialtyLabel}`,status:'draft',baby_id:babyId||null,appointment_id:encounter?.appointment_id||null,encounter_id:encounter?.id||null,content:payload.content});
+        if(!savedDocument?.id)throw new Error('Não foi possível confirmar o encaminhamento salvo.');
+        emitSavedDocument(motherId,savedDocument);
         close();DOC.toast('Rascunho de encaminhamento salvo.');currentMother='';await mount(motherId);
       }catch(error){DOC.toast(error.message||'Não foi possível salvar o encaminhamento.','error');button.disabled=false;button.textContent='Salvar rascunho'}
     });
   }
   window.DeboraReferralFinalization?.attachEditor({
     panel,draft,motherId,babyId,encounter,context,baby,specialtyLabel:base.specialtyLabel,buildPayload,
-    onFinalized:async()=>{close();currentMother='';await mount(motherId)}
+    onFinalized:async finalizedDocument=>{emitSavedDocument(motherId,finalizedDocument);close();currentMother='';await mount(motherId)}
   });
 }
 async function openNew(motherId,trigger){
