@@ -39,8 +39,6 @@ Ficam fora de escopo:
 
 A Débora mantém os dados operacionais em seu D1 e expõe contratos internos somente leitura para a Central Artisys. A Central não acessa diretamente as tabelas internas.
 
-Fluxo:
-
 ```text
 Frontend Débora autenticado
         |
@@ -83,6 +81,20 @@ A API interna deve ser tolerante a crescimento de dados e não pode montar dashb
 - Após mais de 5 minutos sem atividade, um novo heartbeat cria nova sessão.
 - Logout normal pode encerrar a sessão antecipadamente, mas o desenho não depende de evento de fechamento de navegador.
 
+### Contabilização do tempo
+
+O tempo exibido é aproximado e deriva da atividade observada, não do relógio de parede entre início e fim da sessão.
+
+Para evitar supercontagem por abas múltiplas, suspensão de navegador ou heartbeats atrasados:
+
+- o incremento parte do `last_seen_at` consolidado do usuário, não de cada aba;
+- apenas diferenças positivas são contabilizadas;
+- um heartbeat não adiciona mais que uma janela curta de atividade equivalente ao intervalo esperado, com teto de 90 segundos;
+- se o intervalo desde a última atividade for maior que 5 minutos, ele não é somado retroativamente: inicia nova sessão;
+- atualizações concorrentes devem usar operação atômica/transacional ou proteção equivalente para não somar o mesmo intervalo duas vezes.
+
+Exemplo: heartbeats em 10:00, 10:01 e 10:02 geram cerca de 2 minutos ativos. Se o próximo heartbeat chegar às 10:20, os 18 minutos de ausência não são contados; uma nova sessão começa às 10:20.
+
 ### Modelo D1
 
 `user_presence`
@@ -117,9 +129,9 @@ Não haverá armazenamento permanente de um evento bruto por heartbeat.
 
 ## Retenção
 
-- `user_presence`: estado atual, sem histórico bruto.
-- `user_sessions`: histórico detalhado por até 12 meses.
-- `user_usage_daily`: agregado histórico.
+- `user_presence`: estado atual, sem histórico bruto;
+- `user_sessions`: histórico detalhado por até 12 meses;
+- `user_usage_daily`: agregado histórico;
 - limpeza de sessões antigas em lotes pequenos, evitando delete massivo bloqueante.
 
 ## Escala e paginação
@@ -202,7 +214,7 @@ Métricas previstas:
 - Pro anual;
 - checkouts criados;
 - pagamentos confirmados;
-- assinaturas ativas / vencidas / past_due / canceladas;
+- assinaturas ativas / vencidas / `past_due` / canceladas;
 - receita realizada via Asaas, quando suportada pelos dados existentes.
 
 A licença manual de 6 meses será enriquecida e contabilizada na Central, não inferida neste endpoint como compra Asaas.
@@ -255,7 +267,10 @@ A observabilidade apenas consulta e agrega esses dados.
 - offline após janela aprovada;
 - mesma sessão com intervalos abaixo de 5 min;
 - nova sessão acima de 5 min;
+- intervalo longo não contabilizado como uso ativo;
+- teto de incremento por heartbeat;
 - múltiplas abas sem multiplicar tempo;
+- concorrência sem dupla contagem;
 - logout;
 - virada de dia;
 - agregação diária correta;
@@ -281,7 +296,7 @@ A observabilidade apenas consulta e agrega esses dados.
 - failed;
 - expired;
 - subscription active;
-- past_due;
+- `past_due`;
 - cancelled;
 - valores e datas corretos.
 
@@ -300,11 +315,12 @@ A feature neste repositório estará pronta quando:
 3. heartbeat tornar a conta online na janela de 2 minutos;
 4. ausência de heartbeat retirar o status online sem exigir logout;
 5. sessões e agregados de uso refletirem atividade sem duplicação por aba;
-6. billing e planos puderem ser consultados paginadamente;
-7. summary usar agregações server-side;
-8. nenhuma consulta administrativa exigir carregamento integral das tabelas;
-9. nenhum dado clínico aparecer no contrato;
-10. indisponibilidade da observabilidade não impactar os fluxos existentes.
+6. intervalos de inatividade não forem contados como tempo ativo;
+7. billing e planos puderem ser consultados paginadamente;
+8. summary usar agregações server-side;
+9. nenhuma consulta administrativa exigir carregamento integral das tabelas;
+10. nenhum dado clínico aparecer no contrato;
+11. indisponibilidade da observabilidade não impactar os fluxos existentes.
 
 ## Integração com o repositório da Central
 
