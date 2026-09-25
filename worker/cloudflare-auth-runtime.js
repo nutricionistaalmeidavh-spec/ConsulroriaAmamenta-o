@@ -7,6 +7,11 @@ const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+const PARTNER_ADMIN_PATHS = new Set([
+  '/api/admin/partners',
+  '/api/admin/partner-sales',
+  '/api/admin/partner-commission',
+]);
 
 function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
@@ -192,8 +197,30 @@ export async function authenticateRuntimeToken(token, env) {
   return payload?.sub ? runtimeUserById(env, payload.sub) : null;
 }
 
+function internalPartnerAdmin(request, env) {
+  let pathname = '';
+  try { pathname = new URL(request.url).pathname; } catch {}
+  if (!PARTNER_ADMIN_PATHS.has(pathname)) return null;
+  const expected = String(env.DEBORA_PARTNER_ADMIN_SECRET || env.DEBORA_OBSERVABILITY_SECRET || '').trim();
+  const provided = String(request.headers.get('x-debora-partner-admin-secret') || '').trim();
+  if (!expected || !provided || !safeEqual(provided, expected)) return null;
+  return {
+    id: 'artisys-central',
+    email: 'artisys-central@internal',
+    phone: null,
+    email_confirmed_at: null,
+    phone_confirmed_at: null,
+    created_at: null,
+    updated_at: null,
+    last_sign_in_at: null,
+    user_metadata: { service_identity: 'artisys-central' },
+    app_metadata: { partner_admin: true, service_identity: 'artisys-central' },
+  };
+}
+
 export async function authenticateClinicalRequest(request, env) {
-  return authenticateRuntimeToken(bearer(request), env);
+  const internal = internalPartnerAdmin(request, env);
+  return internal || authenticateRuntimeToken(bearer(request), env);
 }
 
 async function handlePasswordLogin(request, env) {
