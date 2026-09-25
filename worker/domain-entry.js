@@ -12,6 +12,7 @@ import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runt
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
+import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -166,8 +167,6 @@ export default {
       return legacyServiceWorkerRetirementResponse();
     }
 
-    // Auth, clinical data and files stay on their public owned paths. Only billing
-    // keeps a private same-process map to its Asaas-specific implementation names.
     const normalized = normalizeOwnedApiRequest(request, incomingUrl);
     request = normalized.request;
     const url = normalized.url;
@@ -195,6 +194,9 @@ export default {
     const atomicAuthRefreshResponse = await handleAtomicAuthRefresh(request, env, url);
     if (atomicAuthRefreshResponse) return withNoIndex(atomicAuthRefreshResponse);
 
+    const usageObservabilityResponse = await handleUsageObservabilityRuntime(request, env, url);
+    if (usageObservabilityResponse) return withNoIndex(usageObservabilityResponse);
+
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
 
@@ -221,9 +223,6 @@ export default {
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
 
-    // Canonical package facade: integrity RPCs delegate to package-integrity-atomic-runtime,
-    // while session consumption/finalization stay here. No later package handler may
-    // reinterpret the same public RPC based on routing order.
     const atomicPackageSessionResponse = await handleAtomicPackageSessionRuntime(request, env, url);
     if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
 
@@ -233,8 +232,6 @@ export default {
     const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
     if (growthResponse) return withNoIndex(growthResponse);
 
-    // The outer upsert adapter is also a generic mutation surface. Apply the same
-    // table policy before it gets a chance to consume on_conflict writes.
     if (request.method === 'POST') {
       const genericPostPolicyResponse = handleGenericCrudPolicy(request, url);
       if (genericPostPolicyResponse) return withNoIndex(genericPostPolicyResponse);
