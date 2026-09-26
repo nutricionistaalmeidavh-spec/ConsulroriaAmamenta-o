@@ -54,6 +54,13 @@ test('post-deploy verification checks anti-stale headers for all public entrypoi
   assert.match(deploy, /no-store/i);
 });
 
+test('PowerShell anti-stale probe delimits path before query string', () => {
+  assert.match(deploy, /\$Origin\$\{path\}\?deploy_sha=/,
+    'PowerShell must delimit ${path} before ? or StrictMode treats path?deploy_sha as a variable name');
+  assert.doesNotMatch(deploy, /\$Origin\$path\?deploy_sha=/,
+    'ambiguous $path? interpolation crashes after a successful production deploy');
+});
+
 test('public redirects cannot preserve stale routing decisions', () => {
   assert.doesNotMatch(domainEntry, /cache-control['\"]?\s*:\s*['\"]public,\s*max-age=300/i);
   assert.match(domainEntry, /route\.type\s*===\s*['\"]redirect['\"][\s\S]{0,500}no-store/i);
