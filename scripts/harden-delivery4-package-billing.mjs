@@ -10,7 +10,9 @@ const PACKAGE_NEW_REMOUNT_MARKER="!packages.length||selection.mode==='package_ne
 const GUARANTEED_SCHEDULE_MARKER='function bvSchedule(){if(bvTimer)return;bvTimer=setTimeout(()=>{bvTimer=null;';
 
 export function transformDelivery4Billing(source){
-  let next=String(source);
+  const original=String(source);
+  const usesCrlf=original.includes('\r\n');
+  let next=usesCrlf?original.replace(/\r\n/g,'\n'):original;
   if(!next.includes(REQUEST_KEY_MARKER)){
     const needle="    p_package_sessions_total:s.packageSessionsTotal,\n    p_package_id:s.packageId\n";
     const replacement="    p_package_sessions_total:s.packageSessionsTotal,\n    p_package_id:s.packageId,\n    p_request_key:s.mode==='package_new'?'package-new:'+appointmentId:null\n";
@@ -30,7 +32,7 @@ export function transformDelivery4Billing(source){
     next=next.replace(oldSchedule,newSchedule);
   }
   if(!/bvSchedule\(\);\s*$/.test(next))next=next.replace(/\s*$/,'\nbvSchedule();\n');
-  return next;
+  return usesCrlf?next.replace(/\n/g,'\r\n'):next;
 }
 
 export function runDelivery4BillingHardening(){
