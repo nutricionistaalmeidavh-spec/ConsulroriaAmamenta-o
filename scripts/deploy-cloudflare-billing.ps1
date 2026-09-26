@@ -51,7 +51,7 @@ function Get-Health([string]$Url, [string]$GitSha) {
 
 function Assert-AntiStaleHeaders([string]$Origin, [string]$GitSha) {
   foreach ($path in @('/', '/app/', '/comercial/', '/sw.js')) {
-    $probe = "$Origin$path?deploy_sha=$GitSha&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+    $probe = "$Origin${path}?deploy_sha=$GitSha&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
     $response = Invoke-WebRequest -Method Get -Uri $probe -Headers @{ 'cache-control' = 'no-cache'; 'pragma' = 'no-cache' } -UseBasicParsing
     $cacheControl = [string]$response.Headers['Cache-Control']
     if ($cacheControl -notmatch '(?i)(^|,)\s*no-store(?:\s*,|$)') {
