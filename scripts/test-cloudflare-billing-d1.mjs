@@ -11,6 +11,7 @@ import {
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const runtime = read('worker/cloudflare-billing-runtime.js');
+const authRuntime = read('worker/cloudflare-auth-runtime.js');
 const legacyWorker = read('worker/index.js');
 const domainEntry = read('worker/domain-entry.js');
 const schema = read('cloudflare/runtime-schema.sql');
@@ -29,6 +30,15 @@ assert.match(runtime, /subscriptionId/);
 assert.match(runtime, /external_subscription_id/);
 assert.doesNotMatch(runtime, /email_verification_token_hash|env\.EMAIL|\/api\/asaas\/confirm-email/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
+
+// The Central Artisys administers the same D1 partner records through the existing admin routes.
+assert.match(runtime, /'\/api\/admin\/partners'/);
+assert.match(runtime, /'\/api\/admin\/partner-sales'/);
+assert.match(runtime, /'\/api\/admin\/partner-commission'/);
+assert.match(authRuntime, /x-debora-partner-admin-secret/);
+assert.match(authRuntime, /DEBORA_PARTNER_ADMIN_SECRET/);
+assert.match(authRuntime, /partner_admin:\s*true/);
+assert.match(authRuntime, /\/api\/admin\/(partners|partner-sales|partner-commission)/);
 
 // The domain entry must intercept billing before the local API terminal. Block 8
 // retains the public API identity while same-process compatibility paths are used internally.
