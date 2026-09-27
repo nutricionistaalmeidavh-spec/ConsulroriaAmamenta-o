@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [pkgRaw, cutover, billingDeploy] = await Promise.all([
+const [pkgRaw, cutover, billingDeploy, wranglerConfig, domainEntry] = await Promise.all([
   readFile(new URL('../package.json', import.meta.url), 'utf8'),
   readFile(new URL('./cutover-cloudflare-runtime.ps1', import.meta.url), 'utf8'),
   readFile(new URL('./deploy-cloudflare-billing.ps1', import.meta.url), 'utf8'),
+  readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
+  readFile(new URL('../worker/domain-entry.js', import.meta.url), 'utf8'),
 ]);
 
 const pkg = JSON.parse(pkgRaw);
@@ -30,4 +32,15 @@ for (const marker of ['CLINICAL_DB', 'CLINICAL_FILES', 'wrangler.cutover.generat
   assert.ok(cutover.includes(marker), `cutover script must preserve ${marker}`);
 }
 
-console.log('Production deploy contract OK: D1 billing migration precedes guarded Cloudflare deploy.');
+assert.match(
+  wranglerConfig,
+  /"workers_dev"\s*:\s*true/,
+  'workers.dev fallback must remain explicitly enabled while external integrations may still use that hostname',
+);
+assert.match(
+  domainEntry,
+  /['"]\/api\/webhooks\/asaas['"]/,
+  'production Asaas webhook route must remain owned by the Worker runtime',
+);
+
+console.log('Production deploy contract OK: D1 billing migration precedes guarded Cloudflare deploy and webhook fallback remains routable.');
