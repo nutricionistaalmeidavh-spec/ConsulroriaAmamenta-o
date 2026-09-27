@@ -5,6 +5,7 @@
   "main": "worker/domain-entry.js",
   "compatibility_date": "2026-09-06",
   "keep_vars": true,
+  "workers_dev": true,
   "routes": [
     { "pattern": "deboralactacao.com", "custom_domain": true },
     { "pattern": "www.deboralactacao.com", "custom_domain": true },
