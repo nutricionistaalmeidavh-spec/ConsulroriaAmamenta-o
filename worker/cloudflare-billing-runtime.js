@@ -959,7 +959,7 @@ async function applyVerifiedPayment(env, payment, environment, mapped) {
     await updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition);
 
     let activationStatus = null;
-    if (transition === 'active') {
+    if (!mapped.renewal && transition === 'active') {
       const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
       if (pending && pending.status !== 'activated') {
         const now = new Date().toISOString();
