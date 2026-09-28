@@ -1,11 +1,13 @@
 import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clinical-runtime.js';
 import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
+import { resolveProductAccess } from './product-access-runtime.js';
+import { reservePregrantedIdentity } from './signup-identity.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
 const ASAAS_SANDBOX_API_URL = 'https://api-sandbox.asaas.com/v3';
 const ASAAS_CHECKOUT_URL = 'https://asaas.com/checkoutSession/show?id=';
 const ASAAS_SANDBOX_CHECKOUT_URL = 'https://sandbox.asaas.com/checkoutSession/show/';
-const CHECKOUT_TTL_MS = 2 * 60 * 60 * 1000;
+const CHECKOUT_TTL_MS = 60 * 60 * 1000;
 const enc = new TextEncoder();
 
 function json(status, body, extraHeaders = {}) {
@@ -86,6 +88,7 @@ async function asaasFetch(env, path, options = {}, environment = 'production') {
   if (!config.secret) return { response: null, payload: null };
   const response = await fetch(`${config.apiUrl}${path}`, {
     ...options,
+    signal: AbortSignal.timeout(10000),
     headers: {
       access_token: config.secret,
       accept: 'application/json',
@@ -255,6 +258,8 @@ async function preparePendingSignup(request, env) {
   }
 
   const userId = crypto.randomUUID();
+  const reservation = await reservePregrantedIdentity(env, email, userId);
+  if (reservation) return json(403, reservation);
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   await db(env).prepare(`INSERT INTO billing_pending_signups(
@@ -275,29 +280,34 @@ async function activatePendingSignup(env, userId) {
   const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(userId).first();
   if (!pending) return runtimeUserById(env, userId);
   if (!['paid', 'activated'].includes(pending.status)) throw new Error('payment_not_confirmed');
-  const existing = await db(env).prepare('SELECT user_id FROM auth_users WHERE lower(email)=lower(?) LIMIT 1').bind(pending.email).first();
+  const existing = await db(env).prepare('SELECT user_id,password_reset_required FROM auth_users WHERE lower(email)=lower(?) LIMIT 1').bind(pending.email).first();
   if (existing && existing.user_id !== userId) throw new Error('email_already_registered');
+  if (existing && Number(existing.password_reset_required)) throw new Error('mailbox_claim_required');
   if (pending.status === 'activated') return runtimeUserById(env, userId);
 
   const now = new Date().toISOString();
   const userMetadata = JSON.stringify({ signup_source: 'commercial_saas', plan_intent: pending.plan_code });
-  const appMetadata = JSON.stringify({ payment_activated: true, activation_source: 'asaas_verified_payment' });
-  await db(env).batch([
+  const appMetadata = JSON.stringify({ commercial_account: true, payment_activated: true, activation_source: 'asaas_verified_payment' });
+  const activation = await db(env).batch([
     db(env).prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
     ) VALUES(?,?,NULL,?,NULL,?,?,NULL,?,?,0,?)
     ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,email_confirmed_at=excluded.email_confirmed_at,
       updated_at=excluded.updated_at,user_metadata_json=excluded.user_metadata_json,app_metadata_json=excluded.app_metadata_json,
-      password_reset_required=0`).bind(userId, pending.email, now, pending.created_at || now, now, userMetadata, appMetadata, now),
+      password_reset_required=0 WHERE auth_users.password_reset_required=0`).bind(userId, pending.email, now, pending.created_at || now, now, userMetadata, appMetadata, now),
     db(env).prepare(`INSERT INTO auth_credentials(
       user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
-    ) VALUES(?,?,?,?, 'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
-      password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=CURRENT_TIMESTAMP`)
-      .bind(userId, pending.password_salt, pending.password_hash, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS)),
-    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,updated_at=? WHERE user_id=?`).bind(now, now, userId),
+    ) SELECT user_id,password_salt,password_hash,password_iterations,'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+      FROM billing_pending_signups WHERE user_id=? AND EXISTS (
+        SELECT 1 FROM auth_users WHERE auth_users.user_id=billing_pending_signups.user_id AND password_reset_required=0)
+    ON CONFLICT(user_id) DO NOTHING`)
+      .bind(userId),
+    db(env).prepare(`UPDATE billing_pending_signups SET status='activated',activated_at=?,updated_at=? WHERE user_id=?
+      AND EXISTS (SELECT 1 FROM auth_users WHERE auth_users.user_id=billing_pending_signups.user_id AND password_reset_required=0)
+      AND EXISTS (SELECT 1 FROM auth_credentials WHERE auth_credentials.user_id=billing_pending_signups.user_id)`).bind(now, now, userId),
   ]);
+  if (!activation[0].meta.changes || !activation[2].meta.changes) throw new Error('mailbox_claim_required');
   return runtimeUserById(env, userId);
 }
 
@@ -305,7 +315,12 @@ async function pendingStatus(request, env) {
   const input = await request.json().catch(() => ({}));
   const pending = await pendingSignupByProof(env, String(input.userId || ''), String(input.signupNonce || ''));
   if (!pending) return json(401, { error: 'invalid_signup_proof' });
-  if (pending.status === 'activated') return json(200, { ok: true, status: 'account_activated' });
+  if (pending.status === 'activated') {
+    const access = await resolveProductAccess(env, await runtimeUserById(env, pending.user_id));
+    return json(200, { ok: true, status: access.commercial && access.active ? 'account_activated' : 'activation_pending' });
+  }
+
+  await reconcileOwner(env, pending.user_id);
 
   const checkout = await db(env).prepare(`SELECT status FROM billing_checkout_requests
     WHERE owner_id=? AND provider='asaas' ORDER BY created_at DESC LIMIT 1`).bind(pending.user_id).first();
@@ -313,17 +328,30 @@ async function pendingStatus(request, env) {
 
   if (pending.status === 'pending') {
     const now = new Date().toISOString();
-    await db(env).prepare(`UPDATE billing_pending_signups SET status='paid',payment_confirmed_at=COALESCE(payment_confirmed_at,?),
+    await db(env).prepare(`UPDATE billing_pending_signups SET status=CASE WHEN status='activated' THEN status ELSE 'paid' END,payment_confirmed_at=COALESCE(payment_confirmed_at,?),
       updated_at=? WHERE user_id=?`).bind(now, now, pending.user_id).run();
   }
   await activatePendingSignup(env, pending.user_id);
-  return json(200, { ok: true, status: 'account_activated' });
+  const access = await resolveProductAccess(env, await runtimeUserById(env, pending.user_id));
+  return json(200, { ok: true, status: access.commercial && access.active ? 'account_activated' : 'activation_pending' });
 }
 
 async function expireStaleCheckout(env, prior) {
   if (!prior?.id || !['pending_provider', 'checkout_created'].includes(prior.status)) return false;
   const createdAt = Date.parse(String(prior.created_at || ''));
   if (!Number.isFinite(createdAt) || Date.now() - createdAt <= CHECKOUT_TTL_MS) return false;
+  if (prior.external_checkout_id) {
+    const environment = prior.provider === 'asaas_sandbox' ? 'sandbox' : 'production';
+    const { response, payload } = await asaasFetch(env, `/checkouts/${encodeURIComponent(prior.external_checkout_id)}`, {}, environment);
+    if (!response?.ok || String(payload?.id) !== prior.external_checkout_id) throw Object.assign(new Error('checkout_verification_unavailable'), { status: 503 });
+    if (!['EXPIRED', 'CANCELED', 'CANCELLED'].includes(String(payload.status).toUpperCase())) {
+      // Never re-sell a paid checkout or cancel an active one from a local clock.
+      await reconcileCheckout(env, prior, environment);
+      throw Object.assign(new Error('checkout_in_progress'), { status: 409 });
+    }
+  } else if (Date.now() - createdAt < CHECKOUT_TTL_MS + 60000) {
+    return false; // allow for a timed-out create reaching the provider late
+  }
   await db(env).batch([
     db(env).prepare(`UPDATE billing_checkout_requests SET status='expired',updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(prior.id),
     db(env).prepare(`UPDATE partner_attributions SET status='cancelled',commission_status=CASE WHEN commission_status='approved' THEN commission_status ELSE 'cancelled' END,
@@ -362,6 +390,7 @@ async function createCheckoutRequest(env, { ownerId, planCode, provider, partner
       priced.subtotalCents, priced.discountCents, priced.totalCents, priced.commissionCents,
       JSON.stringify({ backend: 'cloudflare-d1' }),
     ).run();
+  await scheduleReconciliation(env, id);
 
   if (priced.partner) {
     await db(env).prepare(`INSERT INTO partner_attributions(
@@ -450,8 +479,17 @@ async function authenticatedCheckout(request, env, environment) {
   const input = await request.json().catch(() => ({}));
   const planCode = String(input.planCode || '');
   if (!['pro_monthly', 'pro_annual'].includes(planCode)) return json(400, { error: 'invalid_plan' });
-  return createProviderCheckout(request, env, environment, 'authenticated', user.id, planCode,
+  const claimKey = `payment-owner:${asaasConfig(env, environment).provider}:${user.id}`;
+  const claim = await acquireClaim(env, claimKey);
+  if (!claim) return json(409, { error: 'checkout_in_progress' });
+  try {
+  if (environment === 'production') {
+    const state = await billingStatusForOwner(env, user);
+    if (['active', 'activation_pending'].includes(state.status)) return json(200, state);
+  }
+  return await createProviderCheckout(request, env, environment, 'authenticated', user.id, planCode,
     normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource));
+  } finally { await releaseClaim(env, claimKey, claim); }
 }
 
 async function preauthCheckout(request, env) {
@@ -462,8 +500,13 @@ async function preauthCheckout(request, env) {
   const pending = await pendingSignupByProof(env, userId, nonce);
   if (!pending) return json(401, { error: 'invalid_signup_proof' });
   if (pending.plan_code !== planCode) return json(409, { error: 'pending_checkout_other_plan' });
-  return createProviderCheckout(request, env, 'production', 'pre_email_confirmation', userId, planCode,
-    normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource));
+  const key = `payment-owner:asaas:${userId}`;
+  const claim = await acquireClaim(env, key);
+  if (!claim) return json(409, { error: 'checkout_in_progress' });
+  try {
+    return await createProviderCheckout(request, env, 'production', 'pre_email_confirmation', userId, planCode,
+      normalizePartnerCode(input.partnerCode), normalizeAttributionSource(input.attributionSource));
+  } finally { await releaseClaim(env, key, claim); }
 }
 
 function parseCheckoutReference(value) {
@@ -491,8 +534,11 @@ function currentPeriodEnd(payment, planCode) {
   const due = /^\d{4}-\d{2}-\d{2}$/.test(String(payment?.dueDate || ''))
     ? new Date(`${payment.dueDate}T12:00:00Z`)
     : new Date();
-  if (planCode === 'pro_annual') due.setUTCFullYear(due.getUTCFullYear() + 1);
-  else due.setUTCMonth(due.getUTCMonth() + 1);
+  const day = due.getUTCDate();
+  due.setUTCDate(1);
+  due.setUTCMonth(due.getUTCMonth() + (planCode === 'pro_annual' ? 12 : 1));
+  const lastDay = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() + 1, 0)).getUTCDate();
+  due.setUTCDate(Math.min(day, lastDay));
   return due.toISOString();
 }
 
@@ -503,8 +549,14 @@ async function mapPayment(env, payment, provider, environment) {
     if (!checkout?.external_checkout_id) return null;
     const { response, payload } = await asaasFetch(env, `/payments?checkoutSession=${encodeURIComponent(checkout.external_checkout_id)}&limit=100`, { method: 'GET' }, environment);
     const rows = Array.isArray(payload?.data) ? payload.data : [];
-    if (!response?.ok || !rows.some((item) => String(item?.id || '') === String(payment.id))) return null;
-    return { checkout, renewal: false };
+    if (!response?.ok) throw Object.assign(new Error('asaas_payment_mapping_unavailable'), { status: 502 });
+    if (!rows.some((item) => String(item?.id || '') === String(payment.id))) {
+      if (payload?.hasMore) throw Object.assign(new Error('asaas_payment_mapping_pagination_required'), { status: 502 });
+      return null;
+    }
+    const subscription = await db(env).prepare('SELECT * FROM subscriptions WHERE owner_id=? AND provider=? LIMIT 1').bind(checkout.owner_id, provider).first();
+    const periodAnchor = rows.map(row => row.dueDate).filter(Boolean).sort()[0];
+    return { checkout, subscription, renewal: false, periodAnchor };
   }
 
   const subscriptionId = String(payment?.subscription || '');
@@ -532,7 +584,8 @@ async function beginEvent(env, provider, paymentId, providerStatus, checkoutId, 
   if (Number(result?.meta?.changes || 0) > 0) return { eventId, process: true };
   const existing = await db(env).prepare('SELECT status FROM billing_webhook_events WHERE provider=? AND external_event_id=? LIMIT 1').bind(provider, eventId).first();
   if (existing?.status === 'processed') return { eventId, process: false, duplicate: true };
-  if (existing?.status === 'received') return { eventId, process: false, inProgress: true };
+  // The owner lease below serializes processors. A received row without its
+  // live lease is an interrupted job, not a permanent lock.
   await db(env).prepare(`UPDATE billing_webhook_events SET status='received',error_message=NULL,processed_at=NULL WHERE provider=? AND external_event_id=?`)
     .bind(provider, eventId).run();
   return { eventId, process: true };
@@ -549,7 +602,12 @@ async function upsertSubscription(env, mapped, payment, transition, providerStat
   const provider = checkout.provider;
   const subscriptionId = String(payment?.subscription || mapped.subscription?.external_subscription_id || '');
   const customerId = String(payment?.customer || mapped.subscription?.external_customer_id || '');
-  const periodEnd = transition === 'active' ? currentPeriodEnd(payment, checkout.plan_code) : mapped.subscription?.current_period_end || null;
+  const annualSamePurchase = checkout.plan_code === 'pro_annual' && mapped.subscription?.origin_checkout_request_id === checkout.id;
+  const periodEnd = transition === 'active'
+    ? annualSamePurchase && mapped.subscription.current_period_end
+      ? mapped.subscription.current_period_end
+      : currentPeriodEnd(checkout.plan_code === 'pro_annual' && mapped.periodAnchor ? { dueDate: mapped.periodAnchor } : payment, checkout.plan_code)
+    : mapped.subscription?.current_period_end || null;
   const id = mapped.subscription?.id || crypto.randomUUID();
   await db(env).prepare(`INSERT INTO subscriptions(
       id,owner_id,provider,external_customer_id,external_subscription_id,origin_checkout_request_id,plan_code,status,current_period_end,metadata_json,created_at,updated_at
@@ -557,13 +615,13 @@ async function upsertSubscription(env, mapped, payment, transition, providerStat
     ON CONFLICT(owner_id,provider) DO UPDATE SET
       external_customer_id=excluded.external_customer_id,
       external_subscription_id=CASE WHEN excluded.external_subscription_id<>'' THEN excluded.external_subscription_id ELSE subscriptions.external_subscription_id END,
-      origin_checkout_request_id=COALESCE(subscriptions.origin_checkout_request_id,excluded.origin_checkout_request_id),
+      origin_checkout_request_id=excluded.origin_checkout_request_id,
       plan_code=excluded.plan_code,status=excluded.status,current_period_end=excluded.current_period_end,
       metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP`)
     .bind(
       id, checkout.owner_id, provider, customerId, subscriptionId,
       checkout.id || mapped.subscription?.origin_checkout_request_id || null, checkout.plan_code, transition, periodEnd,
-      JSON.stringify({ payment_id: payment.id, provider_status: providerStatus, backend: 'cloudflare-d1' }),
+      JSON.stringify({ payment_id: payment.id, due_date: payment.dueDate || null, provider_status: providerStatus, backend: 'cloudflare-d1' }),
     ).run();
   return { periodEnd, subscriptionId };
 }
@@ -594,10 +652,136 @@ async function pendingEmailForOwner(env, ownerId) {
   return row?.email || null;
 }
 
+async function acquireClaim(env, key, ttlMs = 120000) {
+  const token = crypto.randomUUID();
+  const result = await db(env).prepare(`INSERT INTO billing_processing_claims(claim_key,token,expires_at) VALUES(?,?,?)
+    ON CONFLICT(claim_key) DO UPDATE SET token=excluded.token,expires_at=excluded.expires_at
+    WHERE julianday(billing_processing_claims.expires_at)<=julianday(?)`)
+    .bind(key, token, new Date(Date.now() + ttlMs).toISOString(), new Date().toISOString()).run();
+  return Number(result.meta?.changes) ? token : null;
+}
+
+async function releaseClaim(env, key, token) {
+  await db(env).prepare('DELETE FROM billing_processing_claims WHERE claim_key=? AND token=?').bind(key, token).run();
+}
+
+async function scheduleReconciliation(env, id, delayMs = 60000, error = null) {
+  await db(env).prepare(`INSERT INTO billing_reconciliation_schedule(checkout_request_id,next_attempt_at,last_error,updated_at)
+    VALUES(?,?,?,?) ON CONFLICT(checkout_request_id) DO UPDATE SET next_attempt_at=excluded.next_attempt_at,
+    last_error=excluded.last_error,updated_at=excluded.updated_at`)
+    .bind(id, new Date(Date.now() + delayMs).toISOString(), error, new Date().toISOString()).run();
+}
+
+// Only API-verified data reaches this function. The list response is also an
+// authenticated Asaas boundary; browser callback parameters never reach here.
+async function reconcileCheckout(env, checkout, environment = 'production') {
+  if (!checkout.external_checkout_id) return;
+  const { response, payload } = await asaasFetch(env, `/payments?checkoutSession=${encodeURIComponent(checkout.external_checkout_id)}&limit=100`, {}, environment);
+  if (!response?.ok || !Array.isArray(payload?.data)) throw Object.assign(new Error('asaas_reconciliation_unavailable'), { status: 502 });
+  if (payload.hasMore) throw Object.assign(new Error('asaas_reconciliation_pagination_required'), { status: 502 });
+  // Old periods first, so a late event for an old instalment cannot win simply
+  // because it happened to be listed last by the provider.
+  const payments = [...payload.data].sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || '')));
+  for (const payment of payments) {
+    if (!billingTransition(payment.status)) continue;
+    const subscription = await db(env).prepare('SELECT * FROM subscriptions WHERE owner_id=? AND provider=? LIMIT 1').bind(checkout.owner_id, checkout.provider).first();
+    const result = await applyVerifiedPayment(env, payment, environment, { checkout, subscription, renewal: false, periodAnchor: payments[0]?.dueDate });
+    if (!result.ok) throw Object.assign(new Error('payment_reconciliation_pending'), { status: result.status });
+  }
+}
+
+async function reconcileOwner(env, ownerId) {
+  // Polling is bounded across tabs as well as within the frontend.
+  const key = `reconcile:${ownerId}`;
+  const claim = await acquireClaim(env, key, 20000);
+  if (!claim) return;
+  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider='asaas'
+    AND status IN ('pending_provider','checkout_created','paid') ORDER BY created_at DESC LIMIT 1`).bind(ownerId).first();
+  if (!checkout) return;
+  try { await reconcileCheckout(env, checkout); }
+  catch (error) { await scheduleReconciliation(env, checkout.id, 60000, String(error.message).slice(0, 500)); }
+  // Deliberately retain the short lease to limit provider traffic from polling.
+}
+
+async function billingStatusForOwner(env, user) {
+  let access = await resolveProductAccess(env, user);
+  if (access.commercial && access.active) return { status: 'active', access };
+  await reconcileOwner(env, user.id);
+  access = await resolveProductAccess(env, user);
+  if (access.commercial && access.active) return { status: 'active', access };
+  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider='asaas'
+    ORDER BY created_at DESC LIMIT 1`).bind(user.id).first();
+  if (checkout?.status === 'paid') {
+    const subscription = await db(env).prepare("SELECT * FROM subscriptions WHERE owner_id=? AND provider='asaas' LIMIT 1").bind(user.id).first();
+    // A genuinely expired old purchase must not block a new subscription.
+    if (!subscription || (subscription.status === 'active' && (!subscription.current_period_end || Date.parse(subscription.current_period_end) > Date.now()))) {
+      return { status: 'activation_pending', access };
+    }
+  }
+  if (['pending_provider', 'checkout_created'].includes(checkout?.status)) {
+    if (await expireStaleCheckout(env, checkout)) return { status: 'none', access };
+    return { status: 'awaiting_payment', access, checkoutUrl: checkout.checkout_url || null };
+  }
+  return { status: 'none', access };
+}
+
+async function handleCheckoutEvent(env, incoming, environment) {
+  const id = String(incoming.checkout?.id || '');
+  if (!/^[A-Za-z0-9_-]{3,128}$/.test(id)) return json(400, { error: 'invalid_checkout_id' });
+  const config = asaasConfig(env, environment);
+  const { response, payload } = await asaasFetch(env, `/checkouts/${encodeURIComponent(id)}`, {}, environment);
+  if (!response?.ok || String(payload?.id || '') !== id) return json(502, { error: 'asaas_checkout_verification_failed' });
+  let checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE provider=? AND external_checkout_id=? LIMIT 1').bind(config.provider, id).first();
+  if (!checkout) {
+    const requestId = parseCheckoutReference(payload.externalReference);
+    if (requestId) {
+      checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? AND provider=? LIMIT 1').bind(requestId, config.provider).first();
+      if (checkout && !checkout.external_checkout_id) {
+        // Recover a successful POST whose response never reached our Worker.
+        await attachCheckout(env, checkout.id, id, checkoutUrl(payload, environment));
+        checkout.external_checkout_id = id;
+      } else if (checkout?.external_checkout_id !== id) checkout = null;
+    }
+  }
+  if (!checkout) return json(200, { status: 'ignored_unmapped_checkout' });
+  await scheduleReconciliation(env, checkout.id);
+  await reconcileCheckout(env, checkout, environment);
+  if (['EXPIRED', 'CANCELED', 'CANCELLED'].includes(String(payload.status).toUpperCase())) {
+    const status = payload.status === 'EXPIRED' ? 'expired' : 'cancelled';
+    await db(env).prepare("UPDATE billing_checkout_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('pending_provider','checkout_created')").bind(status, checkout.id).run();
+  }
+  return json(200, { status: 'processed', environment });
+}
+
+export async function reconcileBilling(env, { limit = 3 } = {}) {
+  if (!env.CLINICAL_DB || !env.ASAAS_SECRET) return;
+  // Also backfill pre-migration pending purchases and failed webhook jobs.
+  await db(env).prepare(`INSERT OR IGNORE INTO billing_reconciliation_schedule(checkout_request_id)
+    SELECT id FROM billing_checkout_requests WHERE provider='asaas' AND
+    (status IN ('pending_provider','checkout_created') OR id IN (SELECT checkout_request_id FROM billing_webhook_events WHERE status<>'processed'))`).run();
+  const jobs = await db(env).prepare(`SELECT c.* FROM billing_reconciliation_schedule s JOIN billing_checkout_requests c ON c.id=s.checkout_request_id
+    WHERE c.provider='asaas' AND julianday(s.next_attempt_at)<=julianday('now') ORDER BY s.next_attempt_at LIMIT ?`).bind(Math.min(5, Math.max(1, limit))).all();
+  for (const checkout of jobs.results || []) {
+    try {
+      await reconcileCheckout(env, checkout);
+      const current = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=?').bind(checkout.id).first();
+      await expireStaleCheckout(env, current);
+      const fresh = await db(env).prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkout.id).first();
+      if (['paid', 'cancelled', 'expired', 'failed'].includes(fresh?.status)) {
+        await db(env).prepare('DELETE FROM billing_reconciliation_schedule WHERE checkout_request_id=?').bind(checkout.id).run();
+      } else await scheduleReconciliation(env, checkout.id, 5 * 60000);
+    } catch (error) { await scheduleReconciliation(env, checkout.id, 5 * 60000, String(error.message).slice(0, 500)); }
+  }
+  await db(env).prepare("DELETE FROM billing_processing_claims WHERE julianday(expires_at)<julianday('now','-1 day')").run();
+}
+
 async function handleWebhook(request, env, environment) {
   const config = asaasConfig(env, environment);
   if (!config.secret) return json(503, { error: environment === 'sandbox' ? 'asaas_sandbox_not_configured' : 'asaas_not_configured' });
   const incoming = await request.json().catch(() => null);
+  const webhookToken = environment === 'sandbox' ? env.ASAAS_SANDBOX_WEBHOOK_TOKEN : env.ASAAS_WEBHOOK_TOKEN;
+  if (webhookToken && !safeEqual(request.headers.get('asaas-access-token'), webhookToken)) return json(401, { error: 'invalid_webhook_token' });
+  if (String(incoming?.event || '').startsWith('CHECKOUT_')) return handleCheckoutEvent(env, incoming, environment);
   const paymentId = String(incoming?.payment?.id || '');
   if (!paymentId) return json(200, { status: 'ignored_without_payment', environment });
   if (!/^[A-Za-z0-9_-]{3,128}$/.test(paymentId)) return json(400, { error: 'invalid_payment_id' });
@@ -612,18 +796,41 @@ async function handleWebhook(request, env, environment) {
   const mapped = await mapPayment(env, payment, config.provider, environment);
   if (!mapped) return json(200, { status: 'ignored_unmapped_payment', paymentId, environment });
 
+  return applyVerifiedPayment(env, payment, environment, mapped);
+}
+
+async function applyVerifiedPayment(env, payment, environment, mapped) {
+  const config = asaasConfig(env, environment);
+  const paymentId = String(payment.id);
+  const providerStatus = String(payment.status).toUpperCase();
+  const transition = billingTransition(providerStatus);
+  if (!transition) return json(200, { status: 'ignored_no_billing_transition' });
+  const claimKey = `payment-owner:${config.provider}:${mapped.checkout.owner_id}`;
+  const claim = await acquireClaim(env, claimKey);
+  if (!claim) return json(503, { error: 'event_in_progress' });
+  try {
+    // Re-read after acquiring the owner lease, not from the mapping snapshot.
+    mapped.subscription = await db(env).prepare('SELECT * FROM subscriptions WHERE owner_id=? AND provider=? LIMIT 1')
+      .bind(mapped.checkout.owner_id, config.provider).first();
+    const previous = mapped.subscription;
+    let previousMetadata = {};
+    try { previousMetadata = JSON.parse(previous?.metadata_json || '{}'); } catch {}
+    const olderMonthlyPeriod = mapped.checkout.plan_code === 'pro_monthly' && previous?.status === 'active'
+      && ((previousMetadata.due_date && payment.dueDate && payment.dueDate < previousMetadata.due_date)
+        || (!previousMetadata.due_date && previous.current_period_end && currentPeriodEnd(payment, 'pro_monthly') < previous.current_period_end));
+    if (olderMonthlyPeriod) return json(200, { status: 'ignored_older_period', paymentId });
+
   const event = await beginEvent(env, config.provider, paymentId, providerStatus, mapped.checkout?.id, {
     environment, payment_id: paymentId, provider_status: providerStatus, renewal: mapped.renewal,
   });
   if (event.duplicate) return json(200, { status: 'duplicate_ignored', eventId: event.eventId, paymentId, environment });
-  if (event.inProgress) return json(503, { error: 'event_in_progress', eventId: event.eventId });
 
   try {
     const subscription = await upsertSubscription(env, mapped, payment, transition, providerStatus);
     await updateInitialCheckoutAndAttribution(env, mapped, providerStatus, transition);
 
     let activationStatus = null;
-    if (!mapped.renewal && transition === 'active') {
+    if (transition === 'active') {
       const pending = await db(env).prepare('SELECT * FROM billing_pending_signups WHERE user_id=? LIMIT 1').bind(mapped.checkout.owner_id).first();
       if (pending && pending.status !== 'activated') {
         const now = new Date().toISOString();
@@ -647,7 +854,7 @@ async function handleWebhook(request, env, environment) {
       planCode: mapped.checkout.plan_code,
       status: transition,
       expiresAt: subscription.periodEnd,
-      externalRef: subscription.subscriptionId || paymentId,
+      externalRef: mapped.checkout.plan_code === 'pro_annual' ? mapped.checkout.id : subscription.subscriptionId || paymentId,
       environment,
     });
 
@@ -661,6 +868,7 @@ async function handleWebhook(request, env, environment) {
     await finishEvent(env, config.provider, event.eventId, false, String(error?.message || error).slice(0, 1000));
     return json(500, { error: 'billing_state_apply_failed', eventId: event.eventId, details: error?.message || undefined });
   }
+  } finally { await releaseClaim(env, claimKey, claim); }
 }
 
 function adminEmails(env) {
@@ -803,7 +1011,7 @@ async function health(env, environment) {
 }
 
 const ROUTES = new Set([
-  '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/health',
+  '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/status', '/api/asaas/health',
   '/api/asaas/preauth-checkout', '/api/asaas/checkout', '/api/webhooks/asaas',
   '/api/sandbox/asaas/health', '/api/sandbox/asaas/checkout', '/api/sandbox/webhooks/asaas',
   '/api/admin/partners', '/api/admin/partner-sales', '/api/admin/partner-commission',
@@ -812,19 +1020,24 @@ const ROUTES = new Set([
 export async function handleCloudflareBillingRuntime(request, env, url = new URL(request.url)) {
   if (!env.CLINICAL_DB || !ROUTES.has(url.pathname)) return null;
   try {
-    if (url.pathname.startsWith('/api/admin/')) return partnerAdmin(request, env, url);
-    if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return preparePendingSignup(request, env);
-    if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return pendingStatus(request, env);
-    if (url.pathname === '/api/asaas/health' && request.method === 'GET') return health(env, 'production');
-    if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return preauthCheckout(request, env);
-    if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request, env, 'production');
-    if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env, 'production');
-    if (url.pathname === '/api/sandbox/asaas/health' && request.method === 'GET') return health(env, 'sandbox');
-    if (url.pathname === '/api/sandbox/asaas/checkout' && request.method === 'POST') return authenticatedCheckout(request, env, 'sandbox');
-    if (url.pathname === '/api/sandbox/webhooks/asaas' && request.method === 'POST') return handleWebhook(request, env, 'sandbox');
+    if (url.pathname.startsWith('/api/admin/')) return await partnerAdmin(request, env, url);
+    if (url.pathname === '/api/asaas/signup' && request.method === 'POST') return await preparePendingSignup(request, env);
+    if (url.pathname === '/api/asaas/pending-status' && request.method === 'POST') return await pendingStatus(request, env);
+    if (url.pathname === '/api/asaas/status' && request.method === 'GET') {
+      const user = await authenticateClinicalRequest(request, env);
+      if (!user?.id) return json(401, { error: 'unauthorized' });
+      return json(200, await billingStatusForOwner(env, user));
+    }
+    if (url.pathname === '/api/asaas/health' && request.method === 'GET') return await health(env, 'production');
+    if (url.pathname === '/api/asaas/preauth-checkout' && request.method === 'POST') return await preauthCheckout(request, env);
+    if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return await authenticatedCheckout(request, env, 'production');
+    if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return await handleWebhook(request, env, 'production');
+    if (url.pathname === '/api/sandbox/asaas/health' && request.method === 'GET') return await health(env, 'sandbox');
+    if (url.pathname === '/api/sandbox/asaas/checkout' && request.method === 'POST') return await authenticatedCheckout(request, env, 'sandbox');
+    if (url.pathname === '/api/sandbox/webhooks/asaas' && request.method === 'POST') return await handleWebhook(request, env, 'sandbox');
     return json(405, { error: 'method_not_allowed' });
   } catch (error) {
-    return json(500, { error: 'cloudflare_billing_runtime_failed', details: error?.message || String(error) });
+    return json(error.status || 503, { error: 'cloudflare_billing_runtime_failed', details: error?.message || String(error) });
   }
 }
 

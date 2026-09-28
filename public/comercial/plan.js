@@ -10,6 +10,20 @@ const content = document.querySelector('#plan-content');
 const message = document.querySelector('#plan-message');
 const logoutButton = document.querySelector('#logout-button');
 const pageUrl = new URL(window.location.href);
+let checkoutBusy = false;
+let activationPending = false;
+let statusTimer;
+let statusAttempts = 0;
+
+function setCheckoutDisabled(disabled) {
+  document.querySelectorAll('[data-checkout]').forEach((button) => { button.disabled = disabled; });
+}
+
+function httpError(payload, status) {
+  const error = new Error(payload?.message || payload?.msg || payload?.error || `Erro HTTP ${status}`);
+  error.status = status;
+  return error;
+}
 
 function normalizePartnerCode(value) {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, '').slice(0, 64);
@@ -91,7 +105,7 @@ async function api(path, token, options = {}) {
   if (text) {
     try { payload = JSON.parse(text); } catch { payload = text; }
   }
-  if (!response.ok) throw new Error(payload?.message || payload?.msg || payload?.error || `Erro HTTP ${response.status}`);
+  if (!response.ok) throw httpError(payload, response.status);
   return { payload, response };
 }
 
@@ -106,7 +120,7 @@ async function workerApi(path, token, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.message || payload?.error || `Erro HTTP ${response.status}`);
+  if (!response.ok) throw httpError(payload, response.status);
   return payload;
 }
 
@@ -132,34 +146,94 @@ function showSignedIn() {
 
 function checkoutReturnMessage() {
   const state = new URL(window.location.href).searchParams.get('asaas');
-  if (state === 'success') return ['Checkout concluído. A liberação do Pro ocorre após a confirmação recebida pelo webhook do Asaas.', 'success'];
+  if (state === 'success') return ['Retorno do checkout recebido. Verificando pagamento e liberação do Pro…', ''];
   if (state === 'cancel') return ['Checkout cancelado. Seu plano atual não foi alterado.', ''];
   if (state === 'expired') return ['O checkout expirou. Você pode gerar um novo quando quiser.', ''];
   return null;
 }
 
 async function requestCheckout(planCode, token) {
-  setMessage('Preparando checkout seguro no Asaas…');
-  const input = document.querySelector('#upgrade-section input[name="partnerCode"]');
-  const typedCode = normalizePartnerCode(input?.value || '');
-  const existingCode = currentPartnerCode();
-  const attributionSource = typedCode && typedCode === existingCode ? currentAttributionSource() : 'manual_code';
-  const partnerCode = typedCode ? rememberPartnerCode(typedCode, attributionSource) : rememberPartnerCode('', 'manual_code');
-  const response = await fetch('/api/asaas/checkout', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ planCode, partnerCode, attributionSource }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const errors = {
-      invalid_partner_code: 'Cupom ou código do parceiro inválido ou inativo.',
-      partner_lookup_failed: 'Não foi possível validar o código do parceiro agora.',
-    };
-    throw new Error(errors[payload?.error] || payload?.details?.[0]?.description || payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
+  if (checkoutBusy || activationPending) return;
+  checkoutBusy = true;
+  setCheckoutDisabled(true);
+  try {
+    const state = await workerApi('/api/asaas/status', token);
+    if (handlePurchaseState(state)) return;
+    if (state?.status !== 'none') throw new Error('Não foi possível confirmar o estado da compra. Tente novamente em instantes.');
+    setMessage('Preparando checkout seguro no Asaas…');
+    const input = document.querySelector('#upgrade-section input[name="partnerCode"]');
+    const typedCode = normalizePartnerCode(input?.value || '');
+    const existingCode = currentPartnerCode();
+    const attributionSource = typedCode && typedCode === existingCode ? currentAttributionSource() : 'manual_code';
+    const partnerCode = typedCode ? rememberPartnerCode(typedCode, attributionSource) : rememberPartnerCode('', 'manual_code');
+    const response = await fetch('/api/asaas/checkout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planCode, partnerCode, attributionSource }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errors = {
+        invalid_partner_code: 'Cupom ou código do parceiro inválido ou inativo.',
+        partner_lookup_failed: 'Não foi possível validar o código do parceiro agora.',
+      };
+      throw new Error(errors[payload?.error] || payload?.details?.[0]?.description || payload?.message || payload?.error || 'Não foi possível preparar o checkout.');
+    }
+    if (handlePurchaseState(payload)) return;
+    if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
+    window.location.assign(payload.checkoutUrl);
+  } finally {
+    checkoutBusy = false;
+    setCheckoutDisabled(activationPending);
   }
-  if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
-  window.location.assign(payload.checkoutUrl);
+}
+
+function handlePurchaseState(state, patientCount = null) {
+  if (state?.status === 'active') {
+    activationPending = false;
+    if (state.access) paintAccess(state.access, patientCount);
+    document.querySelector('#upgrade-section').hidden = true;
+    setMessage('Seu acesso Pro está liberado.', 'success');
+    return true;
+  }
+  if (state?.status === 'activation_pending') {
+    activationPending = true;
+    setCheckoutDisabled(true);
+    setMessage('Pagamento aprovado. Estamos finalizando a liberação do Pro. Não faça outro pagamento. Recarregue esta página para consultar novamente.');
+    return true;
+  }
+  if (state?.status === 'awaiting_payment') {
+    if (state.checkoutUrl) window.location.assign(state.checkoutUrl);
+    else {
+      activationPending = true;
+      setMessage('Sua compra está em processamento. Não faça outro pagamento. Recarregue esta página para consultar novamente.');
+    }
+    return true;
+  }
+  return false;
+}
+
+async function refreshPurchaseStatus(token, patientCount) {
+  clearTimeout(statusTimer);
+  try {
+    const state = await workerApi('/api/asaas/status', token);
+    if (state.status === 'active') {
+      const access = state.access || await workerApi('/api/license/me', token);
+      handlePurchaseState({ ...state, access }, patientCount);
+      return;
+    }
+    if (state.status === 'activation_pending') handlePurchaseState(state);
+    else {
+      activationPending = false;
+      setMessage(state.status === 'awaiting_payment'
+        ? 'Aguardando confirmação do pagamento. Não é necessário iniciar outra compra.'
+        : 'Nenhum pagamento confirmado até o momento.');
+    }
+    setCheckoutDisabled(activationPending);
+    if (++statusAttempts < 12) statusTimer = setTimeout(() => refreshPurchaseStatus(token, patientCount), 5000);
+  } catch (error) {
+    setMessage('Não foi possível atualizar seu plano. Recarregue a página para tentar novamente. Sua compra não será repetida.', 'error');
+  }
 }
 
 function paintAccess(access, patientCount) {
@@ -201,7 +275,7 @@ async function init() {
 
   try {
     const { payload: user } = await api('/auth/v1/user', token);
-    if (!user?.id) throw new Error('Sessão inválida.');
+    if (!user?.id) throw httpError({ message: 'Sessão inválida.' }, 401);
     const [profilesRes, patientCount, access] = await Promise.all([
       api(`/rest/v1/professional_profiles?owner_id=eq.${encodeURIComponent(user.id)}&select=professional_name,business_name,phone,settings&limit=1`, token),
       loadPatientCount(user.id, token),
@@ -217,18 +291,25 @@ async function init() {
 
     const returned = checkoutReturnMessage();
     if (returned) setMessage(returned[0], returned[1]);
+    if (pageUrl.searchParams.get('asaas') === 'success') {
+      activationPending = true;
+      setCheckoutDisabled(true);
+      await refreshPurchaseStatus(token, patientCount);
+    }
 
     document.querySelectorAll('[data-checkout]').forEach((button) => {
       button.addEventListener('click', async () => {
-        button.disabled = true;
         try { await requestCheckout(button.dataset.checkout, token); }
         catch (error) { setMessage(error?.message || 'Não foi possível preparar o checkout.', 'error'); }
-        finally { button.disabled = false; }
       });
     });
   } catch (error) {
-    sessionStorage.removeItem(SESSION_KEY);
-    showSignedOut();
+    if (error?.status === 401) {
+      sessionStorage.removeItem(SESSION_KEY);
+      showSignedOut();
+    } else {
+      document.querySelector('#upgrade-section').hidden = true;
+    }
     setMessage(error?.message || 'Sua sessão expirou. Entre novamente.', 'error');
   }
 }

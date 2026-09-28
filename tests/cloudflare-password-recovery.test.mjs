@@ -8,6 +8,7 @@ function database() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync('cloudflare/full-migration-schema.sql','utf8'));
   sqlite.exec(readFileSync('cloudflare/runtime-schema.sql','utf8'));
+  sqlite.exec(readFileSync('cloudflare/migrations/0009-billing-recovery.sql','utf8'));
   const db = { prepare(sql) { return { bind(...args) { return {
     async first() { return sqlite.prepare(sql).get(...args) || null; },
     async run() { const r=sqlite.prepare(sql).run(...args); return {meta:{changes:r.changes}}; }
@@ -22,6 +23,8 @@ const req=(path,body)=>new Request(`https://app.test${path}`,{method:'POST',head
 test('D1 recovery: private, hashed, expiring, one-use; password and refresh credentials rotate without network fallback',async()=>{
   const {sqlite,db}=database(); const messages=[];
   const env={CLINICAL_DB:db,CLINICAL_AUTH_SECRET:'test-secret',AUTH_RECOVERY_ORIGIN:'https://app.test',AUTH_RECOVERY_DELIVERY:{async fetch(request){messages.push(await request.json());return new Response(null,{status:204});}}};
+  env.LICENSE_SERVICE_SECRET='test-license-secret';
+  env.ARTISYS_LICENSING={async fetch(){return Response.json({commercial:false,active:true});}};
   const original=globalThis.fetch; globalThis.fetch=()=>{throw new Error('external network forbidden');};
   try {
     const signup=await handle(req('/api/auth/signup',{email:'synthetic@example.test',password:'old-password'}),env);

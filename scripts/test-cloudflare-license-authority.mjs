@@ -4,6 +4,7 @@ import { strict as assert } from 'node:assert';
 const worker = readFileSync('worker/index.js', 'utf8');
 const domain = readFileSync('worker/domain-entry.js', 'utf8');
 const bootstrap = readFileSync('worker/commercial-license-bootstrap.js', 'utf8');
+const accessResolver = readFileSync('worker/product-access-runtime.js', 'utf8');
 const wrangler = readFileSync('wrangler.jsonc', 'utf8');
 const plan = readFileSync('public/comercial/plan.js', 'utf8');
 const repositories = readFileSync('public/clinical-source/core/lib/repositories.js', 'utf8');
@@ -23,10 +24,11 @@ assert.match(worker, /\/api\/clinical\/media\/upload/);
 assert.match(worker, /ARTISYS_LICENSING/);
 
 assert.match(domain, /ensureExplicitCommercialMarker/);
-assert.match(bootstrap, /saas_accounts/);
-assert.match(bootstrap, /access\?\.commercial===true/);
-assert.match(bootstrap, /hasOwnedRecord\(env,'saas_accounts',user\.id\)/);
-assert.match(bootstrap, /source:'d1_saas_account'/);
+assert.match(bootstrap, /resolveProductAccess\(env,user\)/);
+assert.match(accessResolver, /saas_accounts/);
+assert.match(accessResolver, /app_metadata\?\.commercial_account === true/);
+assert.match(accessResolver, /source: 'd1_saas_account'/);
+assert.match(accessResolver, /licensing_unavailable/);
 assert.doesNotMatch(bootstrap, /migrated_saas_account|supabase_saas_account|supabase\.co|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY/i);
 
 assert.doesNotMatch(plan, /\/rest\/v1\/entitlements/);

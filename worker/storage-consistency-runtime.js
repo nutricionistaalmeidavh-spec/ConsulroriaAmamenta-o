@@ -1,4 +1,5 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { resolveProductAccess } from './product-access-runtime.js';
 import { runtimeJson } from './cloudflare-data-runtime.js';
 import { validateRelationalRow } from './relational-integrity-runtime.js';
 
@@ -89,20 +90,14 @@ function mutationTarget(request, url) {
   return parseObjectTarget(url);
 }
 
-async function resolveMediaAccess(env, user) {
-  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET) return null;
-  const response = await env.ARTISYS_LICENSING.fetch(new Request('https://artisys-licensing.internal/api/internal/product-license', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-artisys-license-secret': env.LICENSE_SERVICE_SECRET },
-    body: JSON.stringify({ action: 'resolve', productCode: 'debora-lactacao', email: user.email }),
-  }));
-  if (!response.ok) return null;
-  return response.json().catch(() => null);
-}
-
 async function assertMediaAccess(env, user, contentType) {
   if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) return null;
-  const access = await resolveMediaAccess(env, user);
+  let access;
+  try { access = await resolveProductAccess(env, user); }
+  catch (error) {
+    if (error?.code === 'licensing_unavailable') return runtimeJson(503, { error: error.code });
+    throw error;
+  }
   return access?.commercial && !access.mediaUpload
     ? runtimeJson(403, { error: 'SAAS_MEDIA_UPLOAD_NOT_ALLOWED' })
     : null;

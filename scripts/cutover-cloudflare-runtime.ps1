@@ -257,6 +257,10 @@ try {
 
   Step 'Aplicando schema de autenticação Cloudflare'
   Invoke-NativeChecked 'runtime schema' $NpxCmd @('--yes','wrangler@4','d1','execute',$D1Database,'--remote','--file',$RuntimeSchema,'--yes') | Out-Null
+  foreach ($migration in @('0009-billing-recovery.sql','0010-billing-reconciliation.sql')) {
+    $migrationPath = Join-Path $RepoRoot "cloudflare\migrations\$migration"
+    Invoke-NativeChecked $migration $NpxCmd @('--yes','wrangler@4','d1','execute',$D1Database,'--remote','--file',$migrationPath,'--yes') | Out-Null
+  }
 
   Step 'Instalando dependências e materializando runtime clínico'
   Push-Location $RepoRoot

@@ -2,6 +2,7 @@ import {
   CLOUDFLARE_PBKDF2_ITERATIONS,
   cloudflarePasswordHash,
 } from './cloudflare-auth-compat.js';
+import { reservePregrantedIdentity } from './signup-identity.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -299,12 +300,22 @@ async function handleSignup(request, env) {
     } : { message: 'Este e-mail já possui cadastro. Use Entrar.' });
   }
 
-  const userId = crypto.randomUUID();
+  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
+  if (pending) {
+    const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
+    if (!safeEqual(proof, pending.password_hash)) return json(400, {error:'signup_credentials_invalid',message:'Cadastro pendente. Informe a senha original ou use “Esqueci minha senha”.'});
+  }
+  const userId = pending?.user_id || crypto.randomUUID();
+  // A payment confirmed for this identity is its own purchase, not a pre-grant.
+  if (!pending?.payment_confirmed_at) {
+    const claim = await reservePregrantedIdentity(env, email, userId);
+    if (claim) return json(403, claim);
+  }
   const now = new Date().toISOString();
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const userMetadata = JSON.stringify(input?.data && typeof input.data === 'object' ? input.data : {});
-  const appMetadata = JSON.stringify({ auth_backend: 'cloudflare-d1' });
+  const appMetadata = JSON.stringify({ auth_backend: 'cloudflare-d1', commercial_account: true });
   const database = requireDb(env);
 
   const statements = [
@@ -319,10 +330,29 @@ async function handleSignup(request, env) {
       .bind(userId, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS),
   ];
 
-  if (typeof database.batch === 'function') await database.batch(statements);
-  else for (const statement of statements) await statement.run();
+  if (pending) {
+    // Recheck the credential version inside the transaction: a recovery may
+    // have changed it since the password proof above was evaluated.
+    statements[0] = database.prepare(`INSERT INTO auth_users(
+      user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
+      user_metadata_json,app_metadata_json,password_reset_required,migrated_at
+    ) SELECT user_id,email,NULL,NULL,NULL,?,?,NULL,?,?,0,? FROM billing_pending_signups
+      WHERE user_id=? AND password_hash=?`)
+      .bind(now,now,userMetadata,appMetadata,now,userId,pending.password_hash);
+    statements[1] = database.prepare(`INSERT INTO auth_credentials(
+      user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
+    ) SELECT p.user_id,p.password_salt,p.password_hash,p.password_iterations,'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+      FROM billing_pending_signups p JOIN auth_users u ON u.user_id=p.user_id
+      WHERE p.user_id=? AND p.password_hash=?`)
+      .bind(userId,pending.password_hash);
+  }
+  const created = await database.batch(statements);
+  if (!created[0].meta.changes || !created[1].meta.changes) {
+    return json(409, {error:'signup_credentials_changed',message:'A senha foi alterada. Tente novamente com sua nova senha.'});
+  }
 
   const user = await runtimeUserById(env, userId);
+  if (!user) return json(409, {error:'signup_credentials_changed',message:'A senha foi alterada. Tente novamente com sua nova senha.'});
   return json(200, await issueSession(env, user));
 }
 
@@ -357,14 +387,16 @@ async function handleRecovery(request, env) {
   }
   const token = randomToken(32);
   const tokenHash = await sha256(token);
-  const row = await userRowByEmail(env, email);
+  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
+  const row = pending || await userRowByEmail(env, email);
+  const recoveryTable = pending ? 'billing_signup_recovery_tokens' : 'auth_recovery_tokens';
   if (row) {
     const db = requireDb(env);
     const now = new Date().toISOString();
-    const result = await db.prepare(`INSERT INTO auth_recovery_tokens(token_hash,user_id,expires_at,created_at)
+    const result = await db.prepare(`INSERT INTO ${recoveryTable}(token_hash,user_id,expires_at,created_at)
       VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
       token_hash=excluded.token_hash,expires_at=excluded.expires_at,created_at=excluded.created_at
-      WHERE auth_recovery_tokens.created_at < ?`)
+      WHERE ${recoveryTable}.created_at < ?`)
       .bind(
         tokenHash,
         row.user_id,
@@ -384,7 +416,8 @@ async function handleRecovery(request, env) {
         if (!response.ok) throw new Error('delivery_failed');
       } catch {
         console.error('auth_recovery_delivery_failed');
-        await db.prepare('DELETE FROM auth_recovery_tokens WHERE token_hash = ?').bind(tokenHash).run();
+        await db.prepare(`DELETE FROM ${recoveryTable} WHERE token_hash = ?`).bind(tokenHash).run();
+        return json(503, {error:'recovery_delivery_unavailable',message:'Recuperação por e-mail indisponível no momento. Entre em contato com o suporte.'});
       }
     }
   }
@@ -408,6 +441,19 @@ async function handleResetPassword(request, env) {
   // it outside the batch: concurrent resets must not reuse a stale user_id, and a
   // failed credential write must leave the link available for retry.
   const results = await db.batch([
+    db.prepare(`UPDATE billing_pending_signups SET password_salt=?,password_hash=?,password_iterations=?,signup_nonce_hash=?,updated_at=?
+      WHERE user_id IN (SELECT user_id FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?)`)
+      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,await sha256(randomToken(32)),now,tokenHash,now),
+    db.prepare(`INSERT INTO auth_credentials(user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at)
+      SELECT t.user_id,?,?,?,'PBKDF2-SHA256',?,? FROM billing_signup_recovery_tokens t
+      JOIN auth_users u ON u.user_id=t.user_id WHERE t.token_hash=? AND t.expires_at>?
+      ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
+      password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=excluded.updated_at`)
+      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now,tokenHash,now),
+    db.prepare(`UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id IN
+      (SELECT user_id FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?)`).bind(now,tokenHash,now),
+    db.prepare(`UPDATE auth_users SET password_reset_required=0,email_confirmed_at=?,updated_at=? WHERE user_id IN
+      (SELECT user_id FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?)`).bind(now,now,tokenHash,now),
     db.prepare(`INSERT INTO auth_credentials(user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at)
       SELECT user_id,?,?,?, 'PBKDF2-SHA256',?,? FROM auth_recovery_tokens
       WHERE token_hash = ? AND expires_at > ?
@@ -417,13 +463,14 @@ async function handleResetPassword(request, env) {
     db.prepare(`UPDATE auth_refresh_sessions SET revoked_at=? WHERE user_id IN
       (SELECT user_id FROM auth_recovery_tokens WHERE token_hash=? AND expires_at>?)`)
       .bind(now,tokenHash,now),
-    db.prepare(`UPDATE auth_users SET password_reset_required=0,updated_at=? WHERE user_id IN
+    db.prepare(`UPDATE auth_users SET password_reset_required=0,updated_at=?,email_confirmed_at=? WHERE user_id IN
       (SELECT user_id FROM auth_recovery_tokens WHERE token_hash=? AND expires_at>?)`)
-      .bind(now,tokenHash,now),
+      .bind(now,now,tokenHash,now),
     db.prepare('DELETE FROM auth_recovery_tokens WHERE token_hash=? AND expires_at>?')
       .bind(tokenHash,now),
+    db.prepare('DELETE FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?').bind(tokenHash,now),
   ]);
-  if (!results[3].meta.changes) {
+  if (!results[7].meta.changes && !results[8].meta.changes) {
     return json(400, { message: 'Link inválido ou expirado. Solicite uma nova recuperação.' });
   }
   return json(200, { message: 'Senha atualizada. Entre novamente com sua nova senha.' });

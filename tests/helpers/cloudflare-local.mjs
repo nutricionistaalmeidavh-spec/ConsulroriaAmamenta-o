@@ -6,17 +6,18 @@ import { pbkdf2Sync } from 'node:crypto';
 
 export const credentials = { email: 'audit@example.test', password: 'Local-test-only-2026!' };
 export const userId = 'audit-professional';
-export async function createLocalRuntime({ port = 0, assets = false } = {}) {
+export async function createLocalRuntime({ port = 0, assets = false, outboundService, licensing, bindings = {} } = {}) {
   const recoveryMessages = [];
   const bundle = await build({ entryPoints: ['worker/domain-entry.js'], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
   const mf = new Miniflare({
     modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-08-06',
     host: '127.0.0.1', port,
-    bindings: { AUTH_RECOVERY_ORIGIN: 'https://app.test', CLINICAL_AUTH_SECRET: 'local-audit-secret-never-use-in-production' },
+    bindings: { AUTH_RECOVERY_ORIGIN: 'https://app.test', CLINICAL_AUTH_SECRET: 'local-audit-secret-never-use-in-production', LICENSE_SERVICE_SECRET: 'local-test-license-secret', ...bindings },
     d1Databases: ['CLINICAL_DB'], r2Buckets: ['CLINICAL_FILES'],
-    // External services are deliberately unavailable: migrated login and clinical data must work locally.
-    outboundService: () => new Response(JSON.stringify({ message: 'External service disabled in local audit' }), { status: 503, headers: { 'content-type': 'application/json' } }),
-    serviceBindings: { AUTH_RECOVERY_DELIVERY: async request => { recoveryMessages.push(await request.json()); return new Response(null,{status:204}); }, ...(assets ? { ASSETS: async (request) => {
+    // No real provider traffic. Legacy clinical fixtures use an explicit confirmed
+    // legacy license, not the former fail-open behavior of an unavailable service.
+    outboundService: outboundService || (() => new Response(JSON.stringify({ message: 'External service disabled in local audit' }), { status: 503, headers: { 'content-type': 'application/json' } })),
+    serviceBindings: { ARTISYS_LICENSING: licensing || (async () => Response.json({ productCode: 'debora-lactacao', planCode: 'legacy_unmanaged', active: true, commercial: false, enforceLimits: false, patientLimit: null, mediaUpload: true, expiresAt: null, source: 'legacy', status: 'unmanaged' })), AUTH_RECOVERY_DELIVERY: async request => { recoveryMessages.push(await request.json()); return new Response(null,{status:204}); }, ...(assets ? { ASSETS: async (request) => {
       const pathname = decodeURIComponent(new URL(request.url).pathname);
       const root = resolve('dist');
       const path = resolve(root, '.' + pathname + (pathname.endsWith('/') ? 'index.html' : ''));
@@ -35,6 +36,8 @@ export async function createLocalRuntime({ port = 0, assets = false } = {}) {
     'cloudflare/runtime-schema.sql',
     'cloudflare/migrations/0007-clinical-query-performance.sql',
     'cloudflare/migrations/0008-usage-observability.sql',
+    'cloudflare/migrations/0009-billing-recovery.sql',
+    'cloudflare/migrations/0010-billing-reconciliation.sql',
   ]) {
     const sql = (await readFile(path, 'utf8')).replace(/^--.*$/gm, '');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();

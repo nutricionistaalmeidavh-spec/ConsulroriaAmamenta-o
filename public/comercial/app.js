@@ -356,6 +356,12 @@ async function startCheckout(planCode, environment = 'production') {
   const token = currentSession?.access_token;
   if (!token) throw new ApiError('Sua sessão expirou. Entre novamente.', 401, null);
 
+  if (environment === 'production') {
+    const state = await request('/api/asaas/status', { token });
+    if (handlePurchaseState(state)) return;
+    if (state?.status !== 'none') throw new Error('Não foi possível confirmar o estado da compra. Tente novamente em instantes.');
+  }
+
   const endpoint = environment === 'sandbox'
     ? '/api/sandbox/asaas/checkout'
     : '/api/asaas/checkout';
@@ -379,11 +385,35 @@ async function startCheckout(planCode, environment = 'production') {
     const firstDetail = payload?.details?.[0]?.description;
     throw new ApiError(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o checkout.', response.status, payload);
   }
+  if (environment === 'production' && handlePurchaseState(payload)) return;
   if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
   window.location.assign(payload.checkoutUrl);
 }
 
+function handlePurchaseState(state) {
+  if (state?.status === 'active') {
+    sessionStorage.removeItem(CHECKOUT_AFTER_LOGIN_KEY);
+    showView('complete');
+    setMessage('Perfil salvo. Seu acesso Pro está liberado.', 'success');
+    return true;
+  }
+  if (state?.status === 'activation_pending') {
+    window.location.assign('./plano.html?asaas=success');
+    return true;
+  }
+  if (state?.status === 'awaiting_payment') {
+    if (state.checkoutUrl) window.location.assign(state.checkoutUrl);
+    else {
+      showView('complete');
+      setMessage('Sua compra está em processamento. Acompanhe em Meu plano; não é necessário pagar novamente.');
+    }
+    return true;
+  }
+  return false;
+}
+
 async function startPreconfirmCheckout(userId, signupNonce, planCode) {
+  sessionStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ userId, signupNonce }));
   setMessage('Cadastro preparado. Abrindo pagamento seguro no Asaas…');
   const partnerCode = currentPartnerCode();
   const attributionSource = currentAttributionSource();
@@ -397,7 +427,10 @@ async function startPreconfirmCheckout(userId, signupNonce, planCode) {
     const firstDetail = payload?.details?.[0]?.description;
     throw new ApiError(firstDetail || payload?.message || payload?.error || 'Não foi possível preparar o pagamento.', response.status, payload);
   }
-  if (payload.status === 'paid') { window.location.assign('./compra-concluida.html'); return; }
+  if (['paid', 'activation_pending', 'active'].includes(payload.status)) {
+    window.location.assign('./compra-concluida.html');
+    return;
+  }
   if (!payload.checkoutUrl) throw new Error('O Asaas não retornou o link do checkout.');
   window.location.assign(payload.checkoutUrl);
 }
@@ -408,17 +441,6 @@ async function continueAfterOnboarding() {
 
   if (returnContext === 'sandbox') {
     window.location.assign('./sandbox-teste.html?auto=1');
-    return;
-  }
-
-  if (pageUrl.searchParams.get('confirmed') === '1') {
-    showView('complete');
-    setMessage(
-      ['pro_monthly', 'pro_annual'].includes(selectedPlan)
-        ? 'Pagamento confirmado e perfil salvo. Seu acesso Pro está liberado.'
-        : 'E-mail confirmado e perfil salvo. Seu acesso Freemium está pronto.',
-      'success',
-    );
     return;
   }
 

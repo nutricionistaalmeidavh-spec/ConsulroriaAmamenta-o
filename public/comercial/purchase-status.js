@@ -33,7 +33,9 @@ async function checkPayment() {
       return;
     }
 
-    status.textContent = 'Aguardando a aprovação do pagamento. Assim que o Asaas confirmar, sua conta será ativada automaticamente.';
+    status.textContent = result.status === 'activation_pending'
+      ? 'Pagamento aprovado. Estamos finalizando a liberação do acesso Pro. Não faça um novo pagamento.'
+      : 'Aguardando a aprovação do pagamento. Assim que o Asaas confirmar, sua conta será ativada automaticamente.';
     if (++attempts < 12) timer = setTimeout(checkPayment, 10000);
   } catch {
     status.textContent = 'Ainda não foi possível atualizar a confirmação. Use “Verificar pagamento” novamente em instantes. Sua compra não será repetida.';
