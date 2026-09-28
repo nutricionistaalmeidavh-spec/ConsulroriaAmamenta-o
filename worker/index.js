@@ -232,8 +232,8 @@ function credentialEnvironment(secret) {
   return 'unknown';
 }
 
-function tomorrowAsaasDateTime() {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+function todayAsaasDateTime() {
+  const date = new Date();
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
 }
 
@@ -280,7 +280,7 @@ function checkoutPayload(planCode, requestId, origin, environment = 'production'
       }],
       subscription: {
         cycle: 'MONTHLY',
-        nextDueDate: tomorrowAsaasDateTime(),
+        nextDueDate: todayAsaasDateTime(),
       },
     };
   }

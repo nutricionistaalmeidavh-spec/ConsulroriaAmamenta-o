@@ -18,14 +18,18 @@ function readToken() {
 
 async function heartbeat() {
   if (document.visibilityState === 'hidden') return;
-  const current = token || readToken();
+  const current = readToken() || token;
   if (!current) return;
   try {
-    await fetch('/api/presence/heartbeat', {
+    const response = await fetch('/api/presence/heartbeat', {
       method: 'POST',
       headers: { Authorization: `Bearer ${current}` },
       cache: 'no-store',
     });
+    if (!response.ok) {
+      if ([401, 403].includes(response.status) && token === current) token = '';
+      throw new Error(`presence_heartbeat_http_${response.status}`);
+    }
   } catch {
     // Telemetry is best-effort and must never affect the application UX.
   }

@@ -16,3 +16,10 @@ test('presence runtime is best effort and contains no clinical payload', () => {
   assert.match(runtime,/catch/);
   assert.doesNotMatch(runtime,/patient|mother|baby|prontu/i);
 });
+
+test('presence heartbeat prefers the current stored token and handles HTTP failures', () => {
+  assert.match(runtime,/const current = readToken\(\) \|\| token/);
+  assert.match(runtime,/if \(!response\.ok\)/);
+  assert.match(runtime,/\[401, 403\]\.includes\(response\.status\)/);
+  assert.match(runtime,/presence_heartbeat_http_/);
+});

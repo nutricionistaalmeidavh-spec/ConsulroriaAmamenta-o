@@ -78,12 +78,12 @@ test('cleanup clamps oversized batches to 500', async () => {
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS total FROM user_sessions').get().total, 10);
 });
 
-test('worker schedules a daily 12-month cleanup capped at 200 rows', () => {
+test('worker keeps reconciliation and daily 12-month cleanup schedules', () => {
   const worker = readFileSync('worker/domain-entry.js', 'utf8');
   const wrangler = readFileSync('wrangler.jsonc', 'utf8');
   assert.match(worker, /async scheduled\s*\(/);
   assert.match(worker, /365\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/);
   assert.match(worker, /cleanupExpiredUsageSessions\(env,\s*\{\s*beforeIso:\s*before,\s*limit:\s*200\s*\}\)/s);
   assert.match(worker, /usage session cleanup failed/);
-  assert.match(wrangler, /"crons"\s*:\s*\[\s*"17 4 \* \* \*"\s*\]/);
+  assert.match(wrangler, /"crons"\s*:\s*\[\s*"\*\/5 \* \* \* \*"\s*,\s*"17 4 \* \* \*"\s*\]/);
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSqliteD1 } from './helpers/sqlite-d1.mjs';
-import { handleCloudflareBillingRuntime, currentPeriodEnd, reconcileBilling } from '../worker/cloudflare-billing-runtime.js';
+import { handleCloudflareBillingRuntime, currentPeriodEnd, reconcileBilling, checkoutPayload } from '../worker/cloudflare-billing-runtime.js';
 import { handleCloudflareAuthRuntime } from '../worker/cloudflare-auth-runtime.js';
 import { cloudflarePasswordHash } from '../worker/cloudflare-auth-compat.js';
 
@@ -16,7 +16,7 @@ async function fixture() {
   const db = createSqliteD1();
   let access = { ...free };
   let failLicenseSync = false;
-  const env = { CLINICAL_DB: db, ASAAS_SECRET: 'test-only', CLINICAL_AUTH_SECRET: 'test-only-secret', LICENSE_SERVICE_SECRET: 'test-only',
+  const env = { CLINICAL_DB: db, ASAAS_SECRET: 'test-only', ASSAS_SANDBOX_SECRET: 'test-sandbox-only', CLINICAL_AUTH_SECRET: 'test-only-secret', LICENSE_SERVICE_SECRET: 'test-only',
     ARTISYS_LICENSING: { fetch: async request => {
       const input = await request.json();
       if (input.action === 'sync') {
@@ -36,8 +36,8 @@ async function fixture() {
     method: data === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(authenticated ? { authorization: `Bearer ${session.access_token}` } : {}) },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
   }), env);
-  const addCheckout = async (status = 'checkout_created', createdAt = new Date().toISOString()) => db.prepare(`INSERT INTO billing_checkout_requests(id,owner_id,plan_code,provider,status,external_checkout_id,checkout_url,subtotal_cents,total_cents,created_at)
-    VALUES(?,?, 'pro_monthly','asaas',?,'checkout_test','https://asaas.test/pay',9990,9990,?)`).bind(checkoutId, owner, status, createdAt).run();
+  const addCheckout = async (status = 'checkout_created', createdAt = new Date().toISOString(), provider = 'asaas') => db.prepare(`INSERT INTO billing_checkout_requests(id,owner_id,plan_code,provider,status,external_checkout_id,checkout_url,subtotal_cents,total_cents,created_at)
+    VALUES(?,?, 'pro_monthly',?,?,'checkout_test','https://asaas.test/pay',9990,9990,?)`).bind(checkoutId, owner, provider, status, createdAt).run();
   return { db, env, call, addCheckout, setAccess(value) { access = value; }, failSync(value) { failLicenseSync = value; } };
 }
 
@@ -140,6 +140,207 @@ test('scheduled reconciliation recovers a lost webhook without another payment',
     assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
     assert.equal((await f.db.prepare('SELECT status FROM billing_webhook_events').first()).status, 'processed');
     assert.equal((await f.db.prepare('SELECT COUNT(*) n FROM billing_reconciliation_schedule').first()).n, 0);
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('recurring payment webhook maps directly by its verified checkoutSession', async () => {
+  const f = await fixture(); const original = globalThis.fetch;
+  const payment = {
+    id: 'pay_checkout_session', status: 'RECEIVED', value: 99.9, dueDate: '2026-09-28',
+    subscription: 'sub_checkout_session', checkoutSession: 'checkout_test', externalReference: null,
+  };
+  globalThis.fetch = async url => {
+    assert.match(String(url), /\/payments\/pay_checkout_session$/);
+    return json(payment);
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/webhooks/asaas', { event: 'PAYMENT_RECEIVED', payment: { id: payment.id } });
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await response.json()).status, 'processed');
+    const subscription = await f.db.prepare('SELECT * FROM subscriptions').first();
+    assert.equal(subscription.external_subscription_id, 'sub_checkout_session');
+    assert.equal(subscription.status, 'active');
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('authenticated sandbox recovery verifies the payment and checkout ownership', async () => {
+  const f = await fixture(); const original = globalThis.fetch;
+  const payment = {
+    id: 'pay_recovery', status: 'RECEIVED', value: 99.9, dueDate: '2026-09-28',
+    subscription: 'sub_recovery', checkoutSession: 'checkout_test', externalReference: null,
+  };
+  globalThis.fetch = async url => {
+    assert.match(String(url), /^https:\/\/api-sandbox\.asaas\.com\/v3\/payments\/pay_recovery$/);
+    return json(payment);
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/asaas/reconcile-payment', { paymentId: payment.id }, true);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await response.json()).status, 'processed');
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+    assert.equal((await f.db.prepare('SELECT external_subscription_id FROM subscriptions').first()).external_subscription_id, 'sub_recovery');
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('authenticated CHECKOUT_PAID remains authoritative after Asaas stops serving the checkout', async () => {
+  const f = await fixture(); const original = globalThis.fetch; const today = new Date().toISOString().slice(0,10);
+  const payment = { id: 'pay_closed_checkout', status: 'CONFIRMED', value: 99.9, dueDate: today, subscription: 'sub_closed_checkout' };
+  globalThis.fetch = async url => {
+    const value = String(url);
+    assert.doesNotMatch(value, /\/checkouts\/checkout_test$/, 'must not re-fetch a closed checkout after a verified webhook');
+    if (value.includes('checkoutSession=') || value.includes('externalReference=')) return json({ data: [], hasMore: false });
+    if (value.includes('/subscriptions?customer=cus_from_webhook')) return json({ data: [
+      { id: 'sub_closed_checkout', cycle: 'MONTHLY', value: 99.9, dateCreated: today },
+    ], hasMore: false });
+    if (value.includes('subscription=sub_closed_checkout')) return json({ data: [payment], hasMore: false });
+    throw new Error('Unexpected URL: ' + value);
+  };
+  try {
+    await f.addCheckout();
+    const event = { event: 'CHECKOUT_PAID', checkout: { id: 'checkout_test', status: 'PAID', customer: 'cus_from_webhook' } };
+    const response = await f.call('/api/webhooks/asaas', event);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+    assert.equal((await f.db.prepare('SELECT external_subscription_id FROM subscriptions').first()).external_subscription_id, 'sub_closed_checkout');
+    const saved = await f.db.prepare('SELECT metadata_json FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first();
+    assert.equal(JSON.parse(saved.metadata_json).provider_customer_id, 'cus_from_webhook');
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('monthly checkout charges on the contracting day without an unintended free day', () => {
+  const priced = { totalCents: 9990, discountCents: 0, partnerCode: '', plan: { installment_max: 12 } };
+  const payload = checkoutPayload('pro_monthly', checkoutId, 'https://app.test', 'sandbox', 'authenticated', priced);
+  assert.equal(payload.subscription.nextDueDate.slice(0, 10), new Date().toISOString().slice(0, 10));
+});
+
+test('sandbox status reconciles only the sandbox checkout against the sandbox API', async () => {
+  const f = await fixture(); const original = globalThis.fetch;
+  const payment = { id: 'pay_sandbox', status: 'CONFIRMED', dueDate: '2026-09-28', externalReference: `saas_checkout:${checkoutId}` };
+  globalThis.fetch = async url => {
+    assert.match(String(url), /^https:\/\/api-sandbox\.asaas\.com\/v3\//);
+    return json({ data: [payment], hasMore: false });
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+    assert.equal((await f.db.prepare('SELECT provider FROM subscriptions WHERE owner_id=?').bind(owner).first()).provider, 'asaas_sandbox');
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('reconciliation falls back to the exact external reference for recurring checkout payments', async () => {
+  const f = await fixture(); const original = globalThis.fetch; const calls = [];
+  const reference = `saas_checkout:${checkoutId}`;
+  const payment = { id: 'pay_recurring', status: 'CONFIRMED', dueDate: '2026-09-28', subscription: 'sub_recurring', externalReference: reference };
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    if (String(url).includes('checkoutSession=')) return json({ data: [], hasMore: false });
+    if (String(url).includes('externalReference=')) return json({ data: [payment, { ...payment, id: 'wrong', externalReference: 'another-order' }], hasMore: false });
+    throw new Error('Unexpected URL: ' + url);
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+    assert.equal((await f.db.prepare('SELECT external_subscription_id FROM subscriptions').first()).external_subscription_id, 'sub_recurring');
+    assert.equal(calls.length, 2);
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('recurring checkout recovers through its verified customer, unique subscription and payment', async () => {
+  const f = await fixture(); const original = globalThis.fetch; const calls = [];
+  const payment = { id: 'pay_subscription', status: 'RECEIVED', value: 99.9, dueDate: '2026-09-28', subscription: 'sub_unique' };
+  globalThis.fetch = async url => {
+    const value = String(url); calls.push(value);
+    if (value.includes('checkoutSession=') || value.includes('externalReference=')) return json({ data: [], hasMore: false });
+    if (value.includes('/checkouts/checkout_test')) return json({ id: 'checkout_test', status: 'PAID', customer: 'cus_verified' });
+    if (value.includes('/subscriptions?customer=')) return json({ data: [
+      { id: 'sub_old', cycle: 'MONTHLY', value: 99.9, dateCreated: '2026-09-27' },
+      { id: 'sub_unique', cycle: 'MONTHLY', value: 99.9, dateCreated: new Date().toISOString().slice(0,10) },
+    ], hasMore: false });
+    if (value.includes('subscription=sub_unique')) return json({ data: [payment], hasMore: false });
+    throw new Error('Unexpected URL: ' + value);
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(response.status, 200, await response.clone().text());
+    const subscription = await f.db.prepare('SELECT * FROM subscriptions').first();
+    assert.equal(subscription.external_subscription_id, 'sub_unique');
+    assert.equal(subscription.status, 'active');
+    assert.equal((await f.db.prepare('SELECT status FROM billing_checkout_requests WHERE id=?').bind(checkoutId).first()).status, 'paid');
+    assert.equal(calls.length, 5);
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('recurring recovery refuses ambiguous same-day subscriptions', async () => {
+  const f = await fixture(); const original = globalThis.fetch;
+  const today = new Date().toISOString().slice(0,10);
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('checkoutSession=') || value.includes('externalReference=')) return json({ data: [], hasMore: false });
+    if (value.includes('/checkouts/checkout_test')) return json({ id: 'checkout_test', status: 'PAID', customer: 'cus_verified' });
+    if (value.includes('/subscriptions?customer=')) return json({ data: [
+      { id: 'sub_one', cycle: 'MONTHLY', value: 99.9, dateCreated: today },
+      { id: 'sub_two', cycle: 'MONTHLY', value: 99.9, dateCreated: today },
+    ], hasMore: false });
+    throw new Error('must not inspect payments for an ambiguous subscription');
+  };
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    const response = await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'awaiting_payment');
+    assert.equal(await f.db.prepare('SELECT * FROM subscriptions').first(), null);
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('sandbox licensing sync is opt-in and identifies its sandbox source', async () => {
+  const f = await fixture(); const original = globalThis.fetch; const syncs = [];
+  f.env.SANDBOX_LICENSE_SYNC_ENABLED = 'true';
+  f.env.ARTISYS_LICENSING.fetch = async request => {
+    const body = await request.json();
+    if (body.action === 'sync') syncs.push(body);
+    return json(body.action === 'resolve' ? free : { ok: true });
+  };
+  const payment = { id: 'pay_sandbox_sync', status: 'CONFIRMED', dueDate: '2026-09-28', externalReference: `saas_checkout:${checkoutId}` };
+  globalThis.fetch = async () => json({ data: [payment], hasMore: false });
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(syncs.length, 1);
+    assert.equal(syncs[0].source, 'asaas_sandbox');
+    assert.equal(syncs[0].planCode, 'pro_monthly');
+  } finally { globalThis.fetch = original; f.db.close(); }
+});
+
+test('duplicate sandbox payment safely repairs a license sync enabled later', async () => {
+  const f = await fixture(); const original = globalThis.fetch; const syncs = [];
+  f.env.ARTISYS_LICENSING.fetch = async request => {
+    const body = await request.json();
+    if (body.action === 'sync') syncs.push(body);
+    return json(body.action === 'resolve' ? free : { ok: true });
+  };
+  const payment = { id: 'pay_sandbox_retry', status: 'CONFIRMED', dueDate: '2026-09-28', externalReference: `saas_checkout:${checkoutId}` };
+  globalThis.fetch = async url => String(url).includes('/payments?')
+    ? json({ data: [payment], hasMore: false })
+    : json(payment);
+  try {
+    await f.addCheckout('checkout_created', new Date().toISOString(), 'asaas_sandbox');
+    await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(syncs.length, 0);
+    await f.db.prepare('DELETE FROM billing_processing_claims').run();
+    f.env.SANDBOX_LICENSE_SYNC_ENABLED = 'true';
+    await f.call('/api/sandbox/asaas/status', undefined, true);
+    assert.equal(syncs.length, 1);
+    assert.equal(syncs[0].source, 'asaas_sandbox');
+    assert.equal((await f.db.prepare('SELECT COUNT(*) n FROM subscriptions').first()).n, 1);
+    assert.equal((await f.db.prepare('SELECT COUNT(*) n FROM billing_webhook_events').first()).n, 1);
   } finally { globalThis.fetch = original; f.db.close(); }
 });
 
