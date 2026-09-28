@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "consulroriaamamenta-o-sandbox",
+  "main": "worker/domain-entry.js",
+  "compatibility_date": "2026-09-28",
+  "workers_dev": true,
+  "routes": [],
+  "triggers": {
+    "crons": ["*/5 * * * *", "17 4 * * *"]
+  },
+  "services": [
+    {
+      "binding": "ARTISYS_LICENSING",
+      "service": "obra-na-mao-comercial-sandbox"
+    }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "CLINICAL_DB",
+      "database_name": "debora-lactacao-sandbox",
+      "database_id": "8b9a95eb-e989-4240-a6b0-51ccc4e5ce18"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CLINICAL_FILES",
+      "bucket_name": "debora-lactacao-sandbox-files"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "sandbox",
+    "SANDBOX_LICENSE_SYNC_ENABLED": "true",
+    "AUTH_RECOVERY_ORIGIN": "https://consulroriaamamenta-o-sandbox.nutricionistaalmeidavh.workers.dev"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

@@ -117,7 +117,8 @@ async function licensingRequest(env, body) {
 }
 
 async function syncCommercialLicense(env, { email, planCode, status, expiresAt, externalRef, environment }) {
-  if (environment !== 'production' || !email) return;
+  const sandboxSyncEnabled = environment === 'sandbox' && env.SANDBOX_LICENSE_SYNC_ENABLED === 'true';
+  if ((environment !== 'production' && !sandboxSyncEnabled) || !email) return;
   await licensingRequest(env, {
     action: 'sync',
     productCode: 'debora-lactacao',
@@ -125,7 +126,7 @@ async function syncCommercialLicense(env, { email, planCode, status, expiresAt, 
     planCode,
     status,
     expiresAt: expiresAt || null,
-    source: 'asaas',
+    source: environment === 'sandbox' ? 'asaas_sandbox' : 'asaas',
     externalRef: externalRef || null,
     actor: 'asaas_webhook_d1',
   });
@@ -168,8 +169,8 @@ async function resolvePartnerOffer(env, code, plan) {
   };
 }
 
-function tomorrowAsaasDateTime() {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+function todayAsaasDateTime() {
+  const date = new Date();
   return `${date.toISOString().slice(0, 10)} 12:00:00`;
 }
 
@@ -208,7 +209,7 @@ function checkoutPayload(planCode, requestId, origin, environment, flow, priced)
         quantity: 1,
         value: priced.totalCents / 100,
       }],
-      subscription: { cycle: 'MONTHLY', nextDueDate: tomorrowAsaasDateTime() },
+      subscription: { cycle: 'MONTHLY', nextDueDate: todayAsaasDateTime() },
     };
   }
 
@@ -559,6 +560,16 @@ async function mapPayment(env, payment, provider, environment) {
     return { checkout, subscription, renewal: false, periodAnchor };
   }
 
+  const checkoutSession = String(payment?.checkoutSession || '');
+  if (checkoutSession) {
+    const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests
+      WHERE provider=? AND external_checkout_id=? LIMIT 1`).bind(provider, checkoutSession).first();
+    if (!checkout) return null;
+    const subscription = await db(env).prepare('SELECT * FROM subscriptions WHERE owner_id=? AND provider=? LIMIT 1')
+      .bind(checkout.owner_id, provider).first();
+    return { checkout, subscription, renewal: false, periodAnchor: payment?.dueDate || null };
+  }
+
   const subscriptionId = String(payment?.subscription || '');
   if (!subscriptionId) return null;
   const subscription = await db(env).prepare(`SELECT * FROM subscriptions
@@ -672,13 +683,88 @@ async function scheduleReconciliation(env, id, delayMs = 60000, error = null) {
     .bind(id, new Date(Date.now() + delayMs).toISOString(), error, new Date().toISOString()).run();
 }
 
+async function recurringPaymentsForCheckout(env, checkout, environment, verifiedCheckout = null) {
+  if (checkout.plan_code !== 'pro_monthly') return [];
+  let providerCheckout = verifiedCheckout;
+  let checkoutResponse = null;
+  if (!providerCheckout) {
+    ({ response: checkoutResponse, payload: providerCheckout } = await asaasFetch(
+      env, `/checkouts/${encodeURIComponent(checkout.external_checkout_id)}`, {}, environment,
+    ));
+  }
+  const responseOk = verifiedCheckout ? true : checkoutResponse?.ok;
+  if (!responseOk || String(providerCheckout?.id || '') !== checkout.external_checkout_id
+    || String(providerCheckout?.status || '').toUpperCase() !== 'PAID') {
+    console.warn('billing recurring checkout not paid', JSON.stringify({
+      environment, responseStatus: verifiedCheckout ? 'verified_webhook' : checkoutResponse?.status || null,
+      checkoutMatches: String(providerCheckout?.id || '') === checkout.external_checkout_id,
+      providerStatus: String(providerCheckout?.status || ''),
+    }));
+    return [];
+  }
+  const customerId = String(providerCheckout?.customer || '');
+  if (!customerId) {
+    console.warn('billing recurring checkout missing customer', JSON.stringify({ environment }));
+    return [];
+  }
+
+  const { response: subscriptionsResponse, payload: subscriptionsPayload } = await asaasFetch(
+    env, `/subscriptions?customer=${encodeURIComponent(customerId)}&limit=100`, {}, environment,
+  );
+  if (!subscriptionsResponse?.ok || !Array.isArray(subscriptionsPayload?.data)) {
+    throw Object.assign(new Error('asaas_subscription_reconciliation_unavailable'), { status: 502 });
+  }
+  if (subscriptionsPayload.hasMore) throw Object.assign(new Error('asaas_subscription_reconciliation_pagination_required'), { status: 502 });
+
+  const checkoutDay = String(checkout.created_at || '').slice(0, 10);
+  const reference = `saas_checkout:${checkout.id}`;
+  let candidates = subscriptionsPayload.data.filter(subscription => {
+    const createdDay = String(subscription?.dateCreated || '').slice(0, 10);
+    return String(subscription?.cycle || '').toUpperCase() === 'MONTHLY'
+      && Math.round(Number(subscription?.value || 0) * 100) === Number(checkout.total_cents || 0)
+      && Boolean(checkoutDay) && createdDay === checkoutDay;
+  });
+  const referenced = candidates.filter(subscription => String(subscription?.externalReference || '') === reference);
+  if (referenced.length === 1) candidates = referenced;
+  if (candidates.length !== 1 || !candidates[0]?.id) {
+    console.warn('billing recurring subscription match failed', JSON.stringify({
+      environment, checkoutDay, totalCents: Number(checkout.total_cents || 0), candidateCount: candidates.length,
+      subscriptions: subscriptionsPayload.data.map(subscription => ({
+        cycle: String(subscription?.cycle || ''), valueCents: Math.round(Number(subscription?.value || 0) * 100),
+        createdDay: String(subscription?.dateCreated || '').slice(0, 10), referenceMatches: String(subscription?.externalReference || '') === reference,
+      })),
+    }));
+    if (candidates.length > 1) throw Object.assign(new Error('asaas_subscription_reconciliation_ambiguous'), { status: 409 });
+    return [];
+  }
+
+  const subscriptionId = String(candidates[0].id);
+  const { response: paymentsResponse, payload: paymentsPayload } = await asaasFetch(
+    env, `/payments?subscription=${encodeURIComponent(subscriptionId)}&limit=100`, {}, environment,
+  );
+  if (!paymentsResponse?.ok || !Array.isArray(paymentsPayload?.data)) {
+    throw Object.assign(new Error('asaas_subscription_payments_unavailable'), { status: 502 });
+  }
+  if (paymentsPayload.hasMore) throw Object.assign(new Error('asaas_reconciliation_pagination_required'), { status: 502 });
+  return paymentsPayload.data.filter(payment => String(payment?.subscription || '') === subscriptionId
+    && Math.round(Number(payment?.value || 0) * 100) === Number(checkout.total_cents || 0));
+}
+
 // Only API-verified data reaches this function. The list response is also an
 // authenticated Asaas boundary; browser callback parameters never reach here.
-async function reconcileCheckout(env, checkout, environment = 'production') {
+async function reconcileCheckout(env, checkout, environment = 'production', verifiedCheckout = null) {
   if (!checkout.external_checkout_id) return;
-  const { response, payload } = await asaasFetch(env, `/payments?checkoutSession=${encodeURIComponent(checkout.external_checkout_id)}&limit=100`, {}, environment);
+  let { response, payload } = await asaasFetch(env, `/payments?checkoutSession=${encodeURIComponent(checkout.external_checkout_id)}&limit=100`, {}, environment);
   if (!response?.ok || !Array.isArray(payload?.data)) throw Object.assign(new Error('asaas_reconciliation_unavailable'), { status: 502 });
   if (payload.hasMore) throw Object.assign(new Error('asaas_reconciliation_pagination_required'), { status: 502 });
+  if (payload.data.length === 0) {
+    const reference = `saas_checkout:${checkout.id}`;
+    ({ response, payload } = await asaasFetch(env, `/payments?externalReference=${encodeURIComponent(reference)}&limit=100`, {}, environment));
+    if (!response?.ok || !Array.isArray(payload?.data)) throw Object.assign(new Error('asaas_reference_reconciliation_unavailable'), { status: 502 });
+    if (payload.hasMore) throw Object.assign(new Error('asaas_reconciliation_pagination_required'), { status: 502 });
+    payload.data = payload.data.filter(payment => String(payment?.externalReference || '') === reference);
+  }
+  if (payload.data.length === 0) payload.data = await recurringPaymentsForCheckout(env, checkout, environment, verifiedCheckout);
   // Old periods first, so a late event for an old instalment cannot win simply
   // because it happened to be listed last by the provider.
   const payments = [...payload.data].sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || '')));
@@ -690,29 +776,31 @@ async function reconcileCheckout(env, checkout, environment = 'production') {
   }
 }
 
-async function reconcileOwner(env, ownerId) {
+async function reconcileOwner(env, ownerId, environment = 'production') {
   // Polling is bounded across tabs as well as within the frontend.
-  const key = `reconcile:${ownerId}`;
+  const provider = asaasConfig(env, environment).provider;
+  const key = `reconcile:${provider}:${ownerId}`;
   const claim = await acquireClaim(env, key, 20000);
   if (!claim) return;
-  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider='asaas'
-    AND status IN ('pending_provider','checkout_created','paid') ORDER BY created_at DESC LIMIT 1`).bind(ownerId).first();
+  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider=?
+    AND status IN ('pending_provider','checkout_created','paid') ORDER BY created_at DESC LIMIT 1`).bind(ownerId, provider).first();
   if (!checkout) return;
-  try { await reconcileCheckout(env, checkout); }
+  try { await reconcileCheckout(env, checkout, environment); }
   catch (error) { await scheduleReconciliation(env, checkout.id, 60000, String(error.message).slice(0, 500)); }
   // Deliberately retain the short lease to limit provider traffic from polling.
 }
 
-async function billingStatusForOwner(env, user) {
+async function billingStatusForOwner(env, user, environment = 'production') {
+  const provider = asaasConfig(env, environment).provider;
   let access = await resolveProductAccess(env, user);
   if (access.commercial && access.active) return { status: 'active', access };
-  await reconcileOwner(env, user.id);
+  await reconcileOwner(env, user.id, environment);
   access = await resolveProductAccess(env, user);
   if (access.commercial && access.active) return { status: 'active', access };
-  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider='asaas'
-    ORDER BY created_at DESC LIMIT 1`).bind(user.id).first();
+  const checkout = await db(env).prepare(`SELECT * FROM billing_checkout_requests WHERE owner_id=? AND provider=?
+    ORDER BY created_at DESC LIMIT 1`).bind(user.id, provider).first();
   if (checkout?.status === 'paid') {
-    const subscription = await db(env).prepare("SELECT * FROM subscriptions WHERE owner_id=? AND provider='asaas' LIMIT 1").bind(user.id).first();
+    const subscription = await db(env).prepare('SELECT * FROM subscriptions WHERE owner_id=? AND provider=? LIMIT 1').bind(user.id, provider).first();
     // A genuinely expired old purchase must not block a new subscription.
     if (!subscription || (subscription.status === 'active' && (!subscription.current_period_end || Date.parse(subscription.current_period_end) > Date.now()))) {
       return { status: 'activation_pending', access };
@@ -729,10 +817,13 @@ async function handleCheckoutEvent(env, incoming, environment) {
   const id = String(incoming.checkout?.id || '');
   if (!/^[A-Za-z0-9_-]{3,128}$/.test(id)) return json(400, { error: 'invalid_checkout_id' });
   const config = asaasConfig(env, environment);
-  const { response, payload } = await asaasFetch(env, `/checkouts/${encodeURIComponent(id)}`, {}, environment);
-  if (!response?.ok || String(payload?.id || '') !== id) return json(502, { error: 'asaas_checkout_verification_failed' });
   let checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE provider=? AND external_checkout_id=? LIMIT 1').bind(config.provider, id).first();
+  let payload = incoming.checkout;
+  const verifiedWebhookCheckout = String(payload?.id || '') === id && Boolean(payload?.status);
   if (!checkout) {
+    const { response, payload: fetched } = await asaasFetch(env, `/checkouts/${encodeURIComponent(id)}`, {}, environment);
+    if (!response?.ok || String(fetched?.id || '') !== id) return json(502, { error: 'asaas_checkout_verification_failed' });
+    payload = fetched;
     const requestId = parseCheckoutReference(payload.externalReference);
     if (requestId) {
       checkout = await db(env).prepare('SELECT * FROM billing_checkout_requests WHERE id=? AND provider=? LIMIT 1').bind(requestId, config.provider).first();
@@ -744,8 +835,16 @@ async function handleCheckoutEvent(env, incoming, environment) {
     }
   }
   if (!checkout) return json(200, { status: 'ignored_unmapped_checkout' });
+  if (verifiedWebhookCheckout && payload.customer) {
+    let metadata = {};
+    try { metadata = JSON.parse(checkout.metadata_json || '{}'); } catch {}
+    metadata.provider_customer_id = String(payload.customer);
+    await db(env).prepare('UPDATE billing_checkout_requests SET metadata_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+      .bind(JSON.stringify(metadata), checkout.id).run();
+    checkout.metadata_json = JSON.stringify(metadata);
+  }
   await scheduleReconciliation(env, checkout.id);
-  await reconcileCheckout(env, checkout, environment);
+  await reconcileCheckout(env, checkout, environment, verifiedWebhookCheckout ? payload : null);
   if (['EXPIRED', 'CANCELED', 'CANCELLED'].includes(String(payload.status).toUpperCase())) {
     const status = payload.status === 'EXPIRED' ? 'expired' : 'cancelled';
     await db(env).prepare("UPDATE billing_checkout_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('pending_provider','checkout_created')").bind(status, checkout.id).run();
@@ -799,6 +898,19 @@ async function handleWebhook(request, env, environment) {
   return applyVerifiedPayment(env, payment, environment, mapped);
 }
 
+async function authenticatedSandboxPaymentReconcile(request, env) {
+  const user = await authenticateClinicalRequest(request, env);
+  if (!user?.id) return json(401, { error: 'unauthorized' });
+  const input = await request.json().catch(() => ({}));
+  const paymentId = String(input.paymentId || '');
+  if (!/^[A-Za-z0-9_-]{3,128}$/.test(paymentId)) return json(400, { error: 'invalid_payment_id' });
+  const { response, payload: payment } = await asaasFetch(env, `/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' }, 'sandbox');
+  if (!response?.ok || String(payment?.id || '') !== paymentId) return json(502, { error: 'asaas_payment_verification_failed' });
+  const mapped = await mapPayment(env, payment, 'asaas_sandbox', 'sandbox');
+  if (!mapped || mapped.checkout.owner_id !== user.id) return json(404, { error: 'payment_not_owned_by_account' });
+  return applyVerifiedPayment(env, payment, 'sandbox', mapped);
+}
+
 async function applyVerifiedPayment(env, payment, environment, mapped) {
   const config = asaasConfig(env, environment);
   const paymentId = String(payment.id);
@@ -823,7 +935,24 @@ async function applyVerifiedPayment(env, payment, environment, mapped) {
   const event = await beginEvent(env, config.provider, paymentId, providerStatus, mapped.checkout?.id, {
     environment, payment_id: paymentId, provider_status: providerStatus, renewal: mapped.renewal,
   });
-  if (event.duplicate) return json(200, { status: 'duplicate_ignored', eventId: event.eventId, paymentId, environment });
+  if (event.duplicate) {
+    // Provider events are at-least-once. Repeating the idempotent downstream
+    // sync repairs a prior licensing outage or a later sandbox opt-in without
+    // recreating the local subscription, checkout or webhook event.
+    const user = await runtimeUserById(env, mapped.checkout.owner_id);
+    const email = user?.email || await pendingEmailForOwner(env, mapped.checkout.owner_id);
+    await syncCommercialLicense(env, {
+      email,
+      planCode: mapped.checkout.plan_code,
+      status: transition,
+      expiresAt: mapped.subscription?.current_period_end || null,
+      externalRef: mapped.checkout.plan_code === 'pro_annual'
+        ? mapped.checkout.id
+        : mapped.subscription?.external_subscription_id || paymentId,
+      environment,
+    });
+    return json(200, { status: 'duplicate_ignored', eventId: event.eventId, paymentId, environment });
+  }
 
   try {
     const subscription = await upsertSubscription(env, mapped, payment, transition, providerStatus);
@@ -1013,7 +1142,8 @@ async function health(env, environment) {
 const ROUTES = new Set([
   '/api/asaas/signup', '/api/asaas/pending-status', '/api/asaas/status', '/api/asaas/health',
   '/api/asaas/preauth-checkout', '/api/asaas/checkout', '/api/webhooks/asaas',
-  '/api/sandbox/asaas/health', '/api/sandbox/asaas/checkout', '/api/sandbox/webhooks/asaas',
+  '/api/sandbox/asaas/health', '/api/sandbox/asaas/status', '/api/sandbox/asaas/checkout',
+  '/api/sandbox/asaas/reconcile-payment', '/api/sandbox/webhooks/asaas',
   '/api/admin/partners', '/api/admin/partner-sales', '/api/admin/partner-commission',
 ]);
 
@@ -1033,6 +1163,14 @@ export async function handleCloudflareBillingRuntime(request, env, url = new URL
     if (url.pathname === '/api/asaas/checkout' && request.method === 'POST') return await authenticatedCheckout(request, env, 'production');
     if (url.pathname === '/api/webhooks/asaas' && request.method === 'POST') return await handleWebhook(request, env, 'production');
     if (url.pathname === '/api/sandbox/asaas/health' && request.method === 'GET') return await health(env, 'sandbox');
+    if (url.pathname === '/api/sandbox/asaas/status' && request.method === 'GET') {
+      const user = await authenticateClinicalRequest(request, env);
+      if (!user?.id) return json(401, { error: 'unauthorized' });
+      return json(200, await billingStatusForOwner(env, user, 'sandbox'));
+    }
+    if (url.pathname === '/api/sandbox/asaas/reconcile-payment' && request.method === 'POST') {
+      return await authenticatedSandboxPaymentReconcile(request, env);
+    }
     if (url.pathname === '/api/sandbox/asaas/checkout' && request.method === 'POST') return await authenticatedCheckout(request, env, 'sandbox');
     if (url.pathname === '/api/sandbox/webhooks/asaas' && request.method === 'POST') return await handleWebhook(request, env, 'sandbox');
     return json(405, { error: 'method_not_allowed' });
