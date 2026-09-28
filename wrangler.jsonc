@@ -21,6 +21,12 @@
       "service": "obra-na-mao-comercial"
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

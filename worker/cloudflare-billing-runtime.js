@@ -2,6 +2,7 @@ import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clini
 import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 import { resolveProductAccess } from './product-access-runtime.js';
 import { reservePregrantedIdentity } from './signup-identity.js';
+import { sendBestEffortTransactionalEmail } from './transactional-email.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
 const ASAAS_SANDBOX_API_URL = 'https://api-sandbox.asaas.com/v3';
@@ -986,6 +987,13 @@ async function applyVerifiedPayment(env, payment, environment, mapped) {
       externalRef: mapped.checkout.plan_code === 'pro_annual' ? mapped.checkout.id : subscription.subscriptionId || paymentId,
       environment,
     });
+
+    if (!mapped.renewal && transition === 'active' && environment === 'production') {
+      const planName = mapped.checkout.plan_code === 'pro_annual' ? 'Plano Pro anual' : 'Plano Pro mensal';
+      await sendBestEffortTransactionalEmail(env, {
+        kind: 'purchase_confirmed', to: email, data: { planName, appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+      });
+    }
 
     await finishEvent(env, config.provider, event.eventId, true);
     return json(200, {

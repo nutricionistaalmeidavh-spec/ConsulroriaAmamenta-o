@@ -3,6 +3,7 @@ import {
   cloudflarePasswordHash,
 } from './cloudflare-auth-compat.js';
 import { reservePregrantedIdentity } from './signup-identity.js';
+import { sendBestEffortTransactionalEmail, sendTransactionalEmail } from './transactional-email.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -353,6 +354,9 @@ async function handleSignup(request, env) {
 
   const user = await runtimeUserById(env, userId);
   if (!user) return json(409, {error:'signup_credentials_changed',message:'A senha foi alterada. Tente novamente com sua nova senha.'});
+  await sendBestEffortTransactionalEmail(env, {
+    kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+  });
   return json(200, await issueSession(env, user));
 }
 
@@ -374,7 +378,9 @@ const RECOVERY_ACCEPTED = {
 async function handleRecovery(request, env) {
   let origin;
   try { origin = new URL(env.AUTH_RECOVERY_ORIGIN); } catch {}
-  if (!env.AUTH_RECOVERY_DELIVERY?.fetch || origin?.protocol !== 'https:') {
+  const deliveryConfigured = env.EMAIL?.send || env.AUTH_RECOVERY_DELIVERY?.fetch || env.TRANSACTIONAL_EMAIL_DELIVERY?.fetch
+    || (String(env.RESEND_API_KEY || '').trim() && String(env.TRANSACTIONAL_EMAIL_FROM || '').trim());
+  if (!deliveryConfigured || origin?.protocol !== 'https:') {
     return json(503, {
       error: 'recovery_delivery_unavailable',
       message: 'Recuperação por e-mail indisponível no momento. Entre em contato com o suporte.',
@@ -408,12 +414,9 @@ async function handleRecovery(request, env) {
       const link = new URL('/comercial/index.html?recovery=1', origin.origin);
       link.hash = `recovery_token=${token}`;
       try {
-        const response = await env.AUTH_RECOVERY_DELIVERY.fetch(new Request('https://recovery-delivery.internal/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: row.email, recoveryUrl: link.href, expiresInSeconds: 1800 }),
-        }));
-        if (!response.ok) throw new Error('delivery_failed');
+        await sendTransactionalEmail(env, {
+          kind: 'password_recovery', to: row.email, data: { recoveryUrl: link.href, expiresInSeconds: 1800 },
+        });
       } catch {
         console.error('auth_recovery_delivery_failed');
         await db.prepare(`DELETE FROM ${recoveryTable} WHERE token_hash = ?`).bind(tokenHash).run();

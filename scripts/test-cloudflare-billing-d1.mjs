@@ -75,8 +75,10 @@ assert.match(planHtml, /R\$ 999,90/);
 assert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 9990 : 99990/);
 assert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 4990 : 49900/);
 
-// Payment confirmation activates access directly; no e-mail transport is required by billing.
-assert.doesNotMatch(wrangler, /"send_email"|BILLING_EMAIL_FROM|"name":\s*"EMAIL"/);
+// Payment confirmation activates access directly; transactional e-mail is an
+// independent best-effort notification and cannot gate paid access.
+assert.match(wrangler, /"send_email"/);
+assert.match(wrangler, /"name":\s*"EMAIL"/);
 assert.match(purchaseStatus, /account_activated/);
 assert.match(purchaseStatus, /acesso Pro liberado/i);
 assert.doesNotMatch(purchaseStatus, /email_sent|email_confirmed|e-mail de confirmação/i);
