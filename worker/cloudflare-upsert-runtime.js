@@ -1,4 +1,5 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { resolveProductAccess } from './product-access-runtime.js';
 import {
   guardedRecordStatement,
   ownerRows,
@@ -104,22 +105,8 @@ function recordStatement(db, table, key, row, now) {
   return guardedRecordStatement(db, table, key, row, row.owner_id, now);
 }
 
-async function licenseCall(env, body) {
-  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET) return null;
-  const response = await env.ARTISYS_LICENSING.fetch(new Request('https://artisys-licensing.internal/api/internal/product-license', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-artisys-license-secret': env.LICENSE_SERVICE_SECRET,
-    },
-    body: JSON.stringify(body),
-  }));
-  if (!response.ok) return null;
-  return response.json().catch(() => null);
-}
-
 async function patientAllowance(env, db, user) {
-  const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
+  const access = await resolveProductAccess(env, user);
   if (!access?.commercial || !Number.isInteger(access.patientLimit)) return null;
   const count = (await ownerRows(db, 'mothers', user.id)).length;
   return { limit: Number(access.patientLimit), count };
@@ -161,7 +148,12 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
   const ignoreDuplicates = /resolution=ignore-duplicates/i.test(request.headers.get('prefer') || '');
   const saved = [];
   const statements = [];
-  const patientAllowanceState = table === 'mothers' ? await patientAllowance(env, db, user) : null;
+  let patientAllowanceState = null;
+  try { patientAllowanceState = table === 'mothers' ? await patientAllowance(env, db, user) : null; }
+  catch (error) {
+    if (error?.code === 'licensing_unavailable') return json(503, { error: error.code });
+    throw error;
+  }
   let pendingNewMothers = 0;
 
   for (const source of list) {

@@ -13,7 +13,7 @@
     { "pattern": "comercial.deboralactacao.com", "custom_domain": true }
   ],
   "triggers": {
-    "crons": ["17 4 * * *"]
+    "crons": ["*/5 * * * *", "17 4 * * *"]
   },
   "services": [
     {

@@ -36,6 +36,7 @@ assert.match(app, /showView\('login'\)/);
 assert.match(runtime, /async function activatePendingSignup/);
 assert.match(runtime, /INSERT INTO auth_users/);
 assert.match(runtime, /INSERT INTO auth_credentials/);
+// Only the first verified active payment materializes the staged identity.
 assert.match(runtime, /if \(!mapped\.renewal && transition === 'active'\)/);
 assert.match(runtime, /await activatePendingSignup\(env, mapped\.checkout\.owner_id\)/);
 assert.match(runtime, /payment_confirmed_at/);

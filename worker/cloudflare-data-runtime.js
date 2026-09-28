@@ -1,4 +1,5 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { resolveProductAccess } from './product-access-runtime.js';
 import {
   guardedRecordStatement,
   ownerRows,
@@ -275,19 +276,8 @@ async function saveEntry(env, table, key, row, userId) {
   return row;
 }
 
-async function licenseCall(env, body) {
-  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET) return null;
-  const response = await env.ARTISYS_LICENSING.fetch(new Request('https://artisys-licensing.internal/api/internal/product-license', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-artisys-license-secret': env.LICENSE_SERVICE_SECRET },
-    body: JSON.stringify(body),
-  }));
-  if (!response.ok) return null;
-  return response.json().catch(() => null);
-}
-
 async function enforcePatientLimit(env, user) {
-  const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
+  const access = await resolveProductAccess(env, user);
   if (!access?.commercial || !Number.isInteger(access.patientLimit)) return null;
   const count = (await scopedRows(env, 'mothers', user.id)).length;
   return count >= Number(access.patientLimit)
@@ -296,7 +286,7 @@ async function enforcePatientLimit(env, user) {
 }
 
 async function enforceMediaAccess(env, user) {
-  const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
+  const access = await resolveProductAccess(env, user);
   return access?.commercial && !access.mediaUpload
     ? runtimeJson(403, { error: 'SAAS_MEDIA_UPLOAD_NOT_ALLOWED' })
     : null;
@@ -713,7 +703,7 @@ async function handleSpecialApi(request, env, url) {
   if (url.pathname === '/api/license/me' && request.method === 'GET') {
     const user = await authenticateClinicalRequest(request, env);
     if (!user?.email) return runtimeJson(401, { error: 'unauthorized' });
-    const access = await licenseCall(env, { action: 'resolve', productCode: 'debora-lactacao', email: user.email });
+    const access = await resolveProductAccess(env, user);
     return access ? runtimeJson(200, access) : runtimeJson(503, { error: 'licensing_unavailable' });
   }
 
@@ -753,7 +743,7 @@ export async function handleCloudflareDataRuntime(request, env, url = new URL(re
     return null;
   } catch (error) {
     console.error('cloudflare data runtime error', error);
-    const status = error?.message === 'record_owner_conflict' ? 409 : 500;
+    const status = error?.code === 'licensing_unavailable' ? 503 : error?.message === 'record_owner_conflict' ? 409 : 500;
     return runtimeJson(status, { error: error?.message || 'cloudflare_data_runtime_error' });
   }
 }

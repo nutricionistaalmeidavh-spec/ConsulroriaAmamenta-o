@@ -1,6 +1,6 @@
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
-import { handleCloudflareBillingRuntime } from './cloudflare-billing-runtime.js';
+import { handleCloudflareBillingRuntime, reconcileBilling } from './cloudflare-billing-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
@@ -39,6 +39,7 @@ self.addEventListener('activate', (event) => {
 const D1_BILLING_PATHS = new Set([
   '/api/asaas/signup',
   '/api/asaas/pending-status',
+  '/api/asaas/status',
   '/api/asaas/health',
   '/api/asaas/preauth-checkout',
   '/api/asaas/checkout',
@@ -51,6 +52,7 @@ const D1_BILLING_PATHS = new Set([
   '/api/admin/partner-commission',
 ]);
 const D1_AUTH_REQUIRED_EXACT = new Set([
+  '/api/asaas/status',
   '/api/asaas/checkout',
   '/api/sandbox/asaas/checkout',
 ]);
@@ -215,7 +217,8 @@ export default {
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
 
     if (env.CLINICAL_DB && url.pathname === '/api/license/me' && request.method === 'GET') {
-      await ensureExplicitCommercialMarker(request, env);
+      try { await ensureExplicitCommercialMarker(request, env); }
+      catch { return cloudflareIdentityRequired(503, 'licensing_unavailable'); }
     }
 
     const relationalIntegrityResponse = await handleRelationalIntegrityGuard(request, env, url);
@@ -271,6 +274,8 @@ export default {
     return isCommercialLandingPath(url.pathname) ? withCommercialSeo(response) : response;
   },
   async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(reconcileBilling(env).catch((error) => console.error('billing reconciliation failed', error)));
+    if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     ctx.waitUntil(
       cleanupExpiredUsageSessions(env, { beforeIso: before, limit: 200 })

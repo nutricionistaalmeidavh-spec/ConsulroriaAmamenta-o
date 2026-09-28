@@ -1,6 +1,7 @@
 const BILLING_COMPAT = new Map([
   ['/api/billing/signup', '/api/asaas/signup'],
   ['/api/billing/pending-status', '/api/asaas/pending-status'],
+  ['/api/billing/status', '/api/asaas/status'],
   ['/api/billing/health', '/api/asaas/health'],
   ['/api/billing/preauth-checkout', '/api/asaas/preauth-checkout'],
   ['/api/billing/checkout', '/api/asaas/checkout'],

@@ -1,4 +1,5 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { resolveProductAccess as resolveAccess } from './product-access-runtime.js';
 import {
   guardedRecordStatement,
   idempotencyInsertStatement,
@@ -7,8 +8,6 @@ import {
   ownerRows,
   recordByIdForOwner,
 } from './d1-record-store.js';
-
-const PRODUCT_CODE = 'debora-lactacao';
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -39,20 +38,6 @@ function normalizedConsents(input) {
 
 function recordStatement(db, table, row, key, ownerIndex, now) {
   return guardedRecordStatement(db, table, key, row, ownerIndex, now);
-}
-
-async function resolveAccess(env, email) {
-  if (!env.ARTISYS_LICENSING || !env.LICENSE_SERVICE_SECRET || !email) return null;
-  const response = await env.ARTISYS_LICENSING.fetch(new Request('https://artisys-licensing.internal/api/internal/product-license', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-artisys-license-secret': env.LICENSE_SERVICE_SECRET,
-    },
-    body: JSON.stringify({ action: 'resolve', productCode: PRODUCT_CODE, email }),
-  }));
-  if (!response.ok) return null;
-  return response.json().catch(() => null);
 }
 
 async function ownedMotherCount(db, userId) {
@@ -128,7 +113,7 @@ export async function persistNewPatient(env, user, input, {
     if (replay) return replay;
   }
 
-  const access = await resolveProductAccess(env, user?.email || '');
+  const access = await resolveProductAccess(env, user);
   if (access?.commercial && Number.isInteger(access.patientLimit)) {
     const count = await ownedMotherCount(db, user.id);
     if (count >= Number(access.patientLimit)) {

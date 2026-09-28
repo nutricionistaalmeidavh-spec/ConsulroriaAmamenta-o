@@ -1,0 +1,23 @@
+name: Validate new client billing flow
+
+on:
+  pull_request:
+    paths: ['worker/**', 'cloudflare/**', 'public/comercial/**', 'tests/**', 'package.json', '.github/workflows/validate-billing-flow.yml']
+  push:
+    branches: [main]
+    paths: ['worker/**', 'cloudflare/**', 'public/comercial/**', 'tests/**', 'package.json', '.github/workflows/validate-billing-flow.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  billing-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --ignore-scripts --no-package-lock --no-audit --no-fund
+      - run: npm run test:billing-flow
