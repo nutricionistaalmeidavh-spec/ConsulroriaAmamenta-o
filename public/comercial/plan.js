@@ -9,9 +9,16 @@ const authRequired = document.querySelector('#auth-required');
 const content = document.querySelector('#plan-content');
 const message = document.querySelector('#plan-message');
 const logoutButton = document.querySelector('#logout-button');
+const cancelRenewalButton = document.querySelector('#cancel-renewal-button');
+const cancelSubscriptionDialog = document.querySelector('#cancel-subscription-dialog');
+const confirmCancelRenewalButton = document.querySelector('#confirm-cancel-renewal');
 const pageUrl = new URL(window.location.href);
 let checkoutBusy = false;
 let activationPending = false;
+let cancellationBusy = false;
+let subscriptionState = null;
+let currentAccess = null;
+let currentPatientCount = null;
 let statusTimer;
 let statusAttempts = 0;
 
@@ -89,6 +96,16 @@ function setMessage(text = '', tone = '') {
   message.className = `plan-message${tone ? ` ${tone}` : ''}`;
 }
 
+function formatPlanDate(value) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}
+
 async function api(path, token, options = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
@@ -152,6 +169,37 @@ function checkoutReturnMessage() {
   return null;
 }
 
+function paintSubscriptionManagement(state) {
+  const box = document.querySelector('#subscription-management');
+  const status = document.querySelector('#renewal-status');
+  const copy = document.querySelector('#renewal-copy');
+  const monthly = state?.planCode === 'pro_monthly' && state?.recurring === true;
+  box.hidden = !monthly;
+  cancelRenewalButton.hidden = true;
+  if (!monthly) return;
+
+  const end = formatPlanDate(state.currentPeriodEnd);
+  if (state.cancelAtPeriodEnd) {
+    status.textContent = state.expired ? 'Período encerrado' : 'Renovação cancelada';
+    copy.textContent = state.expired
+      ? 'O período pago terminou. Você pode contratar um novo plano quando quiser.'
+      : `Seu acesso Pro continua disponível até ${end || 'o fim do período pago'}. Não haverá nova cobrança automática.`;
+    return;
+  }
+
+  if (state.canCancel) {
+    status.textContent = 'Renovação automática ativa';
+    copy.textContent = end
+      ? `O plano mensal renova automaticamente após o período atual, que termina em ${end}.`
+      : 'O plano mensal está configurado para renovação automática.';
+    cancelRenewalButton.hidden = false;
+    return;
+  }
+
+  status.textContent = state.status === 'past_due' ? 'Cobrança pendente' : 'Renovação indisponível';
+  copy.textContent = 'Não foi possível disponibilizar o gerenciamento da renovação neste estado da assinatura.';
+}
+
 async function requestCheckout(planCode, token) {
   if (checkoutBusy || activationPending) return;
   checkoutBusy = true;
@@ -191,7 +239,10 @@ async function requestCheckout(planCode, token) {
 function handlePurchaseState(state, patientCount = null) {
   if (state?.status === 'active') {
     activationPending = false;
-    if (state.access) paintAccess(state.access, patientCount);
+    if (state.access) {
+      currentAccess = state.access;
+      paintAccess(state.access, patientCount);
+    }
     document.querySelector('#upgrade-section').hidden = true;
     setMessage('Seu acesso Pro está liberado.', 'success');
     return true;
@@ -218,7 +269,13 @@ async function refreshPurchaseStatus(token, patientCount) {
   try {
     const state = await workerApi('/api/asaas/status', token);
     if (state.status === 'active') {
-      const access = state.access || await workerApi('/api/license/me', token);
+      const [access, billing] = await Promise.all([
+        state.access ? Promise.resolve(state.access) : workerApi('/api/license/me', token),
+        workerApi('/api/asaas/subscription', token).catch(() => null),
+      ]);
+      subscriptionState = billing;
+      currentAccess = access;
+      paintSubscriptionManagement(subscriptionState);
       handlePurchaseState({ ...state, access }, patientCount);
       return;
     }
@@ -236,10 +293,11 @@ async function refreshPurchaseStatus(token, patientCount) {
   }
 }
 
-function paintAccess(access, patientCount) {
+function paintAccess(access, patientCount, billing = subscriptionState) {
   const legacy = access?.commercial === false;
   const isPro = access?.commercial === true && access?.active === true && String(access?.planCode || '').startsWith('pro_');
   const patientLimit = Number.isInteger(access?.patientLimit) ? access.patientLimit : null;
+  const cancellationEnd = billing?.cancelAtPeriodEnd ? formatPlanDate(billing.currentPeriodEnd) : null;
 
   document.querySelector('#current-plan-badge').textContent = legacy ? 'Existente' : isPro ? 'Pro' : 'Freemium';
   document.querySelector('#current-plan-name').textContent = legacy
@@ -256,10 +314,60 @@ function paintAccess(access, patientCount) {
   document.querySelector('#media-access').textContent = legacy || access?.mediaUpload ? 'Habilitado' : 'Bloqueado';
   document.querySelector('#subscription-status').textContent = legacy
     ? 'Fora do SaaS comercial'
-    : isPro
-      ? (access.planCode === 'pro_6m' ? 'Ativa · 6 meses' : 'Ativa')
-      : 'Sem Pro ativo';
+    : isPro && cancellationEnd
+      ? `Ativa até ${cancellationEnd} · sem renovação`
+      : isPro
+        ? (access.planCode === 'pro_6m' ? 'Ativa · 6 meses' : 'Ativa')
+        : 'Sem Pro ativo';
   document.querySelector('#upgrade-section').hidden = legacy || isPro;
+}
+
+function cancellationErrorMessage(error) {
+  const messages = {
+    subscription_not_found: 'Nenhuma assinatura mensal foi encontrada nesta conta.',
+    subscription_not_recurring: 'Este plano não possui renovação automática para cancelar.',
+    subscription_period_unknown: 'Não foi possível confirmar até quando o período atual está pago. O cancelamento não foi realizado.',
+    subscription_not_cancellable: 'A renovação não pode ser cancelada no estado atual da assinatura.',
+    subscription_change_in_progress: 'Já existe uma atualização da assinatura em andamento. Tente novamente em instantes.',
+    asaas_subscription_delete_failed: 'Não foi possível cancelar a renovação no provedor de pagamento. Nenhuma alteração local foi aplicada.',
+  };
+  return messages[error?.message] || 'Não foi possível cancelar a renovação agora. Sua assinatura atual não foi alterada.';
+}
+
+function openCancellationDialog() {
+  if (!subscriptionState?.canCancel || cancellationBusy) return;
+  const end = formatPlanDate(subscriptionState.currentPeriodEnd);
+  document.querySelector('#cancel-subscription-copy').textContent = end
+    ? `A renovação automática será encerrada agora. Seu acesso ao Plano Pro continuará normalmente até ${end}, que já está pago. Depois dessa data, não haverá uma nova cobrança automática.`
+    : 'A renovação automática será encerrada. O período já pago continuará disponível até o vencimento.';
+  cancelSubscriptionDialog.showModal();
+}
+
+async function cancelRenewal(token) {
+  if (cancellationBusy || !subscriptionState?.canCancel) return;
+  cancellationBusy = true;
+  confirmCancelRenewalButton.disabled = true;
+  cancelRenewalButton.disabled = true;
+  try {
+    const state = await workerApi('/api/asaas/subscription/cancel', token, { method: 'POST' });
+    subscriptionState = state;
+    paintSubscriptionManagement(state);
+    paintAccess(currentAccess, currentPatientCount, state);
+    cancelSubscriptionDialog.close();
+    const end = formatPlanDate(state.currentPeriodEnd);
+    setMessage(
+      end
+        ? `Renovação cancelada. Seu acesso Pro continua ativo até ${end}.`
+        : 'Renovação cancelada. Seu período já pago continua ativo até o vencimento.',
+      'success',
+    );
+  } catch (error) {
+    setMessage(cancellationErrorMessage(error), 'error');
+  } finally {
+    cancellationBusy = false;
+    confirmCancelRenewalButton.disabled = false;
+    cancelRenewalButton.disabled = !subscriptionState?.canCancel;
+  }
 }
 
 async function init() {
@@ -276,15 +384,20 @@ async function init() {
   try {
     const { payload: user } = await api('/auth/v1/user', token);
     if (!user?.id) throw httpError({ message: 'Sessão inválida.' }, 401);
-    const [profilesRes, patientCount, access] = await Promise.all([
+    const [profilesRes, patientCount, access, billing] = await Promise.all([
       api(`/rest/v1/professional_profiles?owner_id=eq.${encodeURIComponent(user.id)}&select=professional_name,business_name,phone,settings&limit=1`, token),
       loadPatientCount(user.id, token),
       workerApi('/api/license/me', token),
+      workerApi('/api/asaas/subscription', token).catch(() => null),
     ]);
     const profile = profilesRes.payload?.[0] || {};
+    currentAccess = access;
+    currentPatientCount = patientCount;
+    subscriptionState = billing;
 
     showSignedIn();
-    paintAccess(access, patientCount);
+    paintAccess(access, patientCount, billing);
+    paintSubscriptionManagement(billing);
     ensurePartnerCodeField();
     document.querySelector('#account-email').textContent = user.email || 'Conta autenticada';
     document.querySelector('#account-name').textContent = profile.professional_name || profile.business_name || 'Perfil profissional';
@@ -303,6 +416,9 @@ async function init() {
         catch (error) { setMessage(error?.message || 'Não foi possível preparar o checkout.', 'error'); }
       });
     });
+
+    cancelRenewalButton.addEventListener('click', openCancellationDialog);
+    confirmCancelRenewalButton.addEventListener('click', () => cancelRenewal(token));
   } catch (error) {
     if (error?.status === 401) {
       sessionStorage.removeItem(SESSION_KEY);
