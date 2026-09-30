@@ -36,9 +36,12 @@ async function mountFixture(page) {
 
 test('novo plano mostra um único campo de valor editável e com largura útil', async ({ page }) => {
   await mountFixture(page);
-  await page.locator('[data-bv-mode]').selectOption('package_new');
+  const mode = page.locator('[data-bv-mode]');
+  const legacy = page.locator('[data-test-legacy-value]');
+  await mode.selectOption('package_new');
 
-  await expect(page.locator('[data-test-legacy-value]')).toBeHidden();
+  await expect(legacy).toBeHidden();
+  await expect(page.locator('label.field:visible').filter({ hasText: 'Valor total do plano' })).toHaveCount(1);
   const total = page.locator('[data-bv-total]');
   await expect(total).toBeVisible();
   await total.fill('600');
@@ -47,6 +50,12 @@ test('novo plano mostra um único campo de valor editável e com largura útil',
   const box = await total.boundingBox();
   expect(box).not.toBeNull();
   expect(box.width).toBeGreaterThanOrEqual(120);
+
+  await mode.selectOption('individual');
+  await expect(legacy).toBeVisible();
+  await mode.selectOption('package_new');
+  await expect(legacy).toBeHidden();
+  await expect(total).toHaveValue('600');
 });
 
 test('layout do valor do novo plano permanece legível em viewport estreita', async ({ page }) => {
