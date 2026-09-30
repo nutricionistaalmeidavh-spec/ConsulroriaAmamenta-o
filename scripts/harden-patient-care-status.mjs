@@ -14,7 +14,7 @@ const targets = [
   {
     path: resolve(ROOT, 'public/clinical-source/core/app-shell.js'),
     transform: hardenPatientCareApp,
-    markers: ['patient-care-status-core.js', 'finalizeCurrentPatientCare', 'ensurePatientCareActive'],
+    markers: ['normalizePatientCareStatus', 'finalizeCurrentPatientCare', 'ensurePatientCareActive'],
   },
 ];
 
