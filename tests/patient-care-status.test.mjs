@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CARE_ACTIVE,
   CARE_FINALIZED,
@@ -70,7 +71,7 @@ test('HTML hardening replaces follow-up KPI and adds finalization control once',
   assert.equal(hardenPatientCareHtml(hardened), hardened);
 });
 
-test('app hardening makes badges dynamic, wires finalization and reactivation', () => {
+test('app hardening makes badges dynamic, wires finalization and reactivation without an unresolved module import', () => {
   const source = `const config = {};
 function patientInitials(patient){return 'MB';}
 function renderPatientList(){root.innerHTML = patients.map((p) => \`<span class="pill confirmed">Em acompanhamento</span></button>\`).join('');}
@@ -87,11 +88,24 @@ await appData.scheduleAppointment({
 });
 else if (action === 'edit-patient') await openPatientForm(currentPatientId);`;
   const hardened = hardenPatientCareApp(source);
-  assert.match(hardened, /patient-care-status-core\.js/);
+  assert.doesNotMatch(hardened, /patient-care-status-core\.js/);
+  assert.match(hardened, /function normalizePatientCareStatus/);
   assert.match(hardened, /patientCareLabel\(p\)/);
   assert.match(hardened, /finalizeCurrentPatientCare/);
   assert.match(hardened, /ensurePatientCareActive/);
   assert.match(hardened, /activePatientCount\(state\.patients\)/);
   assert.match(hardened, /action === 'toggle-patient-care'/);
   assert.equal(hardenPatientCareApp(hardened), hardened);
+});
+
+test('patient care hardening cannot introduce imports that the blob bootstrap cannot rewrite', () => {
+  const shell = readFileSync(new URL('../public/clinical-source/core/app-shell.js', import.meta.url), 'utf8');
+  const bootstrap = readFileSync(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
+  const hardened = hardenPatientCareApp(shell);
+  const imports = [...hardened.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((match) => match[1]);
+  assert.ok(imports.length > 0, 'app-shell deve continuar declarando seus módulos canônicos');
+  for (const specifier of imports) {
+    assert.ok(specifier.startsWith('./lib/'), `import não suportado pelo bootstrap blob: ${specifier}`);
+    assert.ok(bootstrap.includes(`'${specifier.slice(2)}'`), `bootstrap não registra ${specifier}`);
+  }
 });
