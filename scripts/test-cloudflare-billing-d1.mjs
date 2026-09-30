@@ -78,7 +78,7 @@ assert.match(planHtml, /R\$ 999,90/);
 assert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 9990 : 99990/);
 assert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 4990 : 49900/);
 
-// Self-service cancellation is an authenticated billing extension, not a second billing stack.
+// RED gate: self-service cancellation must extend existing billing without altering checkout semantics.
 assert.match(runtime, /'\/api\/asaas\/subscription'/);
 assert.match(runtime, /'\/api\/asaas\/subscription\/cancel'/);
 assert.match(runtime, /SUBSCRIPTION_DELETED/);
