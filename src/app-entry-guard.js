@@ -5,6 +5,8 @@ import {
 import { ensureCanonicalServiceWorker } from './pwa-service-worker.js';
 
 const HIDDEN_MEMBER_SELECTORS = [
+  'script[src="/member-feature.js"]',
+  'link[href="/member-feature.css"]',
   '[data-member-admin]',
   '[data-mother-link]',
   '#mf-admin-overlay',
@@ -16,7 +18,7 @@ function ensureHiddenMemberStyle() {
   if (MEMBER_PORTAL_FRONTEND_ENABLED || document.querySelector('[data-member-portal-disabled-style]')) return;
   const style = document.createElement('style');
   style.dataset.memberPortalDisabledStyle = '1';
-  style.textContent = `${HIDDEN_MEMBER_SELECTORS.join(',')}{display:none!important}`;
+  style.textContent = '[data-member-admin],[data-mother-link],#mf-admin-overlay,#member-portal-root,.mp-login{display:none!important}';
   (document.head || document.documentElement)?.appendChild(style);
 }
 
