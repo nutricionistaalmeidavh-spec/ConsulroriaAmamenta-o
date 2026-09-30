@@ -6,6 +6,8 @@ import {
   currentPeriodEnd,
   normalizePartnerCode,
   checkoutPayload,
+  subscriptionCancellationState,
+  shouldPreserveCancelledRecurringAccess,
   CLOUDFLARE_PBKDF2_ITERATIONS,
 } from '../worker/cloudflare-billing-runtime.js';
 
@@ -14,6 +16,7 @@ const runtime = read('worker/cloudflare-billing-runtime.js');
 const authRuntime = read('worker/cloudflare-auth-runtime.js');
 const legacyWorker = read('worker/index.js');
 const domainEntry = read('worker/domain-entry.js');
+const ownedApiPaths = read('worker/owned-api-paths.js');
 const schema = read('cloudflare/runtime-schema.sql');
 const config = read('public/comercial/config.js');
 const app = read('public/comercial/app.js');
@@ -75,6 +78,22 @@ assert.match(planHtml, /R\$ 999,90/);
 assert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 9990 : 99990/);
 assert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 4990 : 49900/);
 
+// Self-service cancellation is an authenticated billing extension, not a second billing stack.
+assert.match(runtime, /'\/api\/asaas\/subscription'/);
+assert.match(runtime, /'\/api\/asaas\/subscription\/cancel'/);
+assert.match(runtime, /SUBSCRIPTION_DELETED/);
+assert.match(runtime, /cancel_at_period_end/);
+assert.match(runtime, /method:\s*'DELETE'/);
+assert.match(ownedApiPaths, /\['\/api\/billing\/subscription',\s*'\/api\/asaas\/subscription'\]/);
+assert.match(ownedApiPaths, /\['\/api\/billing\/subscription\/cancel',\s*'\/api\/asaas\/subscription\/cancel'\]/);
+assert.match(domainEntry, /'\/api\/asaas\/subscription'/);
+assert.match(domainEntry, /'\/api\/asaas\/subscription\/cancel'/);
+assert.match(planHtml, /Cancelar renovação/);
+assert.match(plan, /\/api\/asaas\/subscription/);
+assert.match(plan, /\/api\/asaas\/subscription\/cancel/);
+assert.match(plan, /showModal\(/);
+assert.doesNotMatch(plan, /window\.confirm|\bconfirm\s*\(/);
+
 // Payment confirmation activates access directly; transactional e-mail is an
 // independent best-effort notification and cannot gate paid access.
 assert.match(wrangler, /"send_email"/);
@@ -94,6 +113,29 @@ const monthlyEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_monthly');
 assert.match(monthlyEnd, /^2026-10-22T/);
 const annualEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_annual');
 assert.match(annualEnd, /^2027-09-22T/);
+
+const cancelledMonthly = {
+  plan_code: 'pro_monthly',
+  status: 'active',
+  external_subscription_id: 'sub_monthly_123',
+  current_period_end: '2026-10-30T12:00:00.000Z',
+  metadata_json: JSON.stringify({
+    cancel_at_period_end: true,
+    cancellation_requested_at: '2026-10-10T12:00:00.000Z',
+    provider_deleted_at: '2026-10-10T12:00:01.000Z',
+  }),
+};
+const cancellationState = subscriptionCancellationState(cancelledMonthly, Date.parse('2026-10-15T12:00:00.000Z'));
+assert.equal(cancellationState.recurring, true);
+assert.equal(cancellationState.cancelAtPeriodEnd, true);
+assert.equal(cancellationState.autoRenew, false);
+assert.equal(cancellationState.canCancel, false);
+assert.equal(cancellationState.accessUntil, cancelledMonthly.current_period_end);
+assert.equal(shouldPreserveCancelledRecurringAccess(cancelledMonthly, 'DELETED', Date.parse('2026-10-15T12:00:00.000Z')), true);
+assert.equal(shouldPreserveCancelledRecurringAccess(cancelledMonthly, 'REFUNDED', Date.parse('2026-10-15T12:00:00.000Z')), false);
+const expiredCancellationState = subscriptionCancellationState(cancelledMonthly, Date.parse('2026-11-01T12:00:00.000Z'));
+assert.equal(expiredCancellationState.expired, true);
+assert.equal(expiredCancellationState.canCancel, false);
 
 const partner = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -133,4 +175,4 @@ assert.equal(payload.externalReference, 'saas_checkout:22222222-2222-4222-8222-2
 assert.equal(payload.items[0].value, 79.92);
 assert.equal(payload.subscription.cycle, 'MONTHLY');
 
-console.log('Cloudflare D1 billing: origin routing, Cloudflare client naming, current prices, partner pricing, Asaas recurrence and automatic post-payment activation OK');
+console.log('Cloudflare D1 billing: origin routing, current prices, Asaas recurrence, safe self-service cancellation and automatic post-payment activation OK');
