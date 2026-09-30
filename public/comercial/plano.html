@@ -45,6 +45,14 @@
             <div><span>Fotos e vídeos</span><strong id="media-access">—</strong></div>
             <div><span>Assinatura</span><strong id="subscription-status">—</strong></div>
           </div>
+          <div class="subscription-management" id="subscription-management" hidden>
+            <div class="subscription-management-copy">
+              <span class="eyebrow">Renovação</span>
+              <strong id="renewal-status">—</strong>
+              <p id="renewal-copy">—</p>
+            </div>
+            <button class="link-button danger-action" id="cancel-renewal-button" type="button" hidden>Cancelar renovação</button>
+          </div>
         </article>
 
         <aside class="account-card">
@@ -83,6 +91,18 @@
 
     <div id="plan-message" class="plan-message" role="status" aria-live="polite"></div>
   </main>
+
+  <dialog id="cancel-subscription-dialog" class="subscription-dialog" aria-labelledby="cancel-subscription-title">
+    <form method="dialog" class="subscription-dialog-card">
+      <span class="eyebrow">Assinatura mensal</span>
+      <h2 id="cancel-subscription-title">Cancelar renovação?</h2>
+      <p id="cancel-subscription-copy">Sua assinatura deixará de renovar automaticamente.</p>
+      <div class="subscription-dialog-actions">
+        <button class="button secondary" type="submit" value="keep">Manter assinatura</button>
+        <button class="button danger-button" id="confirm-cancel-renewal" type="button">Cancelar renovação</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="./config.js"></script>
   <script type="module" src="./plan.js"></script>
