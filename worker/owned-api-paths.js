@@ -5,6 +5,8 @@ const BILLING_COMPAT = new Map([
   ['/api/billing/health', '/api/asaas/health'],
   ['/api/billing/preauth-checkout', '/api/asaas/preauth-checkout'],
   ['/api/billing/checkout', '/api/asaas/checkout'],
+  ['/api/billing/subscription', '/api/asaas/subscription'],
+  ['/api/billing/subscription/cancel', '/api/asaas/subscription/cancel'],
   ['/api/billing/webhooks/asaas', '/api/webhooks/asaas'],
   ['/api/billing/sandbox/health', '/api/sandbox/asaas/health'],
   ['/api/billing/sandbox/checkout', '/api/sandbox/asaas/checkout'],
