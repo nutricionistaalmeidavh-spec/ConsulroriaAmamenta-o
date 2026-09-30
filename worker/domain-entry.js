@@ -1,6 +1,7 @@
 import { handleSeoGoogleOverview, handleSeoGoogleSites, handleSeoPasswordLogin } from './seo-search-console.js';
 import { ensureExplicitCommercialMarker } from './commercial-license-bootstrap.js';
 import { handleCloudflareBillingRuntime, reconcileBilling } from './cloudflare-billing-runtime.js';
+import { handleSubscriptionCancellationRuntime, reconcileSubscriptionCancellations } from './subscription-cancellation-runtime.js';
 import { handleCloudflareClinicalRuntime } from './cloudflare-clinical-runtime.js';
 import { authenticateClinicalRequest, handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { handleAtomicAuthRefresh } from './auth-refresh-atomic-runtime.js';
@@ -43,6 +44,8 @@ const D1_BILLING_PATHS = new Set([
   '/api/asaas/health',
   '/api/asaas/preauth-checkout',
   '/api/asaas/checkout',
+  '/api/asaas/subscription',
+  '/api/asaas/subscription/cancel',
   '/api/webhooks/asaas',
   '/api/sandbox/asaas/health',
   '/api/sandbox/asaas/checkout',
@@ -54,6 +57,8 @@ const D1_BILLING_PATHS = new Set([
 const D1_AUTH_REQUIRED_EXACT = new Set([
   '/api/asaas/status',
   '/api/asaas/checkout',
+  '/api/asaas/subscription',
+  '/api/asaas/subscription/cancel',
   '/api/sandbox/asaas/checkout',
 ]);
 
@@ -212,6 +217,9 @@ export default {
     const clinicalBackupResponse = await handleClinicalBackupRuntime(request, env, url);
     if (clinicalBackupResponse) return withNoIndex(clinicalBackupResponse);
 
+    const subscriptionCancellationResponse = await handleSubscriptionCancellationRuntime(request, env, url);
+    if (subscriptionCancellationResponse) return withNoIndex(subscriptionCancellationResponse);
+
     const cloudflareBillingResponse = await handleCloudflareBillingRuntime(request, env, url);
     if (cloudflareBillingResponse) return withNoIndex(cloudflareBillingResponse);
     if (D1_BILLING_PATHS.has(url.pathname)) return d1BillingRequired();
@@ -275,6 +283,7 @@ export default {
   },
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(reconcileBilling(env).catch((error) => console.error('billing reconciliation failed', error)));
+    ctx.waitUntil(reconcileSubscriptionCancellations(env).catch((error) => console.error('subscription cancellation reconciliation failed', error)));
     if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     ctx.waitUntil(
