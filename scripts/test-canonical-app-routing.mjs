@@ -136,6 +136,8 @@ assert.match(recovery, /import '\.\/app-entry-bridge\.js'/, 'the post-auth bridg
 
 assert.match(manifest, /"name": "Gestão de Amamentação"/, 'installed app name must be customer-neutral');
 assert.match(manifest, /"short_name": "Amamentação"/, 'installed app short name must be customer-neutral');
+assert.match(manifest, /"start_url": "\/app\/"/, 'installed PWA must open the canonical /app/ entry instead of the public landing');
+assert.match(manifest, /"scope": "\/"/, 'installed PWA must keep root scope while launching through /app/');
 assert.doesNotMatch(manifest, /Débora/, 'generic PWA manifest must not use customer name');
 
 for (const file of ['supabase/phase-saas-foundation.sql', 'supabase/phase-saas-enforcement.sql']) {
