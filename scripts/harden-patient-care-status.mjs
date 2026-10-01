@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { hardenPatientCareApp, hardenPatientCareHtml } from './lib/patient-care-status-hardening.mjs';
+import { hardenPatientCareApp, hardenPatientCareHtml, hardenPatientCareStyles } from './lib/patient-care-status-hardening.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WRITE = process.argv.includes('--write');
@@ -10,6 +10,11 @@ const targets = [
     path: resolve(ROOT, 'public/clinical-source/index.html'),
     transform: hardenPatientCareHtml,
     markers: ['data-kpi-active-patients', 'data-patient-care-toggle', 'data-patient-care-status'],
+  },
+  {
+    path: resolve(ROOT, 'public/clinical-source/styles.css'),
+    transform: hardenPatientCareStyles,
+    markers: ['.patient-header-actions [data-patient-care-toggle]{display:inline-flex}'],
   },
   {
     path: resolve(ROOT, 'public/clinical-source/core/app-shell.js'),
