@@ -52,6 +52,16 @@ test('bootstrap re-arms clinical care flow against the live document after canon
   assert.match(bootstrap,/clinical-care-flow-feature\.js\?canonical-runtime=1/);
 });
 
+test('blob clinical shell rewrites patient care status import before execution',()=>{
+  const bootstrap=read('src/bootstrap.js');
+  const importUrlAt=bootstrap.indexOf("new URL('/patient-care-status-core.js', window.location.origin).href");
+  const rewriteAt=bootstrap.indexOf("shell = shell.replace(\n    \"'../../patient-care-status-core.js'\"");
+  const blobAt=bootstrap.indexOf('const shellUrl = moduleUrl(shell);');
+  assert.ok(importUrlAt>=0,'bootstrap must derive a same-origin URL for patient-care-status-core.js');
+  assert.ok(rewriteAt>=0,'bootstrap must rewrite the relative patient care import used by the canonical shell');
+  assert.ok(blobAt>rewriteAt,'patient care import must be rewritten before the shell is converted to a blob module');
+});
+
 test('async album and referral mounts cancel stale renders and stay singleton',()=>{
   for(const [file,card] of [['public/album-feature.js','af'],['public/referrals-feature.js','rf']]){
     const source=read(file);
