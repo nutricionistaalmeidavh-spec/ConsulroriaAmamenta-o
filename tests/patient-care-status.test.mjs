@@ -12,6 +12,7 @@ import {
 import {
   hardenPatientCareApp,
   hardenPatientCareHtml,
+  hardenPatientCareStyles,
 } from '../scripts/lib/patient-care-status-hardening.mjs';
 
 test('legacy patients without care_status remain active', () => {
@@ -68,6 +69,15 @@ test('HTML hardening replaces follow-up KPI and adds finalization control once',
   assert.match(hardened, /data-action="toggle-patient-care"/);
   assert.match(hardened, /data-patient-care-status/);
   assert.equal(hardenPatientCareHtml(hardened), hardened);
+});
+
+test('mobile hardening keeps finalization visible while edit stays hidden', () => {
+  const source = '@media(max-width:760px){.patient-header-actions{margin-left:auto}.patient-header-actions .ui-button-ghost{display:none}}';
+  const hardened = hardenPatientCareStyles(source);
+  assert.match(hardened, /ui-button-ghost:not\(\[data-patient-care-toggle\]\)\{display:none\}/);
+  assert.match(hardened, /\[data-patient-care-toggle\]\{display:inline-flex\}/);
+  assert.match(hardened, /flex-direction:column/);
+  assert.equal(hardenPatientCareStyles(hardened), hardened);
 });
 
 test('app hardening makes badges dynamic, wires finalization and reactivation', () => {
