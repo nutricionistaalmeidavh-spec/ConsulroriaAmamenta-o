@@ -302,15 +302,18 @@ async function handleSignup(request, env) {
   }
 
   const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
-  if (pending) {
-    const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
-    if (!safeEqual(proof, pending.password_hash)) return json(400, {error:'signup_credentials_invalid',message:'Cadastro pendente. Informe a senha original ou use “Esqueci minha senha”.'});
-  }
   const userId = pending?.user_id || crypto.randomUUID();
-  // A payment confirmed for this identity is its own purchase, not a pre-grant.
+  // An unpaid pending checkout must not mask a separately granted commercial
+  // license. Resolve that grant first, preserving the pending user_id so mailbox
+  // proof can safely claim the same identity. Paid Asaas identities keep their
+  // existing password-based activation path below.
   if (!pending?.payment_confirmed_at) {
     const claim = await reservePregrantedIdentity(env, email, userId);
     if (claim) return json(403, claim);
+  }
+  if (pending) {
+    const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
+    if (!safeEqual(proof, pending.password_hash)) return json(400, {error:'signup_credentials_invalid',message:'Cadastro pendente. Informe a senha original ou use “Esqueci minha senha”.'});
   }
   const now = new Date().toISOString();
   const salt = randomToken(18);
