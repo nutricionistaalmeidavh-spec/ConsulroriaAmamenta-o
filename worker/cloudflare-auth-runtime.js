@@ -81,7 +81,7 @@ async function signToken(payload, env) {
   const header = b64urlText(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = b64urlText(JSON.stringify(payload));
   const data = `${header}.${body}`;
-  const signature = await crypto.subtle.sign('HMAC', await hmacKey(env.CLINICAL_AUTH_SECRET), enc.encode(data));
+  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(data));
   return `${data}.${b64urlBytes(signature)}`;
 }
 
@@ -351,6 +351,9 @@ async function handleSignup(request, env) {
   let resolvedAccess = null;
   let manualFirstAccess = false;
 
+  // A payment-confirmed Asaas identity keeps the password chosen during checkout.
+  // A manual six-month grant instead lets the user choose a password directly on
+  // the first-access form, even if an older unpaid checkout exists for the e-mail.
   if (!pending?.payment_confirmed_at) {
     resolvedAccess = await resolvePregrantedAccess(env, email);
     manualFirstAccess = isDirectManualDeboraGrant(resolvedAccess);
@@ -394,6 +397,8 @@ async function handleSignup(request, env) {
   ];
 
   if (pending && !manualFirstAccess) {
+    // Recheck the credential version inside the transaction: a recovery may
+    // have changed it since the password proof above was evaluated.
     statements[0] = database.prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
@@ -500,6 +505,9 @@ async function handleResetPassword(request, env) {
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const now = new Date().toISOString();
 
+  // Every write checks the token inside the same D1 transaction. Do not read/claim
+  // it outside the batch: concurrent resets must not reuse a stale user_id, and a
+  // failed credential write must leave the link available for retry.
   const results = await db.batch([
     db.prepare(`UPDATE billing_pending_signups SET password_salt=?,password_hash=?,password_iterations=?,signup_nonce_hash=?,updated_at=?
       WHERE user_id IN (SELECT user_id FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?)`)
