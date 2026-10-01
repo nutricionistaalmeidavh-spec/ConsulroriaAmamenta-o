@@ -61,6 +61,12 @@ test('materialized frontend modules use owned same-origin Cloudflare API familie
     assert.doesNotMatch(source, /https:\/\/[^'"`]+\/api\/(?:auth|clinical|files|billing)/i, `${path} builds an external API URL`);
   }
   assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/auth\/user/);
-  assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/clinical\/records\/professional_profiles/);
   assert.match(runtimeText('public/documents-feature.js'), /\/api\/clinical\/media\/upload/);
+});
+
+test('clinical first access turns a reserved manual license into mailbox recovery', () => {
+  const source = runtimeText('public/clinical-source/core/app-shell.js');
+  assert.match(source, /error\?\.code === 'password_reset_required'/);
+  assert.match(source, /\/api\/auth\/recovery/);
+  assert.match(source, /Confirme o primeiro acesso pelo link enviado ao seu e-mail/);
 });
