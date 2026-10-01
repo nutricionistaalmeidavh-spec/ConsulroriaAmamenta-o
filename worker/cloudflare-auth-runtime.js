@@ -309,7 +309,14 @@ async function handleSignup(request, env) {
   // existing password-based activation path below.
   if (!pending?.payment_confirmed_at) {
     const claim = await reservePregrantedIdentity(env, email, userId);
-    if (claim) return json(403, claim);
+    if (claim) {
+      const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return handleRecovery(recoveryRequest, env);
+    }
   }
   if (pending) {
     const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
