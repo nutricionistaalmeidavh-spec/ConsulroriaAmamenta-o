@@ -2,6 +2,8 @@ const KPI_OLD = '<article class="lactation-kpi attention"><span>Follow-ups pende
 const KPI_NEW = '<article class="lactation-kpi attention"><span>Pacientes em acompanhamento</span><strong data-kpi-active-patients>0</strong><small data-kpi-active-patients-meta>pacientes ativas</small></article>';
 const ACTIONS_OLD = '<div class="patient-header-actions"><button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button class="ui-button ui-button-primary" data-action="new-appointment">Novo atendimento</button></div>';
 const ACTIONS_NEW = '<div class="patient-header-actions"><button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button class="ui-button ui-button-ghost" data-action="toggle-patient-care" data-patient-care-toggle>Finalizar acompanhamento</button><button class="ui-button ui-button-primary" data-action="new-appointment">Novo atendimento</button></div>';
+const MOBILE_GHOST_OLD = '.patient-header-actions{margin-left:auto}.patient-header-actions .ui-button-ghost{display:none}';
+const MOBILE_GHOST_NEW = '.patient-header-actions{margin-left:auto;flex-direction:column;align-items:stretch;flex:0 0 min(42vw,180px)}.patient-header-actions .ui-button-ghost:not([data-patient-care-toggle]){display:none}.patient-header-actions [data-patient-care-toggle]{display:inline-flex}';
 
 export function hardenPatientCareHtml(source) {
   let next = String(source);
@@ -16,6 +18,12 @@ export function hardenPatientCareHtml(source) {
   next = next
     .replace(/(<[^>]+data-nav-target="followups"[^>]*>\s*<span class="nav-icon">[^<]*<\/span>\s*<span>)Acompanhamentos(<\/span>)/g, '$1Follow-ups$2')
     .replace(/(<section class="lactation-screen" data-screen="followups"[\s\S]*?<h1>)Acompanhamentos(<\/h1>)/, '$1Follow-ups$2');
+  return next;
+}
+
+export function hardenPatientCareStyles(source) {
+  let next = String(source);
+  if (next.includes(MOBILE_GHOST_OLD)) next = next.replace(MOBILE_GHOST_OLD, MOBILE_GHOST_NEW);
   return next;
 }
 
