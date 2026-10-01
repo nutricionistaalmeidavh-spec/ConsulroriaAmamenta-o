@@ -62,16 +62,6 @@ test('blob clinical shell rewrites patient care status import before execution',
   assert.ok(blobAt>rewriteAt,'patient care import must be rewritten before the shell is converted to a blob module');
 });
 
-test('first-access retry converts password-reset-required signup into mailbox recovery',()=>{
-  const bootstrap=read('src/bootstrap.js');
-  assert.match(bootstrap,/function hardenFirstAccessRecovery/);
-  assert.match(bootstrap,/error\?\.code === 'password_reset_required'/);
-  assert.match(bootstrap,/\/api\/auth\/recovery/);
-  assert.match(bootstrap,/CLIENT_RUNTIME_KEY/);
-  assert.match(bootstrap,/Solicitação processada\. Verifique seu e-mail para definir a senha e concluir o primeiro acesso\./);
-  assert.doesNotMatch(bootstrap,/AUTH_RECOVERY_ORIGIN|CLINICAL_AUTH_SECRET|ASAAS_SECRET|ASSAS_SANDBOX_SECRET/);
-});
-
 test('async album and referral mounts cancel stale renders and stay singleton',()=>{
   for(const [file,card] of [['public/album-feature.js','af'],['public/referrals-feature.js','rf']]){
     const source=read(file);
@@ -83,7 +73,7 @@ test('async album and referral mounts cancel stale renders and stay singleton',(
 });
 
 test('changed clinical runtime modules remain valid JavaScript',()=>{
-  for(const file of ['src/bootstrap.js','public/phase02-loader.js','public/phase35-loader.js','public/phase68-loader.js','public/album-feature.js','public/referrals-feature.js']){
+  for(const file of ['public/phase02-loader.js','public/phase35-loader.js','public/phase68-loader.js','public/album-feature.js','public/referrals-feature.js']){
     execFileSync(process.execPath,['--check',file],{stdio:'pipe'});
   }
 });

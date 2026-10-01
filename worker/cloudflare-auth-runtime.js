@@ -2,7 +2,8 @@ import {
   CLOUDFLARE_PBKDF2_ITERATIONS,
   cloudflarePasswordHash,
 } from './cloudflare-auth-compat.js';
-import { isDirectManualDeboraGrant, reservePregrantedIdentity, resolvePregrantedAccess } from './signup-identity.js';
+import { isDirectManualGrant, reservePregrantedIdentity, resolvePregrantedAccess } from './signup-identity.js';
+import { activateManualFirstAccessCredentials } from './manual-first-access.js';
 import { sendBestEffortTransactionalEmail, sendTransactionalEmail } from './transactional-email.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
@@ -285,34 +286,25 @@ async function handleRefresh(request, env) {
   return json(200, await issueSession(env, user));
 }
 
-async function completeManualFirstAccess(env, existing, password) {
-  const database = requireDb(env);
-  const now = new Date().toISOString();
-  const salt = randomToken(18);
-  const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
-  let appMetadata = {};
-  try { appMetadata = JSON.parse(existing.app_metadata_json || '{}'); } catch {}
-  appMetadata = {
-    ...appMetadata,
-    auth_backend: 'cloudflare-d1',
-    commercial_account: true,
-    mailbox_claim_required: false,
-    manual_license_first_access: true,
-  };
-  const results = await database.batch([
-    database.prepare(`INSERT INTO auth_credentials(
-      user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
-    ) SELECT user_id,?,?,?,'PBKDF2-SHA256',?,? FROM auth_users
-      WHERE user_id=? AND password_reset_required=1
-      ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
-      password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=excluded.updated_at`)
-      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now,existing.user_id),
-    database.prepare(`UPDATE auth_users SET password_reset_required=0,email_confirmed_at=COALESCE(email_confirmed_at,?),
-      updated_at=?,app_metadata_json=? WHERE user_id=? AND password_reset_required=1`)
-      .bind(now,now,JSON.stringify(appMetadata),existing.user_id),
-  ]);
-  if (!results[0].meta.changes || !results[1].meta.changes) return null;
-  return runtimeUserById(env, existing.user_id);
+async function handleManualFirstAccess(env, { existing = null, pending = null, email, password, metadata = {} } = {}) {
+  const activated = await activateManualFirstAccessCredentials(env, { existing, pending, email, password, metadata });
+  if (!activated?.userId) {
+    return json(409, {
+      error: 'manual_first_access_conflict',
+      message: 'O estado deste cadastro mudou. Atualize a página e tente novamente.',
+    });
+  }
+  const user = await runtimeUserById(env, activated.userId);
+  if (!user) {
+    return json(409, {
+      error: 'manual_first_access_conflict',
+      message: 'O estado deste cadastro mudou. Atualize a página e tente novamente.',
+    });
+  }
+  await sendBestEffortTransactionalEmail(env, {
+    kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+  });
+  return json(200, await issueSession(env, user));
 }
 
 async function handleSignup(request, env) {
@@ -324,52 +316,56 @@ async function handleSignup(request, env) {
   }
 
   const existing = await userRowByEmail(env, email);
-  if (existing) {
-    const needsReset = Boolean(Number(existing.password_reset_required || 0));
-    if (!needsReset) return json(400, { message: 'Este e-mail já possui cadastro. Use Entrar.' });
+  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
+  const needsReset = Boolean(Number(existing?.password_reset_required || 0));
+  let pregrantedAccess = null;
+  if (!pending?.payment_confirmed_at && (!existing || needsReset)) {
+    pregrantedAccess = await resolvePregrantedAccess(env, email);
+  }
+  const directManualGrant = isDirectManualGrant(pregrantedAccess);
 
-    const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
-    if (!pending?.payment_confirmed_at) {
-      const access = await resolvePregrantedAccess(env, email);
-      if (isDirectManualDeboraGrant(access)) {
-        const user = await completeManualFirstAccess(env, existing, password);
-        if (!user) return json(409, {error:'signup_credentials_changed',message:'O acesso foi alterado durante o cadastro. Tente novamente.'});
-        await sendBestEffortTransactionalEmail(env, {
-          kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
-        });
-        return json(200, await issueSession(env, user));
-      }
+  if (existing) {
+    if (needsReset && directManualGrant) {
+      return handleManualFirstAccess(env, {
+        existing,
+        pending,
+        email,
+        password,
+        metadata: input?.data,
+      });
     }
-    return json(403, {
+    return json(needsReset ? 403 : 400, needsReset ? {
       error: 'password_reset_required',
       message: 'Conta importada. Use “Esqueci minha senha” para definir sua senha no novo acesso.',
+    } : { message: 'Este e-mail já possui cadastro. Use Entrar.' });
+  }
+
+  const userId = pending?.user_id || crypto.randomUUID();
+  if (directManualGrant) {
+    return handleManualFirstAccess(env, {
+      pending,
+      email,
+      password,
+      metadata: input?.data,
     });
   }
 
-  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
-  const userId = pending?.user_id || crypto.randomUUID();
-  let resolvedAccess = null;
-  let manualFirstAccess = false;
-
-  // A payment-confirmed Asaas identity keeps the password chosen during checkout.
-  // A manual six-month grant instead lets the user choose a password directly on
-  // the first-access form, even if an older unpaid checkout exists for the e-mail.
+  // An unpaid pending checkout must not mask a separately granted commercial
+  // license. Manual grants are handled above and accept the password chosen in
+  // "Criar primeiro acesso". Other pre-grants keep mailbox proof. Paid Asaas
+  // identities keep their existing password-based activation path below.
   if (!pending?.payment_confirmed_at) {
-    resolvedAccess = await resolvePregrantedAccess(env, email);
-    manualFirstAccess = isDirectManualDeboraGrant(resolvedAccess);
-    if (!manualFirstAccess && resolvedAccess) {
-      const claim = await reservePregrantedIdentity(env, email, userId, resolvedAccess);
-      if (claim) {
-        const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        return handleRecovery(recoveryRequest, env);
-      }
+    const claim = await reservePregrantedIdentity(env, email, userId, pregrantedAccess);
+    if (claim) {
+      const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return handleRecovery(recoveryRequest, env);
     }
   }
-  if (pending && !manualFirstAccess) {
+  if (pending) {
     const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
     if (!safeEqual(proof, pending.password_hash)) return json(400, {error:'signup_credentials_invalid',message:'Cadastro pendente. Informe a senha original ou use “Esqueci minha senha”.'});
   }
@@ -377,11 +373,7 @@ async function handleSignup(request, env) {
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const userMetadata = JSON.stringify(input?.data && typeof input.data === 'object' ? input.data : {});
-  const appMetadata = JSON.stringify({
-    auth_backend: 'cloudflare-d1',
-    commercial_account: true,
-    ...(manualFirstAccess ? { manual_license_first_access: true, license_source: resolvedAccess?.source || 'mercado_livre_manual' } : {}),
-  });
+  const appMetadata = JSON.stringify({ auth_backend: 'cloudflare-d1', commercial_account: true });
   const database = requireDb(env);
 
   const statements = [
@@ -396,7 +388,7 @@ async function handleSignup(request, env) {
       .bind(userId, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS),
   ];
 
-  if (pending && !manualFirstAccess) {
+  if (pending) {
     // Recheck the credential version inside the transaction: a recovery may
     // have changed it since the password proof above was evaluated.
     statements[0] = database.prepare(`INSERT INTO auth_users(

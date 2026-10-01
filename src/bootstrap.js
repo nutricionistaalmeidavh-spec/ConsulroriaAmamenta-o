@@ -205,21 +205,7 @@ function genericizeClinicalHtml(source) {
     .replace('<h1 data-home-greeting>Olá, Débora</h1>', '<h1 data-home-greeting>Olá, Profissional</h1>');
 }
 
-function hardenFirstAccessRecovery(source) {
-  let shell = String(source);
-  shell = shell.replace(
-    "} catch (error) { loginMessage.textContent = error?.message || 'Não foi possível entrar.'; loginMessage.className = 'form-message error'; }",
-    "} catch (error) { loginMessage.textContent = error?.code === 'password_reset_required' ? 'Esta conta precisa definir uma senha. Toque em “Criar primeiro acesso” para receber o link por e-mail.' : (error?.message || 'Não foi possível entrar.'); loginMessage.className = 'form-message error'; }",
-  );
-  shell = shell.replace(
-    `  } catch (error) {\n    loginMessage.textContent = error?.message || 'Não foi possível criar o acesso.';\n    loginMessage.className = 'form-message error';\n  }`,
-    `  } catch (error) {\n    if (error?.code === 'password_reset_required') {\n      try {\n        const recoveryResponse = await fetch(\`${'${config.API_BASE_URL}'}/api/auth/recovery\`, {\n          method: 'POST',\n          headers: { apikey: config.CLIENT_RUNTIME_KEY, 'Content-Type': 'application/json' },\n          body: JSON.stringify({ email }),\n        });\n        const recoveryPayload = await recoveryResponse.json().catch(() => ({}));\n        if (!recoveryResponse.ok) throw new Error(recoveryPayload?.message || recoveryPayload?.error || 'Não foi possível enviar o link de primeiro acesso.');\n        loginMessage.textContent = 'Solicitação processada. Verifique seu e-mail para definir a senha e concluir o primeiro acesso.';\n        loginMessage.className = 'form-message success';\n        return;\n      } catch (recoveryError) {\n        loginMessage.textContent = recoveryError?.message || 'Não foi possível enviar o link de primeiro acesso.';\n        loginMessage.className = 'form-message error';\n        return;\n      }\n    }\n    loginMessage.textContent = error?.message || 'Não foi possível criar o acesso.';\n    loginMessage.className = 'form-message error';\n  }`,
-  );
-  return shell;
-}
-
 function genericizeClinicalShell(source) {
-  source = hardenFirstAccessRecovery(source);
   let shell = `const CANONICAL_PRODUCT_NAME = globalThis.CANONICAL_APP_CONTEXT?.productName || 'Gestão de Amamentação';\nconst currentProfessionalName = () => globalThis.CANONICAL_PROFESSIONAL_NAME || 'Profissional';\n${source}`;
   return shell
     .replaceAll("titles[screen] || 'Débora Lactação'", 'titles[screen] || CANONICAL_PRODUCT_NAME')

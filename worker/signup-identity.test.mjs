@@ -5,12 +5,12 @@ import { readFileSync } from 'node:fs';
 import { handleCloudflareAuthRuntime } from './cloudflare-auth-runtime.js';
 import { cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 
-function fixture(active = false) {
+function fixture(active = false, source = active ? 'mercado_livre_manual' : 'legacy') {
   const sqlite = new DatabaseSync(':memory:');
   for (const file of ['full-migration-schema.sql','runtime-schema.sql','migrations/0005-auth-recovery.sql','migrations/0009-billing-recovery.sql']) sqlite.exec(readFileSync(new URL(`../cloudflare/${file}`, import.meta.url),'utf8'));
   const wrap = (sql, args = []) => ({ bind: (...values) => wrap(sql,values), first: async () => sqlite.prepare(sql).get(...args) || null, run: async () => ({meta:{changes:Number(sqlite.prepare(sql).run(...args).changes)}}) });
   const db = {prepare:sql=>wrap(sql),batch:async statements=>{sqlite.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sqlite.exec('COMMIT');return results;}catch(error){sqlite.exec('ROLLBACK');throw error;}}};
-  const env = {CLINICAL_DB:db,CLINICAL_AUTH_SECRET:'test-secret',LICENSE_SERVICE_SECRET:'test-license-secret',ARTISYS_LICENSING:{fetch:async()=>Response.json({commercial:active,active,planCode:active?'pro_6m':'legacy_unmanaged',source:active?'mercado_livre_manual':'legacy'})}};
+  const env = {CLINICAL_DB:db,CLINICAL_AUTH_SECRET:'test-secret',LICENSE_SERVICE_SECRET:'test-license-secret',ARTISYS_LICENSING:{fetch:async()=>Response.json({commercial:active,active,planCode:active?'pro_6m':'legacy_unmanaged',source})}};
   return {sqlite,env};
 }
 const call = (env,path,body) => handleCloudflareAuthRuntime(new Request(`https://example.test/api/auth/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),env);
@@ -26,7 +26,7 @@ test('free signup reuses the pending Pro identity only with its password',async(
   const response=await call(env,'signup',{email:'new@example.test',password:'original-password'});
   assert.equal(response.status,200);assert.equal((await response.json()).user.id,'pending-user');
 });
-test('active manual license bypasses stale unpaid pending password and uses the password chosen on first access',async()=>{
+test('active manual license bypasses stale unpaid pending password and installs the password chosen on first access',async()=>{
   const {sqlite,env}=fixture(true);await pending(sqlite);
   const response=await call(env,'signup',{email:'new@example.test',password:'chosen-password'});
   assert.equal(response.status,200);
@@ -38,20 +38,31 @@ test('active manual license bypasses stale unpaid pending password and uses the 
   assert.equal(credential.password_hash,await cloudflarePasswordHash('chosen-password',credential.password_salt,credential.password_iterations));
   assert.equal(sqlite.prepare('SELECT count(*) n FROM billing_signup_recovery_tokens').get().n,0);
   assert.equal((await call(env,'token?grant_type=password',{email:'new@example.test',password:'chosen-password'})).status,200);
+  assert.equal((await call(env,'token?grant_type=password',{email:'new@example.test',password:'original-password'})).status,400);
 });
-test('manual license can finish a previously reserved password-reset identity without email recovery',async()=>{
+test('manual license first access works without recovery delivery and issues a session immediately',async()=>{
   const {sqlite,env}=fixture(true);
-  sqlite.prepare("INSERT INTO auth_users(user_id,email,password_reset_required,app_metadata_json) VALUES('reserved-user','granted@example.test',1,'{\"commercial_account\":true,\"mailbox_claim_required\":true}')").run();
+  const response=await call(env,'signup',{email:'granted@example.test',password:'owner-password'});
+  assert.equal(response.status,200);
+  const payload=await response.json();
+  assert.equal(payload.user.email,'granted@example.test');
+  assert.ok(payload.access_token);
+  assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users WHERE email=?').get('granted@example.test').password_reset_required,0);
+  assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_credentials').get().n,1);
+  assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_recovery_tokens').get().n,0);
+});
+test('manual license first access repairs an identity previously reserved for mailbox recovery',async()=>{
+  const {sqlite,env}=fixture(true);
+  sqlite.prepare("INSERT INTO auth_users(user_id,email,password_reset_required,user_metadata_json,app_metadata_json) VALUES('reserved-user','granted@example.test',1,'{}','{\"mailbox_claim_required\":true}')").run();
   const response=await call(env,'signup',{email:'granted@example.test',password:'owner-password'});
   assert.equal(response.status,200);
   assert.equal((await response.json()).user.id,'reserved-user');
-  assert.equal(sqlite.prepare("SELECT password_reset_required FROM auth_users WHERE user_id='reserved-user'").get().password_reset_required,0);
-  const credential=sqlite.prepare("SELECT * FROM auth_credentials WHERE user_id='reserved-user'").get();
-  assert.equal(credential.password_hash,await cloudflarePasswordHash('owner-password',credential.password_salt,credential.password_iterations));
-  assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_recovery_tokens').get().n,0);
+  const account=sqlite.prepare('SELECT password_reset_required,app_metadata_json FROM auth_users WHERE user_id=?').get('reserved-user');
+  assert.equal(account.password_reset_required,0);
+  assert.equal(JSON.parse(account.app_metadata_json).mailbox_claim_required,false);
   assert.equal((await call(env,'token?grant_type=password',{email:'granted@example.test',password:'owner-password'})).status,200);
 });
-test('paid Asaas pending identity keeps password activation even when a manual commercial license is active',async()=>{
+test('paid Asaas pending identity keeps password activation even when a manual commercial grant is also active',async()=>{
   const {sqlite,env}=fixture(true);await pending(sqlite);
   sqlite.prepare("UPDATE billing_pending_signups SET status='paid',payment_confirmed_at=? WHERE user_id='pending-user'").run(new Date().toISOString());
   assert.equal((await call(env,'signup',{email:'new@example.test',password:'chosen-password'})).status,400);
@@ -60,27 +71,12 @@ test('paid Asaas pending identity keeps password activation even when a manual c
   assert.equal((await response.json()).user.id,'pending-user');
   assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users WHERE user_id=?').get('pending-user').password_reset_required,0);
 });
-test('active manual license with no pending checkout creates credentials directly',async()=>{
-  const {sqlite,env}=fixture(true);
-  const response=await call(env,'signup',{email:'granted@example.test',password:'owner-password'});
-  assert.equal(response.status,200);
-  const body=await response.json();
-  assert.equal(body.user.email,'granted@example.test');
-  assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users WHERE email=?').get('granted@example.test').password_reset_required,0);
-  const credential=sqlite.prepare('SELECT * FROM auth_credentials WHERE user_id=?').get(body.user.id);
-  assert.equal(credential.password_hash,await cloudflarePasswordHash('owner-password',credential.password_salt,credential.password_iterations));
-  assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_recovery_tokens').get().n,0);
-});
-test('non-manual active pregrant still uses mailbox recovery',async()=>{
-  const {sqlite,env}=fixture(false);
-  env.ARTISYS_LICENSING.fetch=async()=>Response.json({commercial:true,active:true,planCode:'pro_annual',source:'asaas'});
-  let delivered;
-  env.AUTH_RECOVERY_ORIGIN='https://example.test';
-  env.AUTH_RECOVERY_DELIVERY={fetch:async request=>{delivered=await request.json();return Response.json({ok:true});}};
-  const response=await call(env,'signup',{email:'other-grant@example.test',password:'submitted-password'});
-  assert.equal(response.status,202);
-  assert.equal(delivered.to,'other-grant@example.test');
-  assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users WHERE email=?').get('other-grant@example.test').password_reset_required,1);
+test('non-manual pregrant still reserves a passwordless identity when recovery delivery is unavailable',async()=>{
+  const {sqlite,env}=fixture(true,'asaas');
+  const response=await call(env,'signup',{email:'granted@example.test',password:'attacker-password'});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,'recovery_delivery_unavailable');
+  assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users').get().password_reset_required,1);
   assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_credentials').get().n,0);
 });
 test('pending recovery resets credential and nonce without activating account; token is single-use',async()=>{
@@ -112,6 +108,19 @@ test('pending recovery also updates same identity activated before reset',async(
   const saved=sqlite.prepare('SELECT * FROM auth_credentials').get();
   assert.equal(saved.password_hash,await cloudflarePasswordHash('replacement-password',saved.password_salt,saved.password_iterations));
   assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_refresh_sessions WHERE revoked_at IS NULL').get().n,0);
+});
+test('non-manual pregrant recovery requires delivery and mailbox proof, then permits login',async()=>{
+  const {sqlite,env}=fixture(true,'asaas');
+  await call(env,'signup',{email:'granted@example.test',password:'attacker-password'});
+  assert.equal((await call(env,'recovery',{email:'granted@example.test'})).status,503);
+  let delivered;
+  env.AUTH_RECOVERY_ORIGIN='https://example.test';
+  env.AUTH_RECOVERY_DELIVERY={fetch:async request=>{delivered=await request.json();return Response.json({ok:true});}};
+  await call(env,'recovery',{email:'granted@example.test'});
+  const token=new URLSearchParams(new URL(delivered.recoveryUrl).hash.slice(1)).get('recovery_token');
+  assert.equal((await call(env,'reset-password',{token,password:'owner-password'})).status,200);
+  assert.equal((await call(env,'token?grant_type=password',{email:'granted@example.test',password:'attacker-password'})).status,400);
+  assert.equal((await call(env,'token?grant_type=password',{email:'granted@example.test',password:'owner-password'})).status,200);
 });
 test('expired pending recovery does not change password or activate an account',async()=>{
   const {sqlite,env}=fixture();await pending(sqlite);
