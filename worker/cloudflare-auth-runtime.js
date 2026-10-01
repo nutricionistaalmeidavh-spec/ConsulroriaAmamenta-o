@@ -2,7 +2,8 @@ import {
   CLOUDFLARE_PBKDF2_ITERATIONS,
   cloudflarePasswordHash,
 } from './cloudflare-auth-compat.js';
-import { reservePregrantedIdentity } from './signup-identity.js';
+import { isDirectManualGrant, reservePregrantedIdentity, resolvePregrantedAccess } from './signup-identity.js';
+import { activateManualFirstAccessCredentials } from './manual-first-access.js';
 import { sendBestEffortTransactionalEmail, sendTransactionalEmail } from './transactional-email.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
@@ -285,6 +286,27 @@ async function handleRefresh(request, env) {
   return json(200, await issueSession(env, user));
 }
 
+async function handleManualFirstAccess(env, { existing = null, pending = null, email, password, metadata = {} } = {}) {
+  const activated = await activateManualFirstAccessCredentials(env, { existing, pending, email, password, metadata });
+  if (!activated?.userId) {
+    return json(409, {
+      error: 'manual_first_access_conflict',
+      message: 'O estado deste cadastro mudou. Atualize a página e tente novamente.',
+    });
+  }
+  const user = await runtimeUserById(env, activated.userId);
+  if (!user) {
+    return json(409, {
+      error: 'manual_first_access_conflict',
+      message: 'O estado deste cadastro mudou. Atualize a página e tente novamente.',
+    });
+  }
+  await sendBestEffortTransactionalEmail(env, {
+    kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+  });
+  return json(200, await issueSession(env, user));
+}
+
 async function handleSignup(request, env) {
   const input = await request.json().catch(() => null);
   const email = String(input?.email || '').trim().toLowerCase();
@@ -292,23 +314,48 @@ async function handleSignup(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { message: 'Informe um e-mail válido e senha com pelo menos 8 caracteres.' });
   }
+
   const existing = await userRowByEmail(env, email);
+  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
+  const needsReset = Boolean(Number(existing?.password_reset_required || 0));
+  let pregrantedAccess = null;
+  if (!pending?.payment_confirmed_at && (!existing || needsReset)) {
+    pregrantedAccess = await resolvePregrantedAccess(env, email);
+  }
+  const directManualGrant = isDirectManualGrant(pregrantedAccess);
+
   if (existing) {
-    const needsReset = Boolean(Number(existing.password_reset_required || 0));
+    if (needsReset && directManualGrant) {
+      return handleManualFirstAccess(env, {
+        existing,
+        pending,
+        email,
+        password,
+        metadata: input?.data,
+      });
+    }
     return json(needsReset ? 403 : 400, needsReset ? {
       error: 'password_reset_required',
       message: 'Conta importada. Use “Esqueci minha senha” para definir sua senha no novo acesso.',
     } : { message: 'Este e-mail já possui cadastro. Use Entrar.' });
   }
 
-  const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
   const userId = pending?.user_id || crypto.randomUUID();
+  if (directManualGrant) {
+    return handleManualFirstAccess(env, {
+      pending,
+      email,
+      password,
+      metadata: input?.data,
+    });
+  }
+
   // An unpaid pending checkout must not mask a separately granted commercial
-  // license. Resolve that grant first, preserving the pending user_id so mailbox
-  // proof can safely claim the same identity. Paid Asaas identities keep their
-  // existing password-based activation path below.
+  // license. Manual grants are handled above and accept the password chosen in
+  // "Criar primeiro acesso". Other pre-grants keep mailbox proof. Paid Asaas
+  // identities keep their existing password-based activation path below.
   if (!pending?.payment_confirmed_at) {
-    const claim = await reservePregrantedIdentity(env, email, userId);
+    const claim = await reservePregrantedIdentity(env, email, userId, pregrantedAccess);
     if (claim) {
       const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
         method: 'POST',
