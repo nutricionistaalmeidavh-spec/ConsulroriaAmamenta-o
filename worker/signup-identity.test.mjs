@@ -26,15 +26,20 @@ test('free signup reuses the pending Pro identity only with its password',async(
   const response=await call(env,'signup',{email:'new@example.test',password:'original-password'});
   assert.equal(response.status,200);assert.equal((await response.json()).user.id,'pending-user');
 });
-test('active manual license bypasses stale unpaid pending password and reserves mailbox proof',async()=>{
+test('active manual license bypasses stale unpaid pending password and sends mailbox recovery',async()=>{
   const {sqlite,env}=fixture(true);await pending(sqlite);
+  let delivered;
+  env.AUTH_RECOVERY_ORIGIN='https://example.test';
+  env.AUTH_RECOVERY_DELIVERY={fetch:async request=>{delivered=await request.json();return Response.json({ok:true});}};
   const response=await call(env,'signup',{email:'new@example.test',password:'different-password'});
-  assert.equal(response.status,403);
-  assert.equal((await response.json()).error,'password_reset_required');
+  assert.equal(response.status,202);
+  assert.match((await response.json()).message,/Solicitação processada/);
+  assert.equal(delivered.to,'new@example.test');
   const account=sqlite.prepare('SELECT user_id,password_reset_required FROM auth_users WHERE email=?').get('new@example.test');
   assert.equal(account.user_id,'pending-user');
   assert.equal(account.password_reset_required,1);
   assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_credentials').get().n,0);
+  assert.equal(sqlite.prepare('SELECT count(*) n FROM billing_signup_recovery_tokens').get().n,1);
 });
 test('paid Asaas pending identity keeps password activation even when commercial access is active',async()=>{
   const {sqlite,env}=fixture(true);await pending(sqlite);
@@ -44,10 +49,11 @@ test('paid Asaas pending identity keeps password activation even when commercial
   assert.equal((await response.json()).user.id,'pending-user');
   assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users WHERE user_id=?').get('pending-user').password_reset_required,0);
 });
-test('pregranted license reserves account without accepting submitted password',async()=>{
+test('pregranted license reserves account without accepting submitted password when recovery delivery is unavailable',async()=>{
   const {sqlite,env}=fixture(true);
   const response=await call(env,'signup',{email:'granted@example.test',password:'attacker-password'});
-  assert.equal(response.status,403);assert.equal((await response.json()).error,'password_reset_required');
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,'recovery_delivery_unavailable');
   assert.equal(sqlite.prepare('SELECT password_reset_required FROM auth_users').get().password_reset_required,1);
   assert.equal(sqlite.prepare('SELECT count(*) n FROM auth_credentials').get().n,0);
 });
