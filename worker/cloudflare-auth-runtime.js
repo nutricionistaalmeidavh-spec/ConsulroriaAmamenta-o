@@ -2,7 +2,7 @@ import {
   CLOUDFLARE_PBKDF2_ITERATIONS,
   cloudflarePasswordHash,
 } from './cloudflare-auth-compat.js';
-import { reservePregrantedIdentity } from './signup-identity.js';
+import { isDirectManualDeboraGrant, reservePregrantedIdentity, resolvePregrantedAccess } from './signup-identity.js';
 import { sendBestEffortTransactionalEmail, sendTransactionalEmail } from './transactional-email.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
@@ -81,7 +81,7 @@ async function signToken(payload, env) {
   const header = b64urlText(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = b64urlText(JSON.stringify(payload));
   const data = `${header}.${body}`;
-  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(data));
+  const signature = await crypto.subtle.sign('HMAC', await hmacKey(env.CLINICAL_AUTH_SECRET), enc.encode(data));
   return `${data}.${b64urlBytes(signature)}`;
 }
 
@@ -285,6 +285,36 @@ async function handleRefresh(request, env) {
   return json(200, await issueSession(env, user));
 }
 
+async function completeManualFirstAccess(env, existing, password) {
+  const database = requireDb(env);
+  const now = new Date().toISOString();
+  const salt = randomToken(18);
+  const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
+  let appMetadata = {};
+  try { appMetadata = JSON.parse(existing.app_metadata_json || '{}'); } catch {}
+  appMetadata = {
+    ...appMetadata,
+    auth_backend: 'cloudflare-d1',
+    commercial_account: true,
+    mailbox_claim_required: false,
+    manual_license_first_access: true,
+  };
+  const results = await database.batch([
+    database.prepare(`INSERT INTO auth_credentials(
+      user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
+    ) SELECT user_id,?,?,?,'PBKDF2-SHA256',?,? FROM auth_users
+      WHERE user_id=? AND password_reset_required=1
+      ON CONFLICT(user_id) DO UPDATE SET password_salt=excluded.password_salt,password_hash=excluded.password_hash,
+      password_iterations=excluded.password_iterations,password_algorithm=excluded.password_algorithm,updated_at=excluded.updated_at`)
+      .bind(salt,hash,CLOUDFLARE_PBKDF2_ITERATIONS,now,now,existing.user_id),
+    database.prepare(`UPDATE auth_users SET password_reset_required=0,email_confirmed_at=COALESCE(email_confirmed_at,?),
+      updated_at=?,app_metadata_json=? WHERE user_id=? AND password_reset_required=1`)
+      .bind(now,now,JSON.stringify(appMetadata),existing.user_id),
+  ]);
+  if (!results[0].meta.changes || !results[1].meta.changes) return null;
+  return runtimeUserById(env, existing.user_id);
+}
+
 async function handleSignup(request, env) {
   const input = await request.json().catch(() => null);
   const email = String(input?.email || '').trim().toLowerCase();
@@ -292,33 +322,51 @@ async function handleSignup(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { message: 'Informe um e-mail válido e senha com pelo menos 8 caracteres.' });
   }
+
   const existing = await userRowByEmail(env, email);
   if (existing) {
     const needsReset = Boolean(Number(existing.password_reset_required || 0));
-    return json(needsReset ? 403 : 400, needsReset ? {
+    if (!needsReset) return json(400, { message: 'Este e-mail já possui cadastro. Use Entrar.' });
+
+    const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
+    if (!pending?.payment_confirmed_at) {
+      const access = await resolvePregrantedAccess(env, email);
+      if (isDirectManualDeboraGrant(access)) {
+        const user = await completeManualFirstAccess(env, existing, password);
+        if (!user) return json(409, {error:'signup_credentials_changed',message:'O acesso foi alterado durante o cadastro. Tente novamente.'});
+        await sendBestEffortTransactionalEmail(env, {
+          kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+        });
+        return json(200, await issueSession(env, user));
+      }
+    }
+    return json(403, {
       error: 'password_reset_required',
       message: 'Conta importada. Use “Esqueci minha senha” para definir sua senha no novo acesso.',
-    } : { message: 'Este e-mail já possui cadastro. Use Entrar.' });
+    });
   }
 
   const pending = await requireDb(env).prepare('SELECT * FROM billing_pending_signups WHERE lower(email)=lower(?) LIMIT 1').bind(email).first();
   const userId = pending?.user_id || crypto.randomUUID();
-  // An unpaid pending checkout must not mask a separately granted commercial
-  // license. Resolve that grant first, preserving the pending user_id so mailbox
-  // proof can safely claim the same identity. Paid Asaas identities keep their
-  // existing password-based activation path below.
+  let resolvedAccess = null;
+  let manualFirstAccess = false;
+
   if (!pending?.payment_confirmed_at) {
-    const claim = await reservePregrantedIdentity(env, email, userId);
-    if (claim) {
-      const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      return handleRecovery(recoveryRequest, env);
+    resolvedAccess = await resolvePregrantedAccess(env, email);
+    manualFirstAccess = isDirectManualDeboraGrant(resolvedAccess);
+    if (!manualFirstAccess && resolvedAccess) {
+      const claim = await reservePregrantedIdentity(env, email, userId, resolvedAccess);
+      if (claim) {
+        const recoveryRequest = new Request(new URL('/api/auth/recovery', request.url), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        return handleRecovery(recoveryRequest, env);
+      }
     }
   }
-  if (pending) {
+  if (pending && !manualFirstAccess) {
     const proof = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
     if (!safeEqual(proof, pending.password_hash)) return json(400, {error:'signup_credentials_invalid',message:'Cadastro pendente. Informe a senha original ou use “Esqueci minha senha”.'});
   }
@@ -326,7 +374,11 @@ async function handleSignup(request, env) {
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const userMetadata = JSON.stringify(input?.data && typeof input.data === 'object' ? input.data : {});
-  const appMetadata = JSON.stringify({ auth_backend: 'cloudflare-d1', commercial_account: true });
+  const appMetadata = JSON.stringify({
+    auth_backend: 'cloudflare-d1',
+    commercial_account: true,
+    ...(manualFirstAccess ? { manual_license_first_access: true, license_source: resolvedAccess?.source || 'mercado_livre_manual' } : {}),
+  });
   const database = requireDb(env);
 
   const statements = [
@@ -341,9 +393,7 @@ async function handleSignup(request, env) {
       .bind(userId, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS),
   ];
 
-  if (pending) {
-    // Recheck the credential version inside the transaction: a recovery may
-    // have changed it since the password proof above was evaluated.
+  if (pending && !manualFirstAccess) {
     statements[0] = database.prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
@@ -450,9 +500,6 @@ async function handleResetPassword(request, env) {
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
   const now = new Date().toISOString();
 
-  // Every write checks the token inside the same D1 transaction. Do not read/claim
-  // it outside the batch: concurrent resets must not reuse a stale user_id, and a
-  // failed credential write must leave the link available for retry.
   const results = await db.batch([
     db.prepare(`UPDATE billing_pending_signups SET password_salt=?,password_hash=?,password_iterations=?,signup_nonce_hash=?,updated_at=?
       WHERE user_id IN (SELECT user_id FROM billing_signup_recovery_tokens WHERE token_hash=? AND expires_at>?)`)
