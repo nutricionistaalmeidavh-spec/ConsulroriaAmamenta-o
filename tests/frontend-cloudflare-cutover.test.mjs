@@ -61,5 +61,6 @@ test('materialized frontend modules use owned same-origin Cloudflare API familie
     assert.doesNotMatch(source, /https:\/\/[^'"`]+\/api\/(?:auth|clinical|files|billing)/i, `${path} builds an external API URL`);
   }
   assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/auth\/user/);
+  assert.match(runtimeText('public/canonical-identity-runtime.js'), /\/api\/clinical\/records\/professional_profiles/);
   assert.match(runtimeText('public/documents-feature.js'), /\/api\/clinical\/media\/upload/);
 });
