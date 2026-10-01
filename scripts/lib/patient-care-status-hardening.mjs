@@ -3,7 +3,7 @@ const KPI_NEW = '<article class="lactation-kpi attention"><span>Pacientes em aco
 const ACTIONS_OLD = '<div class="patient-header-actions"><button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button class="ui-button ui-button-primary" data-action="new-appointment">Novo atendimento</button></div>';
 const ACTIONS_NEW = '<div class="patient-header-actions"><button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button class="ui-button ui-button-ghost" data-action="toggle-patient-care" data-patient-care-toggle>Finalizar acompanhamento</button><button class="ui-button ui-button-primary" data-action="new-appointment">Novo atendimento</button></div>';
 const MOBILE_GHOST_OLD = '.patient-header-actions{margin-left:auto}.patient-header-actions .ui-button-ghost{display:none}';
-const MOBILE_GHOST_NEW = '.patient-header-actions{margin-left:auto;flex-direction:column;align-items:stretch;flex:0 0 min(42vw,180px)}.patient-header-actions .ui-button-ghost:not([data-patient-care-toggle]){display:none}.patient-header-actions [data-patient-care-toggle]{display:inline-flex}';
+const MOBILE_GHOST_NEW = '.patient-title-row{align-items:flex-start;flex-wrap:wrap}.patient-title-row>.patient-header-actions{margin-left:0;width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:0 0 100%}.patient-header-actions .ui-button-ghost:not([data-patient-care-toggle]){display:none}.patient-header-actions [data-patient-care-toggle]{display:inline-flex}.patient-header-actions .ui-button{width:100%;min-width:0;white-space:normal;line-height:1.2;padding-inline:10px}';
 
 export function hardenPatientCareHtml(source) {
   let next = String(source);
@@ -69,8 +69,16 @@ async function finalizeCurrentPatientCare() {
   const patient = patientByMotherId(currentPatientId) || await appData.getPatient(currentPatientId);
   if (!patient || !isPatientCareActive(patient)) return;
   const pending = state.followups.filter((followup) => followup.mother_id === patient.mother.id && followup.status === 'Pendente').length;
-  const pendingMessage = pending ? \`\\n\\n${'${pending}'} follow-up${'${pending === 1 ? \'\' : \'s\'}'} pendente${'${pending === 1 ? \' será mantido\' : \'s serão mantidos\'}'}.\` : '';
-  if (!globalThis.confirm(\`Finalizar o acompanhamento de ${'${patient.mother.name}'}? A paciente continuará no histórico.${'${pendingMessage}'}\`)) return;
+  const pendingMessage = pending ? \` ${'${pending}'} follow-up${'${pending === 1 ? \'\' : \'s\'}'} pendente${'${pending === 1 ? \' será mantido\' : \'s serão mantidos\'}'}.\` : '';
+  const ui = window.DeboraUI;
+  if (!ui?.confirmTyped) throw new Error('Confirmação segura indisponível.');
+  const confirmed = await ui.confirmTyped({
+    title: 'Finalizar acompanhamento?',
+    message: \`${'${patient.mother.name}'} continuará no histórico.${'${pendingMessage}'}\`,
+    confirmLabel: 'Finalizar acompanhamento',
+    cancelLabel: 'Cancelar',
+  });
+  if (!confirmed) return;
   const saved = await persistPatientCareStatus(repositories, patient.mother.id, CARE_FINALIZED);
   Object.assign(patient.mother, saved || { care_status: CARE_FINALIZED, care_finalized_at: new Date().toISOString() });
   mergePatientCareProjection(patient.mother.id, saved || patient.mother);
