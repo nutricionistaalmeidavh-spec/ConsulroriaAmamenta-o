@@ -22,7 +22,8 @@ async function openWhatsApp(patient, message) {
   assert.match(out, /const url = text \? /);
   assert.match(out, /openWhatsApp\(currentPatientForQuickAction\(\), ''\)/);
   assert.match(out, /window\.DeboraAlbum\.openUploader/);
-  assert.match(out, /tel:\+\$\{phone\}/);
+  assert.match(out, /window\.open\(`tel:\+\$\{phone\}`, '_self'\)/);
   assert.match(out, /item\.mother_id === patient\.mother\.id/);
+  assert.match(out, /isScheduledStatus\(item\.status\)/);
   assert.equal(hardenPatientQuickActionsApp(out), out);
 });
