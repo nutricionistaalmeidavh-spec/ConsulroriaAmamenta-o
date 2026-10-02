@@ -43,8 +43,8 @@ export function hardenPatientAddressApp(source) {
   source = replaceOnce(
     source,
     "  renderBabyTargetSelect(select.value || selectedMotherId);\n}",
-    "  renderBabyTargetSelect(select.value || selectedMotherId);\n}\nfunction syncEncounterAddressFromPatient({ force = false } = {}) {\n  const field = document.querySelector('[data-encounter-field=\"address\"]');\n  if (!field) return;\n  const patient = selectedWizardPatient();\n  const fallback = String(patient?.mother?.address || '').trim();\n  if (force || !String(field.value || '').trim()) field.value = fallback;\n}",
-    'address-sync-helper'
+    "  renderBabyTargetSelect(select.value || selectedMotherId);\n}\nfunction normalizedEncounterFormat(format) {\n  return String(format || '').trim().toLocaleLowerCase('pt-BR');\n}\nfunction isHomeVisitFormat(format) {\n  return /domiciliar/.test(normalizedEncounterFormat(format));\n}\nfunction isOnlineFormat(format) {\n  return /online/.test(normalizedEncounterFormat(format));\n}\nfunction encounterAddressForFormat(format, enteredAddress, patient) {\n  const entered = String(enteredAddress || '').trim();\n  if (isOnlineFormat(format)) return '';\n  if (isHomeVisitFormat(format)) return entered || String(patient?.mother?.address || '').trim();\n  return entered;\n}\nfunction routeAddressForAppointment(appointment, patient) {\n  if (!appointment) return String(patient?.mother?.address || '').trim();\n  const format = appointment.format || 'Domiciliar';\n  if (isOnlineFormat(format)) return '';\n  if (isHomeVisitFormat(format)) return String(appointment.address || patient?.mother?.address || '').trim();\n  return String(appointment.address || '').trim();\n}\nfunction selectedEncounterFormat() {\n  return document.querySelector('[data-encounter-choice][data-field=\"format\"][aria-pressed=\"true\"]')?.dataset.value || 'Domiciliar';\n}\nfunction syncEncounterAddressFromPatient({ force = false, format = null } = {}) {\n  const field = document.querySelector('[data-encounter-field=\"address\"]');\n  if (!field) return;\n  const patient = selectedWizardPatient();\n  const selectedFormat = format || selectedEncounterFormat();\n  const fallback = String(patient?.mother?.address || '').trim();\n  const current = String(field.value || '').trim();\n  if (isOnlineFormat(selectedFormat)) { field.value = ''; return; }\n  if (isHomeVisitFormat(selectedFormat)) { if (force || !current) field.value = fallback; return; }\n  if (force && current === fallback) field.value = '';\n}",
+    'address-format-helpers'
   );
 
   source = replaceOnce(
@@ -57,15 +57,15 @@ export function hardenPatientAddressApp(source) {
   source = replaceOnce(
     source,
     "  const value = document.querySelector('[data-encounter-field=\"value\"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);",
-    "  const value = document.querySelector('[data-encounter-field=\"value\"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);\n  const address = document.querySelector('[data-encounter-field=\"address\"]'); if (address) address.value = String(appointment.address || patient.mother.address || '');",
+    "  const value = document.querySelector('[data-encounter-field=\"value\"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);\n  const address = document.querySelector('[data-encounter-field=\"address\"]'); if (address) address.value = encounterAddressForFormat(appointment.format || 'Domiciliar', appointment.address, patient);",
     'scheduled-encounter-address'
   );
 
   source = replaceOnce(
     source,
     "  const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';\n  const value = Number((prompt('Valor em R$ (opcional)', '0') || '0').replace(',', '.'));",
-    "  const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';\n  let address = String(patient.mother.address || '').trim();\n  if (/domiciliar/i.test(format)) {\n    const informedAddress = prompt('Endereço do atendimento', address);\n    if (informedAddress == null) return;\n    address = String(informedAddress).trim();\n  }\n  const value = Number((prompt('Valor em R$ (opcional)', '0') || '0').replace(',', '.'));",
-    'schedule-address-override'
+    "  const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';\n  let address = '';\n  if (isHomeVisitFormat(format)) {\n    const informedAddress = prompt('Endereço do atendimento', String(patient.mother.address || '').trim());\n    if (informedAddress == null) return;\n    address = String(informedAddress).trim();\n  } else if (!isOnlineFormat(format)) {\n    const informedAddress = prompt('Local do atendimento (opcional)', '');\n    if (informedAddress == null) return;\n    address = String(informedAddress).trim();\n  }\n  const value = Number((prompt('Valor em R$ (opcional)', '0') || '0').replace(',', '.'));",
+    'schedule-address-by-format'
   );
 
   source = replaceOnce(
@@ -82,7 +82,14 @@ export function hardenPatientAddressApp(source) {
     'patient-change-address'
   );
 
-  const canonicalAddress = "String(ident.address || patient.mother.address || '').trim()";
+  source = replaceOnce(
+    source,
+    "      const selected = multiple ? choice.getAttribute('aria-pressed') !== 'true' : true;\n      choice.classList.toggle('selected', selected); choice.setAttribute('aria-pressed', String(selected));\n    }",
+    "      const selected = multiple ? choice.getAttribute('aria-pressed') !== 'true' : true;\n      choice.classList.toggle('selected', selected); choice.setAttribute('aria-pressed', String(selected));\n      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });\n    }",
+    'format-choice-address-sync'
+  );
+
+  const canonicalAddress = "encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient)";
   source = replaceOnce(source, "      address: patient.mother.address || ''", `      address: ${canonicalAddress}`, 'existing-appointment-address');
   source = replaceOnce(source, "    p_address: patient.mother.address || '',", `    p_address: ${canonicalAddress},`, 'new-encounter-address');
   source = replaceOnce(
@@ -91,5 +98,20 @@ export function hardenPatientAddressApp(source) {
     `    payment_status: valueCents ? 'Pendente' : 'Sem cobrança',\n    address: ${canonicalAddress},\n    notes: selectedBabies.length > 1`,
     'finalized-appointment-address'
   );
+
+  source = replaceOnce(
+    source,
+    "  const address = next?.address || patient.mother?.address || '';\n  if (!address) { toast('Nenhum endereço cadastrado para esta paciente ou próximo atendimento.', 'error'); return; }\n  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');",
+    "  const address = routeAddressForAppointment(next, patient);\n  if (!address) {\n    if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');\n    else toast('Nenhum endereço de atendimento disponível para abrir a rota.', 'error');\n    return;\n  }\n  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');",
+    'patient-route-by-format'
+  );
+
+  source = replaceOnce(
+    source,
+    "      const address = next?.address || patient?.mother?.address || '';\n      if (!address) toast('Este atendimento não possui endereço cadastrado.', 'error');\n      else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');",
+    "      const address = routeAddressForAppointment(next, patient);\n      if (!address) {\n        if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');\n        else toast('Este atendimento não possui local disponível para rota.', 'error');\n      } else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');",
+    'dashboard-route-by-format'
+  );
+
   return source;
 }
