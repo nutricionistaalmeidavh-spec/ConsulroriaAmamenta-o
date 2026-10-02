@@ -58,6 +58,8 @@ test('patient address hardening makes address inheritance format-aware and keeps
   assert.match(out, /address: get\('motherAddress'\)\.trim\(\)/);
   assert.match(out, /function encounterAddressForFormat/);
   assert.match(out, /if \(isOnlineFormat\(format\)\) return ''/);
+  assert.match(out, /field\.disabled = online/);
+  assert.match(out, /Não se aplica ao atendimento online/);
   assert.match(out, /if \(isHomeVisitFormat\(format\)\)/);
   assert.match(out, /encounterAddressForFormat\(ident\.format \|\| 'Domiciliar', ident\.address, patient\)/);
   assert.match(out, /appointment\.format \|\| 'Domiciliar'/);
