@@ -11,12 +11,13 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await login(page);
   const motherName = uniqueLabel('Address mother');
   const babyName = uniqueLabel('Address baby');
+  const initialAddress = 'Rua Endereço Inicial, 10 - Centro';
   const defaultAddress = 'Rua Endereço Padrão, 123 - Centro';
   const visitAddress = 'Avenida Atendimento, 456 - Jardim';
 
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name=motherName]').fill(motherName);
-  await page.locator('[name=motherAddress]').fill(defaultAddress);
+  await page.locator('[name=motherAddress]').fill(initialAddress);
   await page.locator('[data-baby-field="name"]').first().fill(babyName);
   await page.locator('[name=consentData]').check();
 
@@ -25,13 +26,16 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   const createResponse = await created;
   expect(createResponse.status()).toBe(201);
   const patient = await createResponse.json();
-  expect(patient.mother.address).toBe(defaultAddress);
+  expect(patient.mother.address).toBe(initialAddress);
 
-  await expect(page.locator('[data-mother-address]')).toHaveText(defaultAddress);
+  await expect(page.locator('[data-mother-address]')).toHaveText(initialAddress);
   await page.locator('[data-action="edit-patient"]:visible').first().click();
-  await expect(page.locator('[name=motherAddress]')).toHaveValue(defaultAddress);
-  await page.locator('[data-nav-target="patients"]:visible').first().click();
-  await page.goto(`/app/#/patient/${patient.mother.id}`);
+  await expect(page.locator('[name=motherAddress]')).toHaveValue(initialAddress);
+  await page.locator('[name=motherAddress]').fill(defaultAddress);
+  const updated = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'PATCH');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  expect((await updated).status()).toBe(200);
+  await expect(page.locator('[data-mother-address]')).toHaveText(defaultAddress);
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
 
   await page.locator('[data-action="new-appointment"]:visible').first().click();
