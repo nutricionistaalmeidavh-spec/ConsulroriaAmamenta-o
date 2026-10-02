@@ -97,7 +97,7 @@ test('patient quick actions remain canonical after workspace enhancement and exe
   await quick.locator('[data-action="patient-add-media"]').click();
   await expect(page.locator('.af-layer')).toBeVisible();
   await expect(page.locator('.af-layer')).toContainText('Adicionar foto ou vídeo');
-  await page.locator('.af-layer [data-af-close]').click();
+  await page.locator('.af-layer .af-actions [data-af-close]').click();
   await expect(page.locator('.af-layer')).toHaveCount(0);
 
   await expect(page.locator('[data-prh-more]')).toBeVisible();
