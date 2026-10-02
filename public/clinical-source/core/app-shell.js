@@ -978,7 +978,29 @@ async function openWhatsApp(patient, message) {
   if (!patient) return;
   if (!(await ensureConsent(patient.mother.id, 'whatsapp'))) { toast('Contato por WhatsApp não está autorizado para esta paciente.', 'error'); return; }
   const phone = phoneForWhatsApp(patient.mother.phone); if (!phone) { toast('Paciente sem telefone cadastrado.', 'error'); return; }
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+  const text = String(message || '').trim();
+  const url = text ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/${phone}`;
+  window.open(url, '_blank', 'noopener');
+}
+function currentPatientForQuickAction() {
+  return patientByMotherId(currentPatientId);
+}
+function callCurrentPatient() {
+  const patient = currentPatientForQuickAction();
+  const phone = phoneForWhatsApp(patient?.mother?.phone);
+  if (!phone) { toast('Paciente sem telefone cadastrado.', 'error'); return; }
+  window.location.href = `tel:+${phone}`;
+}
+function openCurrentPatientRoute() {
+  const patient = currentPatientForQuickAction();
+  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }
+  const now = Date.now();
+  const next = state.appointments
+    .filter((item) => item.mother_id === patient.mother.id && new Date(item.starts_at).getTime() >= now)
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
+  const address = next?.address || patient.mother?.address || '';
+  if (!address) { toast('Nenhum endereço cadastrado para esta paciente ou próximo atendimento.', 'error'); return; }
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
 }
 function currentPlanText() {
   const patient = selectedWizardPatient();
@@ -1211,6 +1233,15 @@ document.addEventListener('click', async (event) => {
     else if (action === 'new-appointment') { previousScreen = activeScreen; resetWizard(activeScreen === 'patient' ? currentPatientId : null); navigate('appointment'); }
     else if (action === 'schedule-appointment') await scheduleAppointment();
     else if (action === 'save-draft') { await saveDraft(); navigate(previousScreen || 'home'); }
+    else if (action === 'patient-whatsapp') await openWhatsApp(currentPatientForQuickAction(), '');
+    else if (action === 'patient-call') callCurrentPatient();
+    else if (action === 'patient-route') openCurrentPatientRoute();
+    else if (action === 'patient-add-media') {
+      const patient = currentPatientForQuickAction();
+      if (!patient) toast('Paciente não encontrada.', 'error');
+      else if (!window.DeboraAlbum?.openUploader) toast('Biblioteca clínica ainda está carregando. Tente novamente em instantes.', 'error');
+      else await window.DeboraAlbum.openUploader(patient.mother.id, actionEl);
+    }
     else if (action === 'add-weight') await addWeight();
     else if (action === 'new-followup' || action === 'schedule-followup') await createFollowup();
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
