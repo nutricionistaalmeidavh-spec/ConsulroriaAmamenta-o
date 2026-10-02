@@ -68,7 +68,12 @@ export function hardenPatientAddressApp(source) {
     'schedule-address-override'
   );
 
-  source = replaceOnce(source, "    p_address: patient.mother.address || '',", "    p_address: address,", 'schedule-address-persist');
+  source = replaceOnce(
+    source,
+    "  await appData.scheduleAppointment({\n    p_mother_id: patient.mother.id,\n    p_baby_ids: selectedBabies.map((item) => item.id),\n    p_starts_at: clinicInputToIso(when),\n    p_duration_min: 60,\n    p_appointment_type: type,\n    p_format: format,\n    p_value_cents: Math.max(0, Math.round(value * 100)),\n    p_payment_status: value > 0 ? 'Pendente' : 'Sem cobrança',\n    p_address: patient.mother.address || '',",
+    "  await appData.scheduleAppointment({\n    p_mother_id: patient.mother.id,\n    p_baby_ids: selectedBabies.map((item) => item.id),\n    p_starts_at: clinicInputToIso(when),\n    p_duration_min: 60,\n    p_appointment_type: type,\n    p_format: format,\n    p_value_cents: Math.max(0, Math.round(value * 100)),\n    p_payment_status: value > 0 ? 'Pendente' : 'Sem cobrança',\n    p_address: address,",
+    'schedule-address-persist'
+  );
 
   source = replaceOnce(
     source,
