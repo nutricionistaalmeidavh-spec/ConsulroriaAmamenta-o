@@ -13,7 +13,7 @@ const targets = [
   {
     path: resolve(ROOT, 'public/clinical-source/core/app-shell.js'),
     transform: hardenPatientAddressApp,
-    markers: ["val('motherAddress'", "address: get('motherAddress').trim()", 'syncEncounterAddressFromPatient', "String(ident.address || patient.mother.address || '').trim()"],
+    markers: ["val('motherAddress'", "address: get('motherAddress').trim()", 'syncEncounterAddressFromPatient', 'encounterAddressForFormat', 'routeAddressForAppointment', 'isOnlineFormat', "choice.dataset.field === 'format'"],
   },
 ];
 
