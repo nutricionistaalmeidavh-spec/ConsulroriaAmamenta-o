@@ -68,16 +68,6 @@ async function openSecondaryActions(motherId,trigger){
   if(edit)content.querySelector('[data-pw-edit]').onclick=()=>{close();edit.click()};
 }
 
-function findQuick(screen,label){return [...screen.querySelectorAll('button,a')].find(el=>!el.closest('[data-prh-card],[data-pw-recent],.pw-layer')&&norm(el.textContent)===norm(label))}
-function wireQuickActions(){
-  const screen=document.querySelector('[data-screen="patient"]');
-  if(!screen)return;
-  for(const [label,key] of [['WhatsApp','whatsapp'],['Ligar','call'],['Rota','route'],['Registrar peso','weight'],['Adicionar foto','media']]){
-    const action=findQuick(screen,label);
-    if(action)action.dataset.pwQuick=key;
-  }
-}
-
 async function mountRecent(motherId){
   const active=DOC.currentBabyId()||'',key=`${motherId}|${active}`;
   expectedSummaryKey=key;
@@ -91,7 +81,7 @@ async function mountRecent(motherId){
     const rows=data.rows.filter(row=>!active||row.baby_id===active||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===active)).slice(0,3),card=document.createElement('section');card.className='pw-recent';card.dataset.pwRecent='1';card.dataset.pwKey=key;card.innerHTML=`<div class="pw-recent-head"><div><small>REGISTRO CLÍNICO</small><h2>Prontuários recentes</h2></div><button type="button" data-pw-all-records>Ver todos</button></div>${rows.length?`<div class="pw-recent-list">${rows.map(row=>`<button type="button" data-pw-open-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join('')}</div>`:'<div class="pw-empty compact"><span>Nenhum prontuário neste recorte.</span></div>'}`;card.querySelector('[data-pw-all-records]').onclick=event=>open('records',motherId,event.currentTarget);card.querySelectorAll('[data-pw-open-record]').forEach(btn=>btn.onclick=async()=>{try{await window.DeboraClinicalNote?.openEncounter(btn.dataset.pwOpenRecord,{direction:'history'})}catch(e){DOC.toast(e.message||'Não foi possível abrir o prontuário.','error')}});const hub=screen.querySelector('[data-prh-card]'),hiddenRecords=screen.querySelector('[data-pf-prontuario]');if(hub)hub.after(card);else if(hiddenRecords)hiddenRecords.before(card);else screen.appendChild(card)
   });
 }
-function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId){expectedSummaryKey='';return}wireQuickActions(motherId);mountRecent(motherId).catch(()=>{})},120)}
+function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId){expectedSummaryKey='';return}mountRecent(motherId).catch(()=>{})},120)}
 window.addEventListener('debora:patient-context',scheduleSummary);
 window.addEventListener('debora:clinical-document-saved',event=>{const detail=event.detail||{};if(detail.documentType==='referral'&&detail.motherId&&referralView?.motherId===detail.motherId)referralView?.upsert(detail.document);scheduleSummary()});
 window.addEventListener('debora:clinical-document-finalized',scheduleSummary);window.addEventListener('debora:record-exported',scheduleSummary);new MutationObserver(scheduleSummary).observe(document.documentElement,{subtree:true,childList:true});setTimeout(scheduleSummary,250);
