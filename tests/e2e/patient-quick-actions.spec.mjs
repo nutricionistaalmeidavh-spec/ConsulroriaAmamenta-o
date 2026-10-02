@@ -16,7 +16,7 @@ async function createPatient(page, headers) {
   return { ...(await response.json()), motherName, babyName };
 }
 
-async function schedule(page, headers, patient, startsAt, address) {
+async function schedule(page, headers, patient, startsAt, address, format = 'Domiciliar') {
   const response = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
     headers: { ...headers, 'content-type': 'application/json' },
     data: {
@@ -25,7 +25,7 @@ async function schedule(page, headers, patient, startsAt, address) {
       p_starts_at: startsAt,
       p_duration_min: 60,
       p_appointment_type: 'Retorno',
-      p_format: 'Domiciliar',
+      p_format: format,
       p_value_cents: 15000,
       p_payment_status: 'Pendente',
       p_address: address,
@@ -107,4 +107,20 @@ test('patient quick actions remain canonical after workspace enhancement and exe
   await expect(page.locator('.pw-layer')).toHaveCount(0);
   const delegatedRoute = await page.evaluate(() => window.__quickActionOpens.at(-1)?.url || '');
   expect(decodeURIComponent(delegatedRoute)).toContain(activeAddress);
+
+  // If the next appointment is online, Rota must not fall back to the patient's home address.
+  await schedule(page, headers, patient, new Date(Date.now() + 30 * 60 * 1000).toISOString(), '', 'Online');
+  await page.reload();
+  await page.goto(`/app/#/patient/${patient.mother.id}`);
+  await expect(page.locator('[data-patient-title]')).toContainText(patient.motherName);
+  await page.evaluate(() => {
+    window.__quickActionOpens = [];
+    window.open = (url, target, features) => {
+      window.__quickActionOpens.push({ url: String(url), target: target || '', features: features || '' });
+      return null;
+    };
+  });
+  await page.locator('.patient-quick [data-action="patient-route"]').click();
+  await expect(page.locator('.app-toast')).toContainText('O próximo atendimento é online e não possui rota.');
+  expect(await page.evaluate(() => window.__quickActionOpens.length)).toBe(0);
 });
