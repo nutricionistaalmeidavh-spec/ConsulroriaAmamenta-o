@@ -6,7 +6,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const WRITE = process.argv.includes('--write');
 const targets = [
   { path: resolve(ROOT, 'public/clinical-source/index.html'), transform: hardenPatientQuickActionsHtml, markers: ['data-action="patient-whatsapp"', 'data-action="patient-call"', 'data-action="patient-route"', 'data-action="patient-add-media"'] },
-  { path: resolve(ROOT, 'public/clinical-source/core/app-shell.js'), transform: hardenPatientQuickActionsApp, markers: ['currentPatientForQuickAction', "action === 'patient-whatsapp'", "action === 'patient-add-media'"] },
+  { path: resolve(ROOT, 'public/clinical-source/core/app-shell.js'), transform: hardenPatientQuickActionsApp, markers: ['currentPatientForQuickAction', "action === 'patient-whatsapp'", "action === 'patient-call'", "action === 'patient-route'", "action === 'patient-add-media'", 'isScheduledStatus(item.status)'] },
 ];
 
 let changed = 0;
