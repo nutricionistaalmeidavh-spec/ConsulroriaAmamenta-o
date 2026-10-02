@@ -105,4 +105,12 @@ test('patient quick actions remain canonical after workspace enhancement and exe
   await expect(page.locator('.af-layer')).toContainText('Adicionar foto ou vídeo');
   await page.locator('.af-layer [data-af-close]').click();
   await expect(page.locator('.af-layer')).toHaveCount(0);
+
+  await expect(page.locator('[data-prh-more]')).toBeVisible();
+  await page.locator('[data-prh-more]').click();
+  await expect(page.locator('.pw-layer')).toContainText('Mais ações');
+  await page.locator('.pw-layer [data-pw-route]').click();
+  await expect(page.locator('.pw-layer')).toHaveCount(0);
+  const delegatedRoute = await page.evaluate(() => window.__quickActionOpens.at(-1)?.url || '');
+  expect(decodeURIComponent(delegatedRoute)).toContain(activeAddress);
 });
