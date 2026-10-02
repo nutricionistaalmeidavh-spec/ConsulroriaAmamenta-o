@@ -274,11 +274,19 @@ function syncEncounterAddressFromPatient({ force = false, format = null } = {}) 
   const selectedFormat = format || selectedEncounterFormat();
   const fallback = String(patient?.mother?.address || '').trim();
   const current = String(field.value || '').trim();
-  if (isOnlineFormat(selectedFormat)) {
+  const online = isOnlineFormat(selectedFormat);
+  const homeVisit = isHomeVisitFormat(selectedFormat);
+  field.disabled = online;
+  field.placeholder = online
+    ? 'Não se aplica ao atendimento online'
+    : homeVisit
+      ? 'Endereço padrão da paciente'
+      : 'Informe o local do atendimento (opcional)';
+  if (online) {
     field.value = '';
     return;
   }
-  if (isHomeVisitFormat(selectedFormat)) {
+  if (homeVisit) {
     if (force || !current) field.value = fallback;
     return;
   }
