@@ -242,12 +242,47 @@ function renderPatientSelect(selectedMotherId = null) {
   select.disabled = state.patients.length === 0;
   renderBabyTargetSelect(select.value || selectedMotherId);
 }
-function syncEncounterAddressFromPatient({ force = false } = {}) {
+function normalizedEncounterFormat(format) {
+  return String(format || '').trim().toLocaleLowerCase('pt-BR');
+}
+function isHomeVisitFormat(format) {
+  return /domiciliar/.test(normalizedEncounterFormat(format));
+}
+function isOnlineFormat(format) {
+  return /online/.test(normalizedEncounterFormat(format));
+}
+function encounterAddressForFormat(format, enteredAddress, patient) {
+  const entered = String(enteredAddress || '').trim();
+  if (isOnlineFormat(format)) return '';
+  if (isHomeVisitFormat(format)) return entered || String(patient?.mother?.address || '').trim();
+  return entered;
+}
+function routeAddressForAppointment(appointment, patient) {
+  if (!appointment) return String(patient?.mother?.address || '').trim();
+  const format = appointment.format || 'Domiciliar';
+  if (isOnlineFormat(format)) return '';
+  if (isHomeVisitFormat(format)) return String(appointment.address || patient?.mother?.address || '').trim();
+  return String(appointment.address || '').trim();
+}
+function selectedEncounterFormat() {
+  return document.querySelector('[data-encounter-choice][data-field="format"][aria-pressed="true"]')?.dataset.value || 'Domiciliar';
+}
+function syncEncounterAddressFromPatient({ force = false, format = null } = {}) {
   const field = document.querySelector('[data-encounter-field="address"]');
   if (!field) return;
   const patient = selectedWizardPatient();
+  const selectedFormat = format || selectedEncounterFormat();
   const fallback = String(patient?.mother?.address || '').trim();
-  if (force || !String(field.value || '').trim()) field.value = fallback;
+  const current = String(field.value || '').trim();
+  if (isOnlineFormat(selectedFormat)) {
+    field.value = '';
+    return;
+  }
+  if (isHomeVisitFormat(selectedFormat)) {
+    if (force || !current) field.value = fallback;
+    return;
+  }
+  if (force && current === fallback) field.value = '';
 }
 function renderBabyTargetSelect(motherId, preferred = null) {
   const select = document.querySelector('[data-appointment-baby]');
@@ -695,7 +730,7 @@ async function ensureEncounterStarted() {
       format: ident.format || 'Domiciliar',
       value_cents: valueCents,
       payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-      address: String(ident.address || patient.mother.address || '').trim()
+      address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient)
     });
     const result = await appData.startClinicalEncounterFromAppointment(currentAppointmentId);
     if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id do agendamento.');
@@ -713,7 +748,7 @@ async function ensureEncounterStarted() {
     p_format: ident.format || 'Domiciliar',
     p_value_cents: valueCents,
     p_payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-    p_address: String(ident.address || patient.mother.address || '').trim(),
+    p_address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient),
     p_notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id.');
@@ -828,7 +863,7 @@ async function finalizeEncounter() {
     status: 'Realizado',
     value_cents: valueCents,
     payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-    address: String(ident.address || patient.mother.address || '').trim(),
+    address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient),
     notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   const encounterPayload = buildEncounterPayload({ motherId: patient.mother.id, babyId: singleBabyId, appointmentId: currentAppointmentId, state: clinicalState, status: 'finalized' });
@@ -881,9 +916,13 @@ async function scheduleAppointment() {
   const when = prompt('Data e hora (AAAA-MM-DDTHH:MM)', localDateTimeInput(new Date(Date.now() + 86400000))); if (!when) return;
   const type = prompt('Tipo do atendimento', 'Consulta inicial') || 'Consulta inicial';
   const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';
-  let address = String(patient.mother.address || '').trim();
-  if (/domiciliar/i.test(format)) {
-    const informedAddress = prompt('Endereço do atendimento', address);
+  let address = '';
+  if (isHomeVisitFormat(format)) {
+    const informedAddress = prompt('Endereço do atendimento', String(patient.mother.address || '').trim());
+    if (informedAddress == null) return;
+    address = String(informedAddress).trim();
+  } else if (!isOnlineFormat(format)) {
+    const informedAddress = prompt('Local do atendimento (opcional)', '');
     if (informedAddress == null) return;
     address = String(informedAddress).trim();
   }
@@ -940,7 +979,7 @@ async function openScheduledAppointment(appointmentId) {
   const starts = document.querySelector('[data-encounter-field="startsAt"]'); if (starts) starts.value = localDateTimeInput(new Date(appointment.starts_at));
   const duration = document.querySelector('[data-encounter-field="durationMin"]'); if (duration && [...duration.options].some((option) => Number(option.value) === Number(appointment.duration_min))) duration.value = String(appointment.duration_min);
   const value = document.querySelector('[data-encounter-field="value"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);
-  const address = document.querySelector('[data-encounter-field="address"]'); if (address) address.value = String(appointment.address || patient.mother.address || '');
+  const address = document.querySelector('[data-encounter-field="address"]'); if (address) address.value = encounterAddressForFormat(appointment.format || 'Domiciliar', appointment.address, patient);
   wizardStep = 1;
   renderWizard();
   navigate('appointment');
@@ -1015,8 +1054,12 @@ function openCurrentPatientRoute() {
   const next = state.appointments
     .filter((item) => item.mother_id === patient.mother.id && new Date(item.starts_at).getTime() >= now && isScheduledStatus(item.status))
     .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
-  const address = next?.address || patient.mother?.address || '';
-  if (!address) { toast('Nenhum endereço cadastrado para esta paciente ou próximo atendimento.', 'error'); return; }
+  const address = routeAddressForAppointment(next, patient);
+  if (!address) {
+    if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');
+    else toast('Nenhum endereço de atendimento disponível para abrir a rota.', 'error');
+    return;
+  }
   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
 }
 function currentPlanText() {
@@ -1204,6 +1247,7 @@ document.addEventListener('click', async (event) => {
       if (!multiple) group?.querySelectorAll('[data-encounter-choice]').forEach((el) => { el.classList.remove('selected'); el.setAttribute('aria-pressed','false'); });
       const selected = multiple ? choice.getAttribute('aria-pressed') !== 'true' : true;
       choice.classList.toggle('selected', selected); choice.setAttribute('aria-pressed', String(selected));
+      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });
     }
     if (event.target.closest('[data-wizard-close]')) navigate(previousScreen || 'home');
     if (event.target.closest('[data-wizard-next]')) {
@@ -1232,9 +1276,11 @@ document.addEventListener('click', async (event) => {
     else if (action === 'next-route') {
       const next = nextAppointment();
       const patient = next ? patientByMotherId(next.mother_id) : null;
-      const address = next?.address || patient?.mother?.address || '';
-      if (!address) toast('Este atendimento não possui endereço cadastrado.', 'error');
-      else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
+      const address = routeAddressForAppointment(next, patient);
+      if (!address) {
+        if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');
+        else toast('Este atendimento não possui local disponível para rota.', 'error');
+      } else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
     }
     else if (action === 'new-patient') await openPatientForm();
     else if (action === 'add-baby') { const root = document.querySelector('[data-babies-editor]'); const count = root?.querySelectorAll('[data-baby-editor]').length || 0; root?.insertAdjacentHTML('beforeend', babyEditorMarkup({}, count)); }
