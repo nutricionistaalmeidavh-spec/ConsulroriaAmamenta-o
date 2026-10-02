@@ -56,4 +56,39 @@ test('patient address is saved once, inherited by a new visit and can be overrid
 
   const mother = await record(page, 'mothers', `id=eq.${encodeURIComponent(patient.mother.id)}&limit=1`);
   expect(mother.address).toBe(defaultAddress);
+
+  // Online must never inherit the patient's residential address.
+  await page.locator('[data-wizard-close]:visible').click();
+  await expect(page.locator('[data-patient-title]')).toContainText(motherName);
+  await page.locator('[data-action="new-appointment"]:visible').first().click();
+  await expect(addressField).toHaveValue(defaultAddress);
+  await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]').click();
+  await expect(addressField).toHaveValue('');
+  await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16));
+  const onlineStarted = page.waitForResponse(r => r.url().includes('/api/clinical/rpc/start_clinical_encounter') && r.request().method() === 'POST');
+  await page.locator('[data-wizard-next]').click();
+  const onlineIdentity = await (await onlineStarted).json();
+  const onlineAppointment = await record(page, 'appointments', `id=eq.${encodeURIComponent(onlineIdentity.appointment_id)}&limit=1`);
+  expect(onlineAppointment.format).toBe('Online');
+  expect(String(onlineAppointment.address || '')).toBe('');
+
+  // Presencial may use an explicit location, but must not inherit the home address.
+  await page.locator('[data-wizard-close]:visible').click();
+  await expect(page.locator('[data-patient-title]')).toContainText(motherName);
+  await page.locator('[data-action="new-appointment"]:visible').first().click();
+  await expect(addressField).toHaveValue(defaultAddress);
+  await page.locator('[data-encounter-choice][data-field="format"][data-value="Presencial"]').click();
+  await expect(addressField).toHaveValue('');
+  const clinicAddress = 'Clínica Centro, Sala 4';
+  await addressField.fill(clinicAddress);
+  await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16));
+  const presencialStarted = page.waitForResponse(r => r.url().includes('/api/clinical/rpc/start_clinical_encounter') && r.request().method() === 'POST');
+  await page.locator('[data-wizard-next]').click();
+  const presencialIdentity = await (await presencialStarted).json();
+  const presencialAppointment = await record(page, 'appointments', `id=eq.${encodeURIComponent(presencialIdentity.appointment_id)}&limit=1`);
+  expect(presencialAppointment.format).toBe('Presencial');
+  expect(presencialAppointment.address).toBe(clinicAddress);
+
+  const motherAfterAllFormats = await record(page, 'mothers', `id=eq.${encodeURIComponent(patient.mother.id)}&limit=1`);
+  expect(motherAfterAllFormats.address).toBe(defaultAddress);
 });
