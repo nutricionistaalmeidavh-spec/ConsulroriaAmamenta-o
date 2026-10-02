@@ -42,6 +42,8 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   const addressField = page.locator('[data-encounter-field="address"]');
   await expect(addressField).toBeVisible();
   await expect(addressField).toHaveValue(defaultAddress);
+  await expect(addressField).toBeEnabled();
+  await expect(addressField).toHaveAttribute('placeholder', 'Endereço padrão da paciente');
 
   await addressField.fill(visitAddress);
   await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16));
@@ -64,6 +66,8 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await expect(addressField).toHaveValue(defaultAddress);
   await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]').click();
   await expect(addressField).toHaveValue('');
+  await expect(addressField).toBeDisabled();
+  await expect(addressField).toHaveAttribute('placeholder', 'Não se aplica ao atendimento online');
   await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16));
   const onlineStarted = page.waitForResponse(r => r.url().includes('/api/clinical/rpc/start_clinical_encounter') && r.request().method() === 'POST');
   await page.locator('[data-wizard-next]').click();
@@ -79,6 +83,8 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await expect(addressField).toHaveValue(defaultAddress);
   await page.locator('[data-encounter-choice][data-field="format"][data-value="Presencial"]').click();
   await expect(addressField).toHaveValue('');
+  await expect(addressField).toBeEnabled();
+  await expect(addressField).toHaveAttribute('placeholder', 'Informe o local do atendimento (opcional)');
   const clinicAddress = 'Clínica Centro, Sala 4';
   await addressField.fill(clinicAddress);
   await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16));
