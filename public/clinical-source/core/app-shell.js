@@ -989,14 +989,14 @@ function callCurrentPatient() {
   const patient = currentPatientForQuickAction();
   const phone = phoneForWhatsApp(patient?.mother?.phone);
   if (!phone) { toast('Paciente sem telefone cadastrado.', 'error'); return; }
-  window.location.href = `tel:+${phone}`;
+  window.open(`tel:+${phone}`, '_self');
 }
 function openCurrentPatientRoute() {
   const patient = currentPatientForQuickAction();
   if (!patient) { toast('Paciente não encontrada.', 'error'); return; }
   const now = Date.now();
   const next = state.appointments
-    .filter((item) => item.mother_id === patient.mother.id && new Date(item.starts_at).getTime() >= now)
+    .filter((item) => item.mother_id === patient.mother.id && new Date(item.starts_at).getTime() >= now && isScheduledStatus(item.status))
     .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
   const address = next?.address || patient.mother?.address || '';
   if (!address) { toast('Nenhum endereço cadastrado para esta paciente ou próximo atendimento.', 'error'); return; }
