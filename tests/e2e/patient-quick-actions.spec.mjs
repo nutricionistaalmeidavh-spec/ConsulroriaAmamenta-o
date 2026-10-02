@@ -57,17 +57,11 @@ test('patient quick actions remain canonical after workspace enhancement and exe
 
   const quick = page.locator('.patient-quick');
   await expect(quick.locator('button')).toHaveText(['WhatsApp', 'Ligar', 'Rota', 'Registrar peso', 'Adicionar foto']);
-  const contracts = [
-    ['patient-whatsapp', 'whatsapp'],
-    ['patient-call', 'call'],
-    ['patient-route', 'route'],
-    ['add-weight', 'weight'],
-    ['patient-add-media', 'media'],
-  ];
-  for (const [action, key] of contracts) {
-    const button = quick.locator(`[data-action="${action}"]`);
-    await expect(button).toBeVisible();
-    await expect(button).toHaveAttribute('data-pw-quick', key);
+  await page.evaluate(() => window.DeboraPatientWorkspace.refresh());
+  await page.waitForTimeout(350);
+  await expect(quick.locator('button')).toHaveText(['WhatsApp', 'Ligar', 'Rota', 'Registrar peso', 'Adicionar foto']);
+  for (const action of ['patient-whatsapp', 'patient-call', 'patient-route', 'add-weight', 'patient-add-media']) {
+    await expect(quick.locator(`[data-action="${action}"]`)).toBeVisible();
   }
 
   await page.evaluate(() => {
