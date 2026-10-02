@@ -242,6 +242,13 @@ function renderPatientSelect(selectedMotherId = null) {
   select.disabled = state.patients.length === 0;
   renderBabyTargetSelect(select.value || selectedMotherId);
 }
+function syncEncounterAddressFromPatient({ force = false } = {}) {
+  const field = document.querySelector('[data-encounter-field="address"]');
+  if (!field) return;
+  const patient = selectedWizardPatient();
+  const fallback = String(patient?.mother?.address || '').trim();
+  if (force || !String(field.value || '').trim()) field.value = fallback;
+}
 function renderBabyTargetSelect(motherId, preferred = null) {
   const select = document.querySelector('[data-appointment-baby]');
   const field = document.querySelector('[data-baby-target-field]');
@@ -269,6 +276,7 @@ async function openPatient(motherId, { navigateRoute = true, babyId = null } = {
   setText('[data-patient-title]', patientLabel(patient));
   setText('[data-patient-subtitle]', `${patient.mother.name} · ${babyNames(patient).join(' e ') || 'bebê'}`);
   setText('[data-mother-phone]', patient.mother.phone || 'Não informado');
+  setText('[data-mother-address]', patient.mother.address || 'Não informado');
   setText('[data-mother-delivery]', patient.mother.delivery || 'Não informado');
   setText('[data-mother-conditions]', patient.mother.conditions || 'Não informado');
   setText('[data-mother-history]', patient.mother.breastfeeding_history || 'Não informado');
@@ -371,7 +379,7 @@ async function openPatientForm(motherId = null, { navigateRoute = true } = {}) {
   patientForm.reset();
   const patient = motherId ? patientByMotherId(motherId) || await appData.getPatient(motherId) : null;
   const val = (name, value = '') => { const field = patientForm.elements.namedItem(name); if (field) field.value = value ?? ''; };
-  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherBirthDate', patient?.mother?.birth_date);
+  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherAddress', patient?.mother?.address); val('motherBirthDate', patient?.mother?.birth_date);
   val('motherDelivery', patient?.mother?.delivery); val('motherConditions', patient?.mother?.conditions); val('motherHistory', patient?.mother?.breastfeeding_history); val('notes', patient?.mother?.notes);
   renderBabyEditors(patient ? familyBabies(patient) : [{}]);
   setText('[data-patient-form-title]', patient ? 'Editar paciente' : 'Nova paciente');
@@ -398,7 +406,7 @@ function patientFormPayload() {
   }).filter((baby) => baby.name);
   return {
     mother: {
-      name: get('motherName').trim(), phone: get('motherPhone').trim(), birth_date: get('motherBirthDate') || null,
+      name: get('motherName').trim(), phone: get('motherPhone').trim(), address: get('motherAddress').trim(), birth_date: get('motherBirthDate') || null,
       delivery: get('motherDelivery').trim(), conditions: get('motherConditions').trim(), breastfeeding_history: get('motherHistory').trim(), notes: get('notes').trim()
     },
     babies
@@ -687,7 +695,7 @@ async function ensureEncounterStarted() {
       format: ident.format || 'Domiciliar',
       value_cents: valueCents,
       payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-      address: patient.mother.address || ''
+      address: String(ident.address || patient.mother.address || '').trim()
     });
     const result = await appData.startClinicalEncounterFromAppointment(currentAppointmentId);
     if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id do agendamento.');
@@ -705,7 +713,7 @@ async function ensureEncounterStarted() {
     p_format: ident.format || 'Domiciliar',
     p_value_cents: valueCents,
     p_payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-    p_address: patient.mother.address || '',
+    p_address: String(ident.address || patient.mother.address || '').trim(),
     p_notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id.');
@@ -746,6 +754,7 @@ function resetWizard(selectedMotherId = currentPatientId) {
   const starts = document.querySelector('[data-encounter-field="startsAt"]'); if (starts) starts.value = localDateTimeInput();
   const duration = document.querySelector('[data-encounter-field="durationMin"]'); if (duration) duration.value = '60';
   const value = document.querySelector('[data-encounter-field="value"]'); if (value) value.value = '0';
+  syncEncounterAddressFromPatient({ force: true });
   const followup = document.querySelector('[data-encounter-field="followup"]'); if (followup) followup.value = '48 horas';
   const mediaInput = document.querySelector('[data-clinical-media-input]'); if (mediaInput) mediaInput.value = '';
   const pdfSelect = document.querySelector('[data-pdf-layout-encounter]'); if (pdfSelect) pdfSelect.value = selectedPdfLayout();
@@ -819,6 +828,7 @@ async function finalizeEncounter() {
     status: 'Realizado',
     value_cents: valueCents,
     payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
+    address: String(ident.address || patient.mother.address || '').trim(),
     notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   const encounterPayload = buildEncounterPayload({ motherId: patient.mother.id, babyId: singleBabyId, appointmentId: currentAppointmentId, state: clinicalState, status: 'finalized' });
@@ -871,6 +881,12 @@ async function scheduleAppointment() {
   const when = prompt('Data e hora (AAAA-MM-DDTHH:MM)', localDateTimeInput(new Date(Date.now() + 86400000))); if (!when) return;
   const type = prompt('Tipo do atendimento', 'Consulta inicial') || 'Consulta inicial';
   const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';
+  let address = String(patient.mother.address || '').trim();
+  if (/domiciliar/i.test(format)) {
+    const informedAddress = prompt('Endereço do atendimento', address);
+    if (informedAddress == null) return;
+    address = String(informedAddress).trim();
+  }
   const value = Number((prompt('Valor em R$ (opcional)', '0') || '0').replace(',', '.'));
   const selectedBabies = baby ? [baby] : familyBabies(patient);
   await appData.scheduleAppointment({
@@ -882,7 +898,7 @@ async function scheduleAppointment() {
     p_format: format,
     p_value_cents: Math.max(0, Math.round(value * 100)),
     p_payment_status: value > 0 ? 'Pendente' : 'Sem cobrança',
-    p_address: patient.mother.address || '',
+    p_address: address,
     p_notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((item) => item.name).join(', ')}` : ''
   });
   agendaSelectedDay = clinicDayKey(clinicInputToIso(when));
@@ -924,6 +940,7 @@ async function openScheduledAppointment(appointmentId) {
   const starts = document.querySelector('[data-encounter-field="startsAt"]'); if (starts) starts.value = localDateTimeInput(new Date(appointment.starts_at));
   const duration = document.querySelector('[data-encounter-field="durationMin"]'); if (duration && [...duration.options].some((option) => Number(option.value) === Number(appointment.duration_min))) duration.value = String(appointment.duration_min);
   const value = document.querySelector('[data-encounter-field="value"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);
+  const address = document.querySelector('[data-encounter-field="address"]'); if (address) address.value = String(appointment.address || patient.mother.address || '');
   wizardStep = 1;
   renderWizard();
   navigate('appointment');
@@ -1159,6 +1176,7 @@ document.querySelector('[data-appointment-patient]')?.addEventListener('change',
   if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }
   currentPatientId = event.target.value || null;
   renderBabyTargetSelect(currentPatientId);
+  syncEncounterAddressFromPatient({ force: true });
 });
 document.querySelector('[data-appointment-baby]')?.addEventListener('change', () => {
   if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }
