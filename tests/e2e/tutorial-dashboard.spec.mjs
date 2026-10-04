@@ -8,7 +8,7 @@ test('tutorial dashboard apresenta resumo e atalhos principais da rotina', async
   await expect(home).toBeVisible();
   await expect(page.locator('[data-home-greeting]')).toBeVisible();
   await expect(page.locator('[data-home-summary]')).toBeVisible();
-  await expect(page.locator('[data-kpi-followups]')).toBeVisible();
+  await expect(home.locator('.lactation-kpis')).toContainText('Pacientes em acompanhamento');
 
   const quickActions = home.locator('.quick-actions-grid');
   await expect(quickActions).toContainText('Novo atendimento');
