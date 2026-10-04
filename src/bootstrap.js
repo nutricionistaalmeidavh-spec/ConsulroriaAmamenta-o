@@ -252,10 +252,15 @@ async function boot() {
     moduleUrls[path] = moduleUrl(genericizeRuntimeModule(path, runtime[`core/${path}`]));
   }
 
+  const patientCareStatusUrl = new URL('/patient-care-status-core.js', window.location.origin).href;
   let shell = genericizeClinicalShell(runtime['core/app-shell.js']);
   for (const path of MODULE_PATHS) {
     shell = shell.replace(`'./${path}'`, `'${moduleUrls[path]}'`);
   }
+  shell = shell.replace(
+    "'../../patient-care-status-core.js'",
+    `'${patientCareStatusUrl}'`,
+  );
   shell = shell.replace(
     "navigator.serviceWorker.register('./service-worker.js')",
     "navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => registration.update())",

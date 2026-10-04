@@ -17,6 +17,27 @@ assert.match(wrangler, /"directory"\s*:\s*"\.\/dist"/);
 assert.match(wrangler, /"run_worker_first"\s*:\s*true/);
 assert.match(wrangler, /"keep_vars"\s*:\s*true/);
 
+// Git-connected production deploys must preserve the same infrastructure bindings
+// as the guarded manual deployment path. Secret values remain Dashboard-managed;
+// keep_vars protects them while these assertions prevent publishing a Worker that
+// silently lost D1, R2, licensing or transactional e-mail bindings.
+assert.match(
+  wrangler,
+  /"binding"\s*:\s*"CLINICAL_DB"[\s\S]*?"database_name"\s*:\s*"debora-lactacao-clinical"[\s\S]*?"database_id"\s*:\s*"d9cdaf9e-87a6-47fc-afbc-1f6249fa4cbb"/,
+);
+assert.match(
+  wrangler,
+  /"binding"\s*:\s*"CLINICAL_FILES"[\s\S]*?"bucket_name"\s*:\s*"debora-lactacao-clinical"/,
+);
+assert.match(
+  wrangler,
+  /"binding"\s*:\s*"ARTISYS_LICENSING"[\s\S]*?"service"\s*:\s*"obra-na-mao-comercial"/,
+);
+assert.match(
+  wrangler,
+  /"send_email"\s*:\s*\[[\s\S]*?"name"\s*:\s*"EMAIL"[\s\S]*?"remote"\s*:\s*true/,
+);
+
 // Commercial billing is intercepted by the D1 runtime and Block 7/8 terminates
 // public API routes locally even after same-process compatibility translation.
 assert.match(domain, /handleCloudflareBillingRuntime/);

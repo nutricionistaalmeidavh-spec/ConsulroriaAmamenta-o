@@ -15,6 +15,19 @@
   "triggers": {
     "crons": ["*/5 * * * *", "17 4 * * *"]
   },
+  "d1_databases": [
+    {
+      "binding": "CLINICAL_DB",
+      "database_name": "debora-lactacao-clinical",
+      "database_id": "d9cdaf9e-87a6-47fc-afbc-1f6249fa4cbb"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CLINICAL_FILES",
+      "bucket_name": "debora-lactacao-clinical"
+    }
+  ],
   "services": [
     {
       "binding": "ARTISYS_LICENSING",

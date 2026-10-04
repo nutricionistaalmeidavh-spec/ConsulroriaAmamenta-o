@@ -30,12 +30,10 @@ function cardMarkup(motherId,data){
     </div>
   </section>`;
 }
-function openMoreActions(){
-  const hiddenQuick=document.querySelector('[data-pw-quick="more"]');
-  if(hiddenQuick){hiddenQuick.click();return true}
-  window.DeboraPatientWorkspace?.refresh?.();
-  setTimeout(()=>document.querySelector('[data-pw-quick="more"]')?.click(),120);
-  return false;
+function openMoreActions(motherId,trigger){
+  const openMore=window.DeboraPatientWorkspace?.openMoreActions;
+  if(!openMore){DOC.toast('Ações da paciente ainda estão carregando.','error');return}
+  Promise.resolve(openMore(motherId,trigger)).catch(error=>DOC.toast(error.message||'Não foi possível abrir as ações.','error'));
 }
 async function mount(motherId,{force=false}={}){
   if(!motherId)return;
@@ -58,7 +56,7 @@ async function mount(motherId,{force=false}={}){
       if(firstRecords)firstRecords.before(card);else{const target=screen.querySelector('[data-pf-prontuario]')||screen.querySelector('.patient-detail-grid')||screen.lastElementChild;target?.after?target.after(card):screen.appendChild(card)}
       for(const kind of ['records','terms','referrals','album'])card.querySelector(`[data-prh-target="${kind}"]`).addEventListener('click',event=>window.DeboraPatientWorkspace?.open(kind,motherId,event.currentTarget));
       card.querySelector('[data-prh-target="export"]').addEventListener('click',event=>window.DeboraRecordExport?.open(motherId,event.currentTarget).catch(error=>DOC.toast(error.message||'Não foi possível abrir a exportação.','error')));
-      card.querySelector('[data-prh-more]').addEventListener('click',()=>openMoreActions());
+      card.querySelector('[data-prh-more]').addEventListener('click',event=>openMoreActions(motherId,event.currentTarget));
       currentMother=motherId;
       failedMother='';
       window.DeboraPatientWorkspace?.refresh?.();

@@ -493,8 +493,24 @@ document.querySelectorAll('[data-open]').forEach((trigger) => {
 });
 
 document.querySelectorAll('[data-close]').forEach((trigger) => trigger.addEventListener('click', closeModal));
+function switchAuthView(trigger) {
+  const nextView = trigger?.dataset?.switch || '';
+  if (nextView === 'signup') {
+    const loginEmail = document.querySelector('#login-form input[name="email"]');
+    const signupEmail = document.querySelector('#signup-form input[name="email"]');
+    const carriedEmail = String(loginEmail?.value || '').trim();
+    if (signupEmail && carriedEmail) signupEmail.value = carriedEmail;
+    if (planIntent) planIntent.value = selectedPlan;
+    updateSignupSubmitLabel();
+  }
+  showView(nextView);
+}
+
 document.querySelectorAll('[data-switch]').forEach((trigger) => {
-  trigger.addEventListener('click', () => showView(trigger.dataset.switch));
+  trigger.addEventListener('click', (event) => {
+    event.preventDefault();
+    switchAuthView(trigger);
+  });
 });
 
 modal.addEventListener('click', (event) => {
