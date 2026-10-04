@@ -36,7 +36,13 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Build final materialized application
         run: npm run build
@@ -69,7 +75,13 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Build final materialized application
         run: npm run build
