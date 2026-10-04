@@ -1,0 +1,92 @@
+name: Generate QA tutorial videos
+
+on:
+  push:
+    branches:
+      - qa/tutorial-video-artifacts
+    paths:
+      - 'tests/e2e/**'
+      - 'tests/e2e-mobile/**'
+      - 'tests/helpers/**'
+      - 'playwright.config.mjs'
+      - 'playwright.mobile.config.mjs'
+      - 'playwright.tutorial.config.mjs'
+      - 'playwright.tutorial.mobile.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/generate-qa-tutorial-videos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-tutorial-videos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-recording:
+    name: Desktop QA recordings
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build final materialized application
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run desktop QA with video recording
+        run: npx playwright test --config=playwright.tutorial.config.mjs
+
+      - name: Upload desktop QA videos and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-tutorial-desktop-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-desktop-results
+            artifacts/tutorial-desktop-report
+          if-no-files-found: warn
+          retention-days: 30
+
+  mobile-recording:
+    name: Mobile QA recordings
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build final materialized application
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run mobile QA with video recording
+        run: npx playwright test --config=playwright.tutorial.mobile.config.mjs
+
+      - name: Upload mobile QA videos and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-tutorial-mobile-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-mobile-results
+            artifacts/tutorial-mobile-report
+          if-no-files-found: warn
+          retention-days: 30
