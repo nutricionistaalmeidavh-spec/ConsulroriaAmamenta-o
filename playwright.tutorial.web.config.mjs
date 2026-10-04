@@ -3,6 +3,7 @@ import base from './playwright.config.mjs';
 
 export default defineConfig({
   ...base,
+  retries: 1,
   use: {
     ...base.use,
     video: 'on',
