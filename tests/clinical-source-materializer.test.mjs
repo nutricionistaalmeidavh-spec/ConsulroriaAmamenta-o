@@ -50,4 +50,12 @@ test('materializer regenerates and then verifies the canonical clinical runtime 
   for (const relativePath of expectedCanonicalFiles) {
     assert.equal(existsSync(resolve(root, relativePath)), true, `${relativePath} must exist`);
   }
+
+  const loginHtml = readFileSync(resolve(root, 'public/clinical-source/index.html'), 'utf8');
+  const appShell = readFileSync(resolve(root, 'public/clinical-source/core/app-shell.js'), 'utf8');
+  assert.match(loginHtml, /data-recovery-action>Esqueci minha senha<\/button>/,
+    'canonical app login must expose password recovery');
+  assert.match(appShell, /data-recovery-action/);
+  assert.match(appShell, /\/api\/auth\/recovery/);
+  assert.match(appShell, /Informe seu e-mail para recuperar a senha\./);
 });

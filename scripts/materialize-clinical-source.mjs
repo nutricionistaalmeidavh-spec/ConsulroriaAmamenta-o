@@ -125,6 +125,71 @@ overlay('core/lib/repositories.js');
 overlay('core/lib/app-data.js');
 overlay('core/lib/backup-service.js');
 
+replaceText('index.html',
+  `      <button class="ui-button ui-button-primary auth-submit" type="submit">Entrar</button>
+      <button class="ui-button ui-button-ghost auth-secondary" type="button" data-signup-action>Criar primeiro acesso</button>
+      <p class="form-message" data-login-message role="status"></p>`,
+  `      <button class="ui-button ui-button-primary auth-submit" type="submit">Entrar</button>
+      <button class="ui-button ui-button-ghost auth-secondary" type="button" data-signup-action>Criar primeiro acesso</button>
+      <button class="ui-button ui-button-ghost auth-secondary" type="button" data-recovery-action>Esqueci minha senha</button>
+      <p class="form-message" data-login-message role="status"></p>`,
+  'clinical-login-password-recovery-action');
+
+replaceText('core/app-shell.js',
+  `  } catch (error) {
+    loginMessage.textContent = error?.message || 'Não foi possível criar o acesso.';
+    loginMessage.className = 'form-message error';
+  }
+});
+
+document.querySelector('[data-clinical-media-input]')?.addEventListener('change', (event) => {`,
+  `  } catch (error) {
+    loginMessage.textContent = error?.message || 'Não foi possível criar o acesso.';
+    loginMessage.className = 'form-message error';
+  }
+});
+
+document.querySelector('[data-recovery-action]')?.addEventListener('click', async (event) => {
+  if (!configured()) return;
+  const button = event.currentTarget;
+  const data = new FormData(loginForm);
+  const email = String(data.get('email') || '').trim();
+  if (!email) {
+    loginMessage.textContent = 'Informe seu e-mail para recuperar a senha.';
+    loginMessage.className = 'form-message error';
+    loginForm?.querySelector('[name="email"]')?.focus();
+    return;
+  }
+  if (config.ALLOWED_EMAIL && email.toLowerCase() !== String(config.ALLOWED_EMAIL).toLowerCase()) {
+    loginMessage.textContent = 'Este acesso é exclusivo da profissional autorizada.';
+    loginMessage.className = 'form-message error';
+    return;
+  }
+  button.disabled = true;
+  try {
+    loginMessage.textContent = 'Enviando recuperação…';
+    loginMessage.className = 'form-message';
+    const baseUrl = String(config.API_BASE_URL || '').replace(/\\\/$/, '');
+    const response = await fetch(\`\${baseUrl}/api/auth/recovery\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', apikey: String(config.CLIENT_RUNTIME_KEY || '') },
+      body: JSON.stringify({ email }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || payload?.error || 'Não foi possível enviar a recuperação agora.');
+    loginMessage.textContent = payload?.message || 'Se a conta existir, você receberá as instruções por e-mail.';
+    loginMessage.className = 'form-message success';
+  } catch (error) {
+    loginMessage.textContent = error?.message || 'Não foi possível enviar a recuperação agora.';
+    loginMessage.className = 'form-message error';
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector('[data-clinical-media-input]')?.addEventListener('change', (event) => {`,
+  'clinical-login-password-recovery-handler');
+
 const oldConfigured = `export function configured() {
   return /^https:\\/\\/.+\\.supabase\\.co$/.test(config.SUPABASE_URL || '') &&
     /^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY || '') &&
