@@ -2,10 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sendTransactionalEmail, transactionalTemplate } from './transactional-email.js';
 
-test('transactional templates cover recovery, welcome and confirmed purchase', () => {
-  assert.match(transactionalTemplate('password_recovery', { recoveryUrl: 'https://app.test/reset', expiresInSeconds: 1800 }).html, /30 minutos/);
-  assert.match(transactionalTemplate('welcome', { appUrl: 'https://app.test' }).subject, /Boas-vindas/);
-  assert.match(transactionalTemplate('purchase_confirmed', { planName: 'Pro mensal' }).html, /Pro mensal/);
+test('transactional templates use Gestão Amamentação in visible email branding', () => {
+  const recovery = transactionalTemplate('password_recovery', { recoveryUrl: 'https://app.test/reset', expiresInSeconds: 1800 });
+  const welcome = transactionalTemplate('welcome', { appUrl: 'https://app.test' });
+  const purchase = transactionalTemplate('purchase_confirmed', { planName: 'Pro mensal' });
+
+  assert.match(recovery.html, /Gestão Amamentação/);
+  assert.equal(recovery.subject, 'Redefina sua senha — Gestão Amamentação');
+  assert.match(recovery.html, /30 minutos/);
+
+  assert.match(welcome.html, /Gestão Amamentação/);
+  assert.equal(welcome.subject, 'Boas-vindas à Gestão Amamentação');
+
+  assert.match(purchase.html, /Gestão Amamentação/);
+  assert.equal(purchase.subject, 'Pagamento confirmado — Gestão Amamentação');
+  assert.match(purchase.html, /Pro mensal/);
 });
 
 test('Resend transport keeps credentials in headers and submits a branded message', async () => {
@@ -21,7 +32,9 @@ test('Resend transport keeps credentials in headers and submits a branded messag
     assert.equal(request.options.headers.authorization, 'Bearer secret-test');
     const payload = JSON.parse(request.options.body);
     assert.deepEqual(payload.to, ['cliente@example.com']);
-    assert.match(payload.html, /Débora Lactação/);
+    assert.equal(payload.from, 'Débora Lactação <contato@deboralactacao.com>');
+    assert.equal(payload.subject, 'Boas-vindas à Gestão Amamentação');
+    assert.match(payload.html, /Gestão Amamentação/);
     assert.doesNotMatch(request.options.body, /secret-test/);
   } finally { globalThis.fetch = original; }
 });
@@ -36,7 +49,7 @@ test('legacy recovery service binding remains supported', async () => {
   assert.deepEqual(payload, { to: 'cliente@example.com', recoveryUrl: 'https://app.test/reset', expiresInSeconds: 1800 });
 });
 
-test('Cloudflare native EMAIL binding is the preferred transport', async () => {
+test('Cloudflare native EMAIL binding keeps the default sender unchanged', async () => {
   let payload;
   const result = await sendTransactionalEmail({ EMAIL: { send: async message => { payload = message; } } }, {
     kind: 'purchase_confirmed', to: 'cliente@example.com', data: { planName: 'Plano Pro anual' },
@@ -44,5 +57,6 @@ test('Cloudflare native EMAIL binding is the preferred transport', async () => {
   assert.equal(result.provider, 'cloudflare');
   assert.equal(payload.to, 'cliente@example.com');
   assert.equal(payload.from, 'Débora Lactação <welcome@deboralactacao.com>');
-  assert.match(payload.subject, /Pagamento confirmado/);
+  assert.equal(payload.subject, 'Pagamento confirmado — Gestão Amamentação');
+  assert.match(payload.html, /Gestão Amamentação/);
 });
