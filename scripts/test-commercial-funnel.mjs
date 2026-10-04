@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { normalizeCloudflareFrontendSource } from './materialize-cloudflare-frontend.mjs';
 
 // Commercial funnel stays isolated from the clinical entrypoint and publishes only
@@ -45,6 +46,37 @@ for (const required of [
   'accounttype',
 ]) {
   if (!commercial.includes(required.toLowerCase())) fail(`commercial funnel missing ${required}`);
+}
+
+const switchStart = rawApp.indexOf('function switchAuthView(trigger)');
+const switchEnd = rawApp.indexOf("\ndocument.querySelectorAll('[data-switch]')", switchStart);
+if (switchStart < 0 || switchEnd < 0) {
+  fail('commercial login must use the canonical create-account switch');
+} else {
+  const loginEmail = { value: 'kesia@example.com' };
+  const signupEmail = { value: '' };
+  const planIntentStub = { value: '' };
+  let shownView = '';
+  let labelUpdates = 0;
+  const switchContext = vm.createContext({
+    document: {
+      querySelector(selector) {
+        if (selector === '#login-form input[name="email"]') return loginEmail;
+        if (selector === '#signup-form input[name="email"]') return signupEmail;
+        return null;
+      },
+    },
+    planIntent: planIntentStub,
+    selectedPlan: 'freemium',
+    updateSignupSubmitLabel() { labelUpdates += 1; },
+    showView(view) { shownView = view; },
+  });
+  vm.runInContext(rawApp.slice(switchStart, switchEnd), switchContext);
+  vm.runInContext("switchAuthView({ dataset: { switch: 'signup' } })", switchContext);
+  if (shownView !== 'signup') fail('commercial Create account must open the signup view');
+  if (signupEmail.value !== loginEmail.value) fail('commercial Create account must carry the login email into signup');
+  if (planIntentStub.value !== 'freemium') fail('commercial Create account must preserve the selected plan');
+  if (labelUpdates !== 1) fail('commercial Create account must refresh the plan-aware submit label');
 }
 
 for (const endpoint of [

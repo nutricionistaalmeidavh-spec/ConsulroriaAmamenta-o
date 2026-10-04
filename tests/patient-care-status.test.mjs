@@ -12,6 +12,7 @@ import {
 import {
   hardenPatientCareApp,
   hardenPatientCareHtml,
+  hardenPatientCareStyles,
 } from '../scripts/lib/patient-care-status-hardening.mjs';
 
 test('legacy patients without care_status remain active', () => {
@@ -70,6 +71,18 @@ test('HTML hardening replaces follow-up KPI and adds finalization control once',
   assert.equal(hardenPatientCareHtml(hardened), hardened);
 });
 
+test('mobile hardening moves patient actions below the identity without horizontal overflow', () => {
+  const source = '@media(max-width:760px){.patient-header-actions{margin-left:auto}.patient-header-actions .ui-button-ghost{display:none}}';
+  const hardened = hardenPatientCareStyles(source);
+  assert.match(hardened, /\.patient-title-row\{align-items:flex-start;flex-wrap:wrap\}/);
+  assert.match(hardened, /patient-title-row>\.patient-header-actions\{margin-left:0;width:100%;display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(hardened, /ui-button-ghost:not\(\[data-patient-care-toggle\]\)\{display:none\}/);
+  assert.match(hardened, /\[data-patient-care-toggle\]\{display:inline-flex\}/);
+  assert.match(hardened, /\.patient-header-actions \.ui-button\{width:100%;min-width:0;white-space:normal/);
+  assert.doesNotMatch(hardened, /42vw|flex-direction:column/);
+  assert.equal(hardenPatientCareStyles(hardened), hardened);
+});
+
 test('app hardening makes badges dynamic, wires finalization and reactivation', () => {
   const source = `const config = {};
 function patientInitials(patient){return 'MB';}
@@ -93,5 +106,8 @@ else if (action === 'edit-patient') await openPatientForm(currentPatientId);`;
   assert.match(hardened, /ensurePatientCareActive/);
   assert.match(hardened, /activePatientCount\(state\.patients\)/);
   assert.match(hardened, /action === 'toggle-patient-care'/);
+  assert.match(hardened, /DeboraUI/);
+  assert.match(hardened, /confirmTyped/);
+  assert.doesNotMatch(hardened, /globalThis\.confirm/);
   assert.equal(hardenPatientCareApp(hardened), hardened);
 });

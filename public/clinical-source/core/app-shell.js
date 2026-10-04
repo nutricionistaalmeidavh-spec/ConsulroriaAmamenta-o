@@ -242,6 +242,56 @@ function renderPatientSelect(selectedMotherId = null) {
   select.disabled = state.patients.length === 0;
   renderBabyTargetSelect(select.value || selectedMotherId);
 }
+function normalizedEncounterFormat(format) {
+  return String(format || '').trim().toLocaleLowerCase('pt-BR');
+}
+function isHomeVisitFormat(format) {
+  return /domiciliar/.test(normalizedEncounterFormat(format));
+}
+function isOnlineFormat(format) {
+  return /online/.test(normalizedEncounterFormat(format));
+}
+function encounterAddressForFormat(format, enteredAddress, patient) {
+  const entered = String(enteredAddress || '').trim();
+  if (isOnlineFormat(format)) return '';
+  if (isHomeVisitFormat(format)) return entered || String(patient?.mother?.address || '').trim();
+  return entered;
+}
+function routeAddressForAppointment(appointment, patient) {
+  if (!appointment) return String(patient?.mother?.address || '').trim();
+  const format = appointment.format || 'Domiciliar';
+  if (isOnlineFormat(format)) return '';
+  if (isHomeVisitFormat(format)) return String(appointment.address || patient?.mother?.address || '').trim();
+  return String(appointment.address || '').trim();
+}
+function selectedEncounterFormat() {
+  return document.querySelector('[data-encounter-choice][data-field="format"][aria-pressed="true"]')?.dataset.value || 'Domiciliar';
+}
+function syncEncounterAddressFromPatient({ force = false, format = null } = {}) {
+  const field = document.querySelector('[data-encounter-field="address"]');
+  if (!field) return;
+  const patient = selectedWizardPatient();
+  const selectedFormat = format || selectedEncounterFormat();
+  const fallback = String(patient?.mother?.address || '').trim();
+  const current = String(field.value || '').trim();
+  const online = isOnlineFormat(selectedFormat);
+  const homeVisit = isHomeVisitFormat(selectedFormat);
+  field.disabled = online;
+  field.placeholder = online
+    ? 'Não se aplica ao atendimento online'
+    : homeVisit
+      ? 'Endereço padrão da paciente'
+      : 'Informe o local do atendimento (opcional)';
+  if (online) {
+    field.value = '';
+    return;
+  }
+  if (homeVisit) {
+    if (force || !current) field.value = fallback;
+    return;
+  }
+  if (force && current === fallback) field.value = '';
+}
 function renderBabyTargetSelect(motherId, preferred = null) {
   const select = document.querySelector('[data-appointment-baby]');
   const field = document.querySelector('[data-baby-target-field]');
@@ -269,6 +319,7 @@ async function openPatient(motherId, { navigateRoute = true, babyId = null } = {
   setText('[data-patient-title]', patientLabel(patient));
   setText('[data-patient-subtitle]', `${patient.mother.name} · ${babyNames(patient).join(' e ') || 'bebê'}`);
   setText('[data-mother-phone]', patient.mother.phone || 'Não informado');
+  setText('[data-mother-address]', patient.mother.address || 'Não informado');
   setText('[data-mother-delivery]', patient.mother.delivery || 'Não informado');
   setText('[data-mother-conditions]', patient.mother.conditions || 'Não informado');
   setText('[data-mother-history]', patient.mother.breastfeeding_history || 'Não informado');
@@ -371,7 +422,7 @@ async function openPatientForm(motherId = null, { navigateRoute = true } = {}) {
   patientForm.reset();
   const patient = motherId ? patientByMotherId(motherId) || await appData.getPatient(motherId) : null;
   const val = (name, value = '') => { const field = patientForm.elements.namedItem(name); if (field) field.value = value ?? ''; };
-  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherBirthDate', patient?.mother?.birth_date);
+  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherAddress', patient?.mother?.address); val('motherBirthDate', patient?.mother?.birth_date);
   val('motherDelivery', patient?.mother?.delivery); val('motherConditions', patient?.mother?.conditions); val('motherHistory', patient?.mother?.breastfeeding_history); val('notes', patient?.mother?.notes);
   renderBabyEditors(patient ? familyBabies(patient) : [{}]);
   setText('[data-patient-form-title]', patient ? 'Editar paciente' : 'Nova paciente');
@@ -398,7 +449,7 @@ function patientFormPayload() {
   }).filter((baby) => baby.name);
   return {
     mother: {
-      name: get('motherName').trim(), phone: get('motherPhone').trim(), birth_date: get('motherBirthDate') || null,
+      name: get('motherName').trim(), phone: get('motherPhone').trim(), address: get('motherAddress').trim(), birth_date: get('motherBirthDate') || null,
       delivery: get('motherDelivery').trim(), conditions: get('motherConditions').trim(), breastfeeding_history: get('motherHistory').trim(), notes: get('notes').trim()
     },
     babies
@@ -687,7 +738,7 @@ async function ensureEncounterStarted() {
       format: ident.format || 'Domiciliar',
       value_cents: valueCents,
       payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-      address: patient.mother.address || ''
+      address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient)
     });
     const result = await appData.startClinicalEncounterFromAppointment(currentAppointmentId);
     if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id do agendamento.');
@@ -705,7 +756,7 @@ async function ensureEncounterStarted() {
     p_format: ident.format || 'Domiciliar',
     p_value_cents: valueCents,
     p_payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
-    p_address: patient.mother.address || '',
+    p_address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient),
     p_notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   if (!result?.encounter_id || !result?.appointment_id) throw new Error('O banco não retornou encounter_id/appointment_id.');
@@ -746,6 +797,7 @@ function resetWizard(selectedMotherId = currentPatientId) {
   const starts = document.querySelector('[data-encounter-field="startsAt"]'); if (starts) starts.value = localDateTimeInput();
   const duration = document.querySelector('[data-encounter-field="durationMin"]'); if (duration) duration.value = '60';
   const value = document.querySelector('[data-encounter-field="value"]'); if (value) value.value = '0';
+  syncEncounterAddressFromPatient({ force: true });
   const followup = document.querySelector('[data-encounter-field="followup"]'); if (followup) followup.value = '48 horas';
   const mediaInput = document.querySelector('[data-clinical-media-input]'); if (mediaInput) mediaInput.value = '';
   const pdfSelect = document.querySelector('[data-pdf-layout-encounter]'); if (pdfSelect) pdfSelect.value = selectedPdfLayout();
@@ -819,6 +871,7 @@ async function finalizeEncounter() {
     status: 'Realizado',
     value_cents: valueCents,
     payment_status: valueCents ? 'Pendente' : 'Sem cobrança',
+    address: encounterAddressForFormat(ident.format || 'Domiciliar', ident.address, patient),
     notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((baby) => baby.name).join(', ')}` : ''
   });
   const encounterPayload = buildEncounterPayload({ motherId: patient.mother.id, babyId: singleBabyId, appointmentId: currentAppointmentId, state: clinicalState, status: 'finalized' });
@@ -871,6 +924,16 @@ async function scheduleAppointment() {
   const when = prompt('Data e hora (AAAA-MM-DDTHH:MM)', localDateTimeInput(new Date(Date.now() + 86400000))); if (!when) return;
   const type = prompt('Tipo do atendimento', 'Consulta inicial') || 'Consulta inicial';
   const format = prompt('Formato: Domiciliar, Presencial ou Online', 'Domiciliar') || 'Domiciliar';
+  let address = '';
+  if (isHomeVisitFormat(format)) {
+    const informedAddress = prompt('Endereço do atendimento', String(patient.mother.address || '').trim());
+    if (informedAddress == null) return;
+    address = String(informedAddress).trim();
+  } else if (!isOnlineFormat(format)) {
+    const informedAddress = prompt('Local do atendimento (opcional)', '');
+    if (informedAddress == null) return;
+    address = String(informedAddress).trim();
+  }
   const value = Number((prompt('Valor em R$ (opcional)', '0') || '0').replace(',', '.'));
   const selectedBabies = baby ? [baby] : familyBabies(patient);
   await appData.scheduleAppointment({
@@ -882,7 +945,7 @@ async function scheduleAppointment() {
     p_format: format,
     p_value_cents: Math.max(0, Math.round(value * 100)),
     p_payment_status: value > 0 ? 'Pendente' : 'Sem cobrança',
-    p_address: patient.mother.address || '',
+    p_address: address,
     p_notes: selectedBabies.length > 1 ? `Atendimento conjunto: ${selectedBabies.map((item) => item.name).join(', ')}` : ''
   });
   agendaSelectedDay = clinicDayKey(clinicInputToIso(when));
@@ -924,6 +987,7 @@ async function openScheduledAppointment(appointmentId) {
   const starts = document.querySelector('[data-encounter-field="startsAt"]'); if (starts) starts.value = localDateTimeInput(new Date(appointment.starts_at));
   const duration = document.querySelector('[data-encounter-field="durationMin"]'); if (duration && [...duration.options].some((option) => Number(option.value) === Number(appointment.duration_min))) duration.value = String(appointment.duration_min);
   const value = document.querySelector('[data-encounter-field="value"]'); if (value) value.value = String(Number(appointment.value_cents || 0) / 100);
+  const address = document.querySelector('[data-encounter-field="address"]'); if (address) address.value = encounterAddressForFormat(appointment.format || 'Domiciliar', appointment.address, patient);
   wizardStep = 1;
   renderWizard();
   navigate('appointment');
@@ -978,7 +1042,33 @@ async function openWhatsApp(patient, message) {
   if (!patient) return;
   if (!(await ensureConsent(patient.mother.id, 'whatsapp'))) { toast('Contato por WhatsApp não está autorizado para esta paciente.', 'error'); return; }
   const phone = phoneForWhatsApp(patient.mother.phone); if (!phone) { toast('Paciente sem telefone cadastrado.', 'error'); return; }
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+  const text = String(message || '').trim();
+  const url = text ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/${phone}`;
+  window.open(url, '_blank', 'noopener');
+}
+function currentPatientForQuickAction() {
+  return patientByMotherId(currentPatientId);
+}
+function callCurrentPatient() {
+  const patient = currentPatientForQuickAction();
+  const phone = phoneForWhatsApp(patient?.mother?.phone);
+  if (!phone) { toast('Paciente sem telefone cadastrado.', 'error'); return; }
+  window.open(`tel:+${phone}`, '_self');
+}
+function openCurrentPatientRoute() {
+  const patient = currentPatientForQuickAction();
+  if (!patient) { toast('Paciente não encontrada.', 'error'); return; }
+  const now = Date.now();
+  const next = state.appointments
+    .filter((item) => item.mother_id === patient.mother.id && new Date(item.starts_at).getTime() >= now && isScheduledStatus(item.status))
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
+  const address = routeAddressForAppointment(next, patient);
+  if (!address) {
+    if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');
+    else toast('Nenhum endereço de atendimento disponível para abrir a rota.', 'error');
+    return;
+  }
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
 }
 function currentPlanText() {
   const patient = selectedWizardPatient();
@@ -1137,6 +1227,7 @@ document.querySelector('[data-appointment-patient]')?.addEventListener('change',
   if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }
   currentPatientId = event.target.value || null;
   renderBabyTargetSelect(currentPatientId);
+  syncEncounterAddressFromPatient({ force: true });
 });
 document.querySelector('[data-appointment-baby]')?.addEventListener('change', () => {
   if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }
@@ -1164,6 +1255,7 @@ document.addEventListener('click', async (event) => {
       if (!multiple) group?.querySelectorAll('[data-encounter-choice]').forEach((el) => { el.classList.remove('selected'); el.setAttribute('aria-pressed','false'); });
       const selected = multiple ? choice.getAttribute('aria-pressed') !== 'true' : true;
       choice.classList.toggle('selected', selected); choice.setAttribute('aria-pressed', String(selected));
+      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });
     }
     if (event.target.closest('[data-wizard-close]')) navigate(previousScreen || 'home');
     if (event.target.closest('[data-wizard-next]')) {
@@ -1192,9 +1284,11 @@ document.addEventListener('click', async (event) => {
     else if (action === 'next-route') {
       const next = nextAppointment();
       const patient = next ? patientByMotherId(next.mother_id) : null;
-      const address = next?.address || patient?.mother?.address || '';
-      if (!address) toast('Este atendimento não possui endereço cadastrado.', 'error');
-      else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
+      const address = routeAddressForAppointment(next, patient);
+      if (!address) {
+        if (next && isOnlineFormat(next.format)) toast('O próximo atendimento é online e não possui rota.', 'error');
+        else toast('Este atendimento não possui local disponível para rota.', 'error');
+      } else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank', 'noopener');
     }
     else if (action === 'new-patient') await openPatientForm();
     else if (action === 'add-baby') { const root = document.querySelector('[data-babies-editor]'); const count = root?.querySelectorAll('[data-baby-editor]').length || 0; root?.insertAdjacentHTML('beforeend', babyEditorMarkup({}, count)); }
@@ -1211,6 +1305,15 @@ document.addEventListener('click', async (event) => {
     else if (action === 'new-appointment') { previousScreen = activeScreen; resetWizard(activeScreen === 'patient' ? currentPatientId : null); navigate('appointment'); }
     else if (action === 'schedule-appointment') await scheduleAppointment();
     else if (action === 'save-draft') { await saveDraft(); navigate(previousScreen || 'home'); }
+    else if (action === 'patient-whatsapp') await openWhatsApp(currentPatientForQuickAction(), '');
+    else if (action === 'patient-call') callCurrentPatient();
+    else if (action === 'patient-route') openCurrentPatientRoute();
+    else if (action === 'patient-add-media') {
+      const patient = currentPatientForQuickAction();
+      if (!patient) toast('Paciente não encontrada.', 'error');
+      else if (!window.DeboraAlbum?.openUploader) toast('Biblioteca clínica ainda está carregando. Tente novamente em instantes.', 'error');
+      else await window.DeboraAlbum.openUploader(patient.mother.id, actionEl);
+    }
     else if (action === 'add-weight') await addWeight();
     else if (action === 'new-followup' || action === 'schedule-followup') await createFollowup();
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
