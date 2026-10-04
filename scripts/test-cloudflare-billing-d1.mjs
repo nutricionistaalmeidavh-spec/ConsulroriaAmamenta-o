@@ -8,12 +8,18 @@ import {
   checkoutPayload,
   CLOUDFLARE_PBKDF2_ITERATIONS,
 } from '../worker/cloudflare-billing-runtime.js';
+import {
+  subscriptionCancellationState,
+  shouldPreserveCancelledRecurringAccess,
+} from '../worker/subscription-cancellation-runtime.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const runtime = read('worker/cloudflare-billing-runtime.js');
+const cancellationRuntime = read('worker/subscription-cancellation-runtime.js');
 const authRuntime = read('worker/cloudflare-auth-runtime.js');
 const legacyWorker = read('worker/index.js');
 const domainEntry = read('worker/domain-entry.js');
+const ownedApiPaths = read('worker/owned-api-paths.js');
 const schema = read('cloudflare/runtime-schema.sql');
 const config = read('public/comercial/config.js');
 const app = read('public/comercial/app.js');
@@ -40,11 +46,12 @@ assert.match(authRuntime, /DEBORA_PARTNER_ADMIN_SECRET/);
 assert.match(authRuntime, /partner_admin:\s*true/);
 assert.match(authRuntime, /\/api\/admin\/(partners|partner-sales|partner-commission)/);
 
-// The domain entry must intercept billing before the local API terminal. Block 8
-// retains the public API identity while same-process compatibility paths are used internally.
+// The domain entry must intercept the isolated cancellation extension before the stable billing runtime.
+const cancellationGate = domainEntry.indexOf('handleSubscriptionCancellationRuntime(request, env, url)');
 const billingGate = domainEntry.indexOf('handleCloudflareBillingRuntime(request, env, url)');
 const apiTerminal = domainEntry.indexOf("if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();");
-assert.ok(billingGate >= 0 && apiTerminal >= 0 && billingGate < apiTerminal, 'D1 billing gate must run before the local API 404 terminal');
+assert.ok(cancellationGate >= 0 && billingGate >= 0 && cancellationGate < billingGate, 'cancellation extension must run before stable billing');
+assert.ok(billingGate < apiTerminal, 'D1 billing gate must run before the local API 404 terminal');
 assert.match(domainEntry, /normalizeOwnedApiRequest/);
 assert.doesNotMatch(domainEntry, /coreWorker\.fetch|import\s+coreWorker\s+from\s+['"]\.\/index\.js['"]/);
 assert.doesNotMatch(domainEntry, /\/api\/asaas\/confirm-email/);
@@ -69,11 +76,32 @@ assert.match(schema, /billing_backend','cloudflare-d1'/);
 assert.match(schema, /password_iterations INTEGER NOT NULL DEFAULT 100000/);
 assert.doesNotMatch(schema, /DEFAULT 210000/);
 assert.match(schema, /\('pro_monthly','Plano Pro mensal','month',9990,'BRL',1,1\)/);
-assert.match(schema, /\('pro_annual','Plano Pro anual','year',99990,'BRL',12,1\)/);
+assert.match(schema, /\('pro_annual','Plano Pro anual','year',99990,'BRL',12,1,1\)|\('pro_annual','Plano Pro anual','year',99990,'BRL',12,1\)/);
 assert.match(planHtml, /R\$ 99,90/);
 assert.match(planHtml, /R\$ 999,90/);
 assert.match(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 9990 : 99990/);
 assert.doesNotMatch(legacyWorker, /defaultPriceCents = planCode === 'pro_monthly' \? 4990 : 49900/);
+
+// Self-service cancellation is isolated from checkout/payment activation code.
+assert.doesNotMatch(runtime, /\/api\/asaas\/subscription\/cancel/);
+assert.match(cancellationRuntime, /'\/api\/asaas\/subscription'/);
+assert.match(cancellationRuntime, /'\/api\/asaas\/subscription\/cancel'/);
+assert.match(cancellationRuntime, /SUBSCRIPTION_DELETED/);
+assert.match(cancellationRuntime, /cancel_at_period_end/);
+assert.match(cancellationRuntime, /method:\s*'DELETE'/);
+assert.match(cancellationRuntime, /payment-owner:\$\{provider\}:\$\{user\.id\}/);
+assert.match(cancellationRuntime, /PAYMENT_DELETED/);
+assert.match(cancellationRuntime, /ignored_cancelled_recurring_payment/);
+assert.match(ownedApiPaths, /\['\/api\/billing\/subscription',\s*'\/api\/asaas\/subscription'\]/);
+assert.match(ownedApiPaths, /\['\/api\/billing\/subscription\/cancel',\s*'\/api\/asaas\/subscription\/cancel'\]/);
+assert.match(domainEntry, /'\/api\/asaas\/subscription'/);
+assert.match(domainEntry, /'\/api\/asaas\/subscription\/cancel'/);
+assert.match(domainEntry, /reconcileSubscriptionCancellations\(env\)/);
+assert.match(planHtml, /Cancelar renovação/);
+assert.match(plan, /['"]\/api\/(?:asaas|billing)\/subscription['"]/);
+assert.match(plan, /['"]\/api\/(?:asaas|billing)\/subscription\/cancel['"]/);
+assert.match(plan, /showModal\(/);
+assert.doesNotMatch(plan, /window\.confirm|\bconfirm\s*\(/);
 
 // Payment confirmation activates access directly; transactional e-mail is an
 // independent best-effort notification and cannot gate paid access.
@@ -94,6 +122,29 @@ const monthlyEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_monthly');
 assert.match(monthlyEnd, /^2026-10-22T/);
 const annualEnd = currentPeriodEnd({ dueDate: '2026-09-22' }, 'pro_annual');
 assert.match(annualEnd, /^2027-09-22T/);
+
+const cancelledMonthly = {
+  plan_code: 'pro_monthly',
+  status: 'active',
+  external_subscription_id: 'sub_monthly_123',
+  current_period_end: '2026-10-30T12:00:00.000Z',
+  metadata_json: JSON.stringify({
+    cancel_at_period_end: true,
+    cancellation_requested_at: '2026-10-10T12:00:00.000Z',
+    provider_deleted_at: '2026-10-10T12:00:01.000Z',
+  }),
+};
+const cancellationState = subscriptionCancellationState(cancelledMonthly, Date.parse('2026-10-15T12:00:00.000Z'));
+assert.equal(cancellationState.recurring, true);
+assert.equal(cancellationState.cancelAtPeriodEnd, true);
+assert.equal(cancellationState.autoRenew, false);
+assert.equal(cancellationState.canCancel, false);
+assert.equal(cancellationState.accessUntil, cancelledMonthly.current_period_end);
+assert.equal(shouldPreserveCancelledRecurringAccess(cancelledMonthly, 'DELETED', Date.parse('2026-10-15T12:00:00.000Z')), true);
+assert.equal(shouldPreserveCancelledRecurringAccess(cancelledMonthly, 'REFUNDED', Date.parse('2026-10-15T12:00:00.000Z')), false);
+const expiredCancellationState = subscriptionCancellationState(cancelledMonthly, Date.parse('2026-11-01T12:00:00.000Z'));
+assert.equal(expiredCancellationState.expired, true);
+assert.equal(expiredCancellationState.canCancel, false);
 
 const partner = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -133,4 +184,4 @@ assert.equal(payload.externalReference, 'saas_checkout:22222222-2222-4222-8222-2
 assert.equal(payload.items[0].value, 79.92);
 assert.equal(payload.subscription.cycle, 'MONTHLY');
 
-console.log('Cloudflare D1 billing: origin routing, Cloudflare client naming, current prices, partner pricing, Asaas recurrence and automatic post-payment activation OK');
+console.log('Cloudflare D1 billing: stable checkout runtime preserved; isolated recurring cancellation extension and access preservation OK');
