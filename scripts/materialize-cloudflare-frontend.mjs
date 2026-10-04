@@ -128,6 +128,13 @@ function guardPatientConsentEdit(source) {
   return next;
 }
 
+function stabilizeMemberAdminMount(source) {
+  return String(source).replace(
+    "function addAdminEntry(){if(!proToken())return;const list=document.querySelector('[data-screen=\"settings\"] .settings-list');",
+    "function addAdminEntry(){const list=document.querySelector('[data-screen=\"settings\"] .settings-list');"
+  );
+}
+
 function hardenClinicalNoteSaveIntegrity(source) {
   let next = String(source);
   next = next.replace(
@@ -166,6 +173,10 @@ export function normalizeCloudflareFrontendSource(source, relativePath = '') {
     next = next
       .replace("String(CONFIG.API_BASE_URL||'')", `String(CONFIG.API_BASE_URL||${SAME_ORIGIN_EXPRESSION})`)
       .replace("String(CONFIG.CLIENT_RUNTIME_KEY||'')", "String(CONFIG.CLIENT_RUNTIME_KEY||'cloudflare-runtime')");
+  }
+
+  if (relativePath === 'public/member-feature.js') {
+    next = stabilizeMemberAdminMount(next);
   }
 
   if (relativePath === 'public/clinical-source/features/clinical-note-feature.js') {
