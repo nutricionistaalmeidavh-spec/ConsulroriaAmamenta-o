@@ -262,8 +262,8 @@ patientForm?.addEventListener('submit', async (event) => {
 replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');
 
 replaceText('core/app-shell.js',
-  `  await appData.createFollowup({ mother_id: patient.mother.id, baby_id: baby?.id || null, due_at: new Date(due).toISOString(), notes: baby ? notes : \`${notes} · ${babyNames(patient).join(' e ')}\` });`,
-  `  await appData.createFollowup({ mother_id: patient.mother.id, baby_id: baby?.id || null, due_at: new Date(due).toISOString(), notes: baby ? notes : \`${notes} · ${babyNames(patient).join(' e ')}\`, status: 'Pendente' });`,
+  "  await appData.createFollowup({ mother_id:",
+  "  await appData.createFollowup({ status: 'Pendente', mother_id:",
   'manual-followup-default-pending');
 
 replaceText('core/app-shell.js',
