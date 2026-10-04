@@ -77,6 +77,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Package videos - Inicio e Dashboard
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-02-dashboard-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/tutorial-dashboard-*/video*.webm
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Package videos - Agenda
         if: success()
         uses: actions/upload-artifact@v4
@@ -135,6 +145,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Package videos - Follow-ups e Acompanhamentos
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-08-followups-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/tutorial-followups-*/video*.webm
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Package videos - Financeiro e Planos
         if: success()
         uses: actions/upload-artifact@v4
@@ -144,6 +164,26 @@ jobs:
             artifacts/tutorial-web-results/package-new-value-ui-*/video*.webm
             artifacts/tutorial-web-results/package-concurrency-p1-*/video*.webm
           if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Biblioteca e Templates
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-10-biblioteca-templates-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/tutorial-library-*/video*.webm
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Package videos - Area da Mae e Configuracoes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-11-area-mae-configuracoes-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/tutorial-member-settings-*/video*.webm
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Package videos - QA tecnico
