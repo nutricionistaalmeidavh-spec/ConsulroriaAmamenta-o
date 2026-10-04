@@ -9,6 +9,8 @@ on:
       - 'tests/e2e/**'
       - 'tests/e2e-mobile/**'
       - 'tests/helpers/**'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'public/member-feature.js'
       - 'playwright.config.mjs'
       - 'playwright.mobile.config.mjs'
       - 'playwright.tutorial.web.config.mjs'
