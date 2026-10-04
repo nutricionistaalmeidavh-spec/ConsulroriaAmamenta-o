@@ -262,6 +262,11 @@ patientForm?.addEventListener('submit', async (event) => {
 replaceText('core/app-shell.js', oldPatientSubmit, newPatientSubmit, 'atomic-patient-create');
 
 replaceText('core/app-shell.js',
+  `  await appData.createFollowup({ mother_id: patient.mother.id, baby_id: baby?.id || null, due_at: new Date(due).toISOString(), notes: baby ? notes : \`${notes} · ${babyNames(patient).join(' e ')}\` });`,
+  `  await appData.createFollowup({ mother_id: patient.mother.id, baby_id: baby?.id || null, due_at: new Date(due).toISOString(), notes: baby ? notes : \`${notes} · ${babyNames(patient).join(' e ')}\`, status: 'Pendente' });`,
+  'manual-followup-default-pending');
+
+replaceText('core/app-shell.js',
   '  editingPatientId = motherId || null;\n  patientForm.reset();',
   '  editingPatientId = motherId || null;\n  patientSaveAttempt = null;\n  patientConsentsReady = !motherId;\n  patientForm.reset();',
   'patient-save-attempt-lifecycle');
@@ -337,6 +342,11 @@ replaceText('core/app-shell.js', oldStartApp,
     .replace('    await renderRoute();', '    await renderRoute();\n    showLoggedIn();')
     .replace('reportError(error);', 'showLoggedOut(); throw error;'),
   'await-startup-before-editing');
+
+replaceText('core/app-shell.js',
+  `    await startApp();`,
+  `    await startApp();\n    window.dispatchEvent(new CustomEvent('debora:session-ready'));`,
+  'notify-additive-features-after-login');
 
 for (const [outputPath, bytes] of resolved) {
   const runtimePath = `public/clinical-source/${outputPath}`;
