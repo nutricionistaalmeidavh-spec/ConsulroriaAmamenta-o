@@ -166,11 +166,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Package videos - Biblioteca e Templates
+      - name: Package QA evidence - Biblioteca desativada
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: videos-10-biblioteca-templates-${{ github.run_id }}
+          name: qa-10-biblioteca-desativada-${{ github.run_id }}
           path: |
             artifacts/tutorial-web-results/tutorial-library-*/video*.webm
           if-no-files-found: warn
