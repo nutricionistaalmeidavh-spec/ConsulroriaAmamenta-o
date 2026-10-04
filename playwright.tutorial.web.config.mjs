@@ -9,9 +9,9 @@ export default defineConfig({
     screenshot: 'on',
     trace: 'retain-on-failure',
   },
-  outputDir: 'artifacts/tutorial-desktop-results',
+  outputDir: 'artifacts/tutorial-web-results',
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'artifacts/tutorial-desktop-report', open: 'never' }],
+    ['html', { outputFolder: 'artifacts/tutorial-web-report', open: 'never' }],
   ],
 });
