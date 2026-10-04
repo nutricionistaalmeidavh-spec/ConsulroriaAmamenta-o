@@ -10,8 +10,8 @@ on:
       - 'tests/helpers/**'
       - 'playwright.config.mjs'
       - 'playwright.mobile.config.mjs'
-      - 'playwright.tutorial.config.mjs'
-      - 'playwright.tutorial.mobile.config.mjs'
+      - 'playwright.tutorial.web.config.mjs'
+      - 'playwright.tutorial.web-mobile.config.mjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/generate-qa-tutorial-videos.yml'
@@ -25,8 +25,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  desktop-recording:
-    name: Desktop QA recordings
+  web-wide-recording:
+    name: Web QA recordings - tela grande
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -50,22 +50,22 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run desktop QA with video recording
-        run: npx playwright test --config=playwright.tutorial.config.mjs
+      - name: Run web QA (wide viewport) with video recording
+        run: npx playwright test --config=playwright.tutorial.web.config.mjs
 
-      - name: Upload desktop QA videos and evidence
+      - name: Upload web wide-screen QA videos and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-tutorial-desktop-${{ github.run_id }}
+          name: qa-tutorial-web-wide-${{ github.run_id }}
           path: |
-            artifacts/tutorial-desktop-results
-            artifacts/tutorial-desktop-report
+            artifacts/tutorial-web-results
+            artifacts/tutorial-web-report
           if-no-files-found: warn
           retention-days: 30
 
-  mobile-recording:
-    name: Mobile QA recordings
+  web-mobile-recording:
+    name: Web QA recordings - mobile
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -89,16 +89,16 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run mobile QA with video recording
-        run: npx playwright test --config=playwright.tutorial.mobile.config.mjs
+      - name: Run web QA (mobile viewport) with video recording
+        run: npx playwright test --config=playwright.tutorial.web-mobile.config.mjs
 
-      - name: Upload mobile QA videos and evidence
+      - name: Upload web mobile QA videos and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-tutorial-mobile-${{ github.run_id }}
+          name: qa-tutorial-web-mobile-${{ github.run_id }}
           path: |
-            artifacts/tutorial-mobile-results
-            artifacts/tutorial-mobile-report
+            artifacts/tutorial-web-mobile-results
+            artifacts/tutorial-web-mobile-report
           if-no-files-found: warn
           retention-days: 30
