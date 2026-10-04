@@ -65,6 +65,104 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Package videos - Acesso e Conta
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-01-acesso-conta-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/auth-session-*/video*.webm
+            artifacts/tutorial-web-results/recovery-*/video*.webm
+            artifacts/tutorial-web-results/clinical-login-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Agenda
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-03-agenda-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/agenda-p1-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Pacientes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-04-pacientes-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/patient-critical-*/video*.webm
+            artifacts/tutorial-web-results/patient-quick-actions-*/video*.webm
+            artifacts/tutorial-web-results/patient-address-*/video*.webm
+            artifacts/tutorial-web-results/p0-ui-integrity-patient-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Evolucao do Bebe
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-05-evolucao-bebe-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/growth-card-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Atendimento Clinico
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-06-atendimento-clinico-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/final-materialized-clinica-*/video*.webm
+            artifacts/tutorial-web-results/clinical-persistence-*/video*.webm
+            artifacts/tutorial-web-results/p1-integrity-starting-an-e-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Prontuario e Documentos
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-07-prontuario-documentos-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/p0-ui-integrity-clinical-n-*/video*.webm
+            artifacts/tutorial-web-results/p1-integrity-clinical-note-*/video*.webm
+            artifacts/tutorial-web-results/p1-integrity-terms-*/video*.webm
+            artifacts/tutorial-web-results/p1-integrity-referrals-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - Financeiro e Planos
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-09-financeiro-planos-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/package-new-value-ui-*/video*.webm
+            artifacts/tutorial-web-results/package-concurrency-p1-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Package videos - QA tecnico
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-00-qa-tecnico-${{ github.run_id }}
+          path: |
+            artifacts/tutorial-web-results/cache-staleness-*/video*.webm
+            artifacts/tutorial-web-results/concurrency-p1-*/video*.webm
+            artifacts/tutorial-web-results/deploy-version-upgrade-*/video*.webm
+            artifacts/tutorial-web-results/isolation-*/video*.webm
+            artifacts/tutorial-web-results/network-resilience-*/video*.webm
+            artifacts/tutorial-web-results/pwa-cache-p1-*/video*.webm
+            artifacts/tutorial-web-results/stability-*/video*.webm
+            artifacts/tutorial-web-results/p1-integrity-documents-bil-*/video*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+
   web-mobile-recording:
     name: Web QA recordings - mobile
     runs-on: ubuntu-latest
