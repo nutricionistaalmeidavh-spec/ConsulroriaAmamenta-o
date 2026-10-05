@@ -64,7 +64,7 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
   await page.locator('[data-action="new-appointment"]:visible').first().click();
   await expect(addressField).toHaveValue(defaultAddress);
-  await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]').click();
+  await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]:visible').first().click();
   await expect(addressField).toHaveValue('');
   await expect(addressField).toBeDisabled();
   await expect(addressField).toHaveAttribute('placeholder', 'Não se aplica ao atendimento online');
@@ -81,7 +81,7 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
   await page.locator('[data-action="new-appointment"]:visible').first().click();
   await expect(addressField).toHaveValue(defaultAddress);
-  await page.locator('[data-encounter-choice][data-field="format"][data-value="Presencial"]').click();
+  await page.locator('[data-encounter-choice][data-field="format"][data-value="Presencial"]:visible').first().click();
   await expect(addressField).toHaveValue('');
   await expect(addressField).toBeEnabled();
   await expect(addressField).toHaveAttribute('placeholder', 'Informe o local do atendimento (opcional)');
