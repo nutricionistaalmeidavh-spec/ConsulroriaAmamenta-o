@@ -135,6 +135,14 @@ replaceText('index.html',
       <p class="form-message" data-login-message role="status"></p>`,
   'clinical-login-password-recovery-action');
 
+replaceText('index.html',
+  `          <button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Importa uma cópia criptografada deste sistema.</small></div><b>›</b></button>
+          <button data-action="logout"><span>↪</span><div><strong>Sair do sistema</strong><small>Encerra a sessão neste aparelho.</small></div><b>›</b></button>`,
+  `          <button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Importa uma cópia criptografada deste sistema.</small></div><b>›</b></button>
+          <button type="button" data-member-admin><span>♡</span><div><strong>Área das mães</strong><small>Acessos, conteúdos e engajamento</small></div><b>›</b></button>
+          <button data-action="logout"><span>↪</span><div><strong>Sair do sistema</strong><small>Encerra a sessão neste aparelho.</small></div><b>›</b></button>`,
+  'member-admin-settings-entry');
+
 replaceText('core/app-shell.js',
   `  } catch (error) {
     loginMessage.textContent = error?.message || 'Não foi possível criar o acesso.';
