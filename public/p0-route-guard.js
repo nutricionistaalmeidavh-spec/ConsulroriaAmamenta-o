@@ -19,7 +19,7 @@ function rgApply(){
   // The previous UUID-only matcher treated valid migrated/demo IDs as "not a patient"
   // and removed the weight evolution card after it had mounted.
   if(!patientRoute){
-    document.querySelectorAll('[data-growth],[data-growth-inline],[data-growth-inline-v3],[data-weight-variation],[data-weight-variation-v3],[data-weight-changes-v4],[data-baby-sex-row],[data-baby-sex-row-v3]').forEach(node=>node.remove());
+    document.querySelectorAll('[data-growth],[data-growth-inline],[data-growth-inline-v3],[data-weight-variation],[data-weight-variation-v3],[data-weight-history-v5],[data-baby-sex-row],[data-baby-sex-row-v3]').forEach(node=>node.remove());
   }
 }
 
