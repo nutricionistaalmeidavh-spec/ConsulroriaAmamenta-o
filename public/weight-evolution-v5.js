@@ -7,24 +7,46 @@ if(!document.getElementById(V5_STYLE_ID)){
   document.head.appendChild(link);
 }
 
-const parseWeight=text=>{
-  const raw=String(text||'').replace(/\s/g,'').replace(/g$/i,'').replace(/\./g,'').replace(',','.');
-  const value=Number(raw.replace(/[^0-9.-]/g,''));
-  return Number.isFinite(value)?value:null;
-};
 const fmtInt=value=>Number.isFinite(value)?Math.round(value).toLocaleString('pt-BR'):'—';
 const fmtPct=value=>Number.isFinite(value)?Math.abs(value).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}):'—';
 const sign=value=>value>0?'+':value<0?'−':'';
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const asArray=value=>Array.isArray(value)?value:[];
 
-function readRows(host){
-  return [...host.querySelectorAll('.gf-weight-change-row')].map((row,index)=>{
-    const header=row.querySelector(':scope > div');
-    const date=header?.querySelector('span')?.textContent?.trim()||'';
-    const weight=parseWeight(header?.querySelector('strong')?.textContent||'');
-    const primary=row.querySelector('p')?.textContent?.trim()||'';
-    return {index,date,weight,birth:/peso ao nascer/i.test(primary)};
-  }).filter(row=>row.date&&Number.isFinite(row.weight));
+function dateKey(value){
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())?date.toISOString().slice(0,10):'';
+}
+
+function buildRows({baby=null,weights=[],measurements=[]}={}){
+  const rows=[];
+  const seen=new Set();
+  const birthWeight=Number(baby?.birth_weight_g);
+  const birthDate=String(baby?.birth_date||'').trim();
+
+  if(Number.isFinite(birthWeight)&&birthWeight>0&&birthDate){
+    const day=birthDate.slice(0,10);
+    const measuredAt=new Date(`${day}T12:00:00Z`).toISOString();
+    const key=`${day}|${birthWeight}`;
+    seen.add(key);
+    rows.push({measuredAt,weight:birthWeight,birth:true});
+  }
+
+  const source=[
+    ...asArray(weights),
+    ...asArray(measurements).filter(item=>item?.weight_g!=null),
+  ];
+  for(const item of source){
+    const weight=Number(item?.weight_g);
+    const day=dateKey(item?.measured_at);
+    if(!day||!Number.isFinite(weight)||weight<=0)continue;
+    const key=`${day}|${weight}`;
+    if(seen.has(key))continue;
+    seen.add(key);
+    rows.push({measuredAt:item.measured_at,weight,birth:false});
+  }
+
+  return rows.sort((a,b)=>new Date(a.measuredAt)-new Date(b.measuredAt));
 }
 
 function tone(delta){return delta>0?'gain':delta<0?'loss':'neutral'}
@@ -39,31 +61,39 @@ function birthSecondary(weight,birth){
   if(Math.abs(delta)<0.5)return 'Mesmo peso do nascimento';
   return `${sign(delta)}${fmtInt(Math.abs(delta))} g · ${sign(pct)}${fmtPct(pct)}% desde o nascimento`;
 }
+function formatDate(value){
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())?date.toLocaleDateString('pt-BR',{timeZone:'UTC'}):'';
+}
 
-function render(host){
-  const rows=readRows(host);
-  if(!rows.length)return;
+function clear(host){
+  if(!host)return;
+  host.innerHTML='';
+  delete host.dataset.v5Signature;
+  delete host.dataset.v5Enhanced;
+}
+
+function mount({host,baby=null,weights=[],measurements=[]}={}){
+  if(!host)return false;
+  const rows=buildRows({baby,weights,measurements});
+  if(!rows.length){clear(host);return false}
+
   const birthRow=rows.find(row=>row.birth)||null;
   const birth=birthRow?.weight??null;
   const current=rows.at(-1)?.weight??null;
   const saldo=Number.isFinite(birth)&&Number.isFinite(current)?current-birth:null;
   const saldoPct=Number.isFinite(saldo)&&birth?saldo/birth*100:null;
-  const signature=rows.map(row=>`${row.date}:${row.weight}:${row.birth}`).join('|');
-  if(host.dataset.v5Signature===signature&&host.dataset.v5Enhanced==='1')return;
+  const signature=rows.map(row=>`${dateKey(row.measuredAt)}:${row.weight}:${row.birth}`).join('|');
+  if(host.dataset.v5Signature===signature&&host.dataset.v5Enhanced==='1')return true;
 
   const timeline=rows.map((row,index)=>{
     const prev=index>0?rows[index-1]:null;
     const delta=prev?row.weight-prev.weight:null;
     const pct=prev&&prev.weight?delta/prev.weight*100:null;
     const isLatest=index===rows.length-1;
-    let detail='';
-    if(row.birth){
-      detail='<span class="gf-v5-chip birth">Peso ao nascer</span>';
-    }else if(prev){
-      detail=deltaChip(delta,pct);
-    }else{
-      detail='<span class="gf-v5-chip neutral">Primeira pesagem</span>';
-    }
+    const detail=row.birth
+      ?'<span class="gf-v5-chip birth">Peso ao nascer</span>'
+      :prev?deltaChip(delta,pct):'<span class="gf-v5-chip neutral">Primeira pesagem</span>';
     let secondary='';
     if(!row.birth&&Number.isFinite(birth)){
       secondary=prev?.birth?'em relação ao nascimento':birthSecondary(row.weight,birth);
@@ -71,7 +101,7 @@ function render(host){
     return `<div class="gf-v5-timeline-row ${row.birth?'is-birth':''} ${isLatest?'is-latest':''}">
       <div class="gf-v5-marker" aria-hidden="true"><span></span></div>
       <div class="gf-v5-entry">
-        <div class="gf-v5-entry-top"><span class="gf-v5-date">${escapeHtml(row.date)}</span><strong>${fmtInt(row.weight)} g</strong></div>
+        <div class="gf-v5-entry-top"><span class="gf-v5-date">${escapeHtml(formatDate(row.measuredAt))}</span><strong>${fmtInt(row.weight)} g</strong></div>
         <div class="gf-v5-entry-detail">${detail}</div>
         ${secondary?`<small>${escapeHtml(secondary)}</small>`:''}
       </div>
@@ -94,21 +124,7 @@ function render(host){
   host.dataset.v5Signature=signature;
   host.dataset.v5Enhanced='1';
   host.classList.add('gf-weight-changes-v5');
+  return true;
 }
 
-function enhanceAll(){
-  document.querySelectorAll('[data-weight-changes-v4]').forEach(host=>{
-    if(host.querySelector('.gf-weight-change-row'))render(host);
-  });
-}
-let timer=null;
-function schedule(){
-  if(timer!==null)return;
-  timer=setTimeout(()=>{
-    timer=null;
-    enhanceAll();
-  },60);
-}
-new MutationObserver(schedule).observe(document.documentElement,{subtree:true,childList:true});
-window.addEventListener('hashchange',()=>setTimeout(enhanceAll,160));
-enhanceAll();
+window.DeboraWeightEvolution={buildRows,mount,clear};
