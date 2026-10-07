@@ -128,7 +128,10 @@ function bvApply(selection,packages){
   const psel=document.querySelector('[data-bv-package]');if(psel&&selection.packageId&&[...psel.options].some(o=>o.value===selection.packageId))psel.value=selection.packageId;
   const total=document.querySelector('[data-bv-total]');if(total&&selection.packageTotalCents!=null)total.value=String((Number(selection.packageTotalCents)/100).toFixed(2));
   const sessions=document.querySelector('[data-bv-sessions]');if(sessions&&selection.packageSessionsTotal!=null)sessions.value=String(selection.packageSessionsTotal);
-  const value=bvValueInput();if(value&&selection.mode==='individual'&&selection.valueCents!=null)value.value=String((Number(selection.valueCents)/100).toFixed(2));
+  const value=bvValueInput();
+  // An async billing remount can finish while the professional is editing the amount.
+  // Never overwrite the focused individual-value control with an older snapshot.
+  if(value&&selection.mode==='individual'&&selection.valueCents!=null&&document.activeElement!==value)value.value=String((Number(selection.valueCents)/100).toFixed(2));
   bvToggle();
 }
 function bvWire(){
