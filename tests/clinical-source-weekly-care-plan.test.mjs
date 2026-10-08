@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   normalizeWeeklyPlan, validStartDate, weeklyPlanError,
-  weeklyPlanPdfSections, weeklyPlanText, weekPeriodLabel, orientationMode
+  weeklyPlanPdfSections, weeklyPlanText, weekPeriodLabel, orientationMode, resizeOrientationTextarea
 } from '../patch-source/weekly-care-plan/core/lib/weekly-care-plan.js';
 import { buildEncounterPayload } from '../public/clinical-source/core/lib/encounter-form.js';
 
@@ -89,4 +89,23 @@ test('apenas a orientação selecionada entra no PDF ou WhatsApp sem apagar o ou
   });
   assert.equal(encounter.care_plan.instructions,'Texto único');
   assert.equal(encounter.care_plan.weekly_plan.weeks[0].instructions,'Texto semanal que será preservado');
+});
+
+test('orientações extensas preservam o conteúdo integral nos dois modos sem maxlength', () => {
+  const long = 'Orientação clínica detalhada. '.repeat(500) + ' FIM_DAS_ORIENTACOES';
+  const weekly = {start_date:'2026-10-08',weeks:[{instructions:long},{instructions:long}]};
+  assert.equal(normalizeWeeklyPlan(weekly).weeks[0].instructions,long);
+  assert.match(weeklyPlanText(weekly,'weekly'),/FIM_DAS_ORIENTACOES/);
+  assert.equal(weeklyPlanPdfSections(weekly,'weekly')[0].lines.join(' ').includes('FIM_DAS_ORIENTACOES'),true);
+  assert.equal(buildEncounterPayload({motherId:'m',state:{care_plan:{
+    instructions:long,orientation_mode:'single',weekly_plan:weekly
+  }}}).care_plan.instructions.length,long.length);
+  const fakeField={style:{},scrollHeight:2200};
+  resizeOrientationTextarea(fakeField,800);
+  assert.equal(fakeField.style.height,'520px');
+  assert.equal(fakeField.style.overflowY,'auto');
+  fakeField.scrollHeight=120;
+  resizeOrientationTextarea(fakeField,800);
+  assert.equal(fakeField.style.height,'122px');
+  assert.equal(fakeField.style.overflowY,'hidden');
 });
