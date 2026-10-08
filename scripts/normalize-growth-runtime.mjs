@@ -22,6 +22,16 @@ export function normalizeGrowthRuntimeSource(source) {
     .replace("gfMountDetailV3();gfMountInlineV3()}catch(e){console.warn('Não foi possível montar sexo/crescimento v3',e)}",
       "gfMountDetailV3();gfMountInlineV3();document.querySelector('[data-growth-load-error]')?.remove()}catch(e){if(routeKey===String(location.hash))gfShowLoadError(e);console.warn('Não foi possível montar sexo/crescimento v3',e)}")
 
+    // Both sources include provenance and the two types of soft invalidation.
+    // Keep length/head measurements when only the weight is invalidated.
+    .replace(
+      "db(\x60growth_measurements?baby_id=eq.\x24{id}&select=id,measured_at,weight_g,length_cm,head_circumference_cm&order=measured_at.asc\x60),db(\x60weights?baby_id=eq.\x24{id}&select=id,measured_at,weight_g&order=measured_at.asc\x60)",
+      "db(\x60growth_measurements?baby_id=eq.\x24{id}&select=id,measured_at,weight_g,length_cm,head_circumference_cm,weight_voided_at&order=measured_at.asc\x60),db(\x60weights?baby_id=eq.\x24{id}&select=id,measured_at,weight_g,voided_at&order=measured_at.asc\x60)"
+    )
+    .replace(
+      "])}function series(){",
+      "]);s.g=s.g.map(x=>x.weight_voided_at?{...x,weight_g:null}:x);s.w=s.w.filter(x=>!x.voided_at)}function series(){"
+    )
     .replace(`const SB_URL='${LEGACY_ORIGIN}';const SB_KEY='${LEGACY_KEY}';`, "const SB_URL=window.location.origin;const SB_KEY='cloudflare-runtime';")
     .replace("const WHO_BASE='./who/v2026-08-30/';", "const WHO_BASE='/who/v2026-08-30/';")
     .concat(`
