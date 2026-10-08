@@ -38,7 +38,16 @@ export async function handleWeightCorrectionRuntime(request, env, url = new URL(
   const action = String(input?.p_action || '');
   if (!babyId || !['correct', 'void'].includes(action)) return respond(400, { error: 'invalid_revision_request' });
   const db = env.CLINICAL_DB;
-  const babyEntry = await recordByIdForOwner(db, 'babies', babyId, user.id);
+  let babyEntry = await recordByIdForOwner(db, 'babies', babyId, user.id);
+  if (!babyEntry) {
+    const legacy = await recordById(db, 'babies', babyId);
+    if (legacy) {
+      const declaredOwner = String(legacy.ownerId || legacy.record?.owner_id || '');
+      const mother = legacy.record?.mother_id ? await recordById(db, 'mothers', legacy.record.mother_id) : null;
+      const inheritedOwner = String(mother?.ownerId || mother?.record?.owner_id || '');
+      if (declaredOwner === String(user.id) || (!declaredOwner && inheritedOwner === String(user.id))) babyEntry = legacy;
+    }
+  }
   if (!babyEntry) return respond(404, { error: 'baby_not_found' });
 
   const weightIds = input?.p_weight_ids;
