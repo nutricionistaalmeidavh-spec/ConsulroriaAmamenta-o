@@ -5,6 +5,7 @@ import {
   idempotencyResponse,
   isIdempotencyConflict,
   recordByIdForOwner,
+  ownerRows,
 } from './d1-record-store.js';
 
 const PATH = '/api/clinical/rpc/finalize_clinical_encounter_atomic';
@@ -91,6 +92,8 @@ export async function handleAtomicClinicalEncounterFinalization(request, env, ur
   ];
 
   const seenBabies = new Set();
+  const previousWeights = await ownerRows(db, 'weights', user.id);
+  const previousMeasurements = await ownerRows(db, 'growth_measurements', user.id);
   for (const raw of Array.isArray(input.p_weights) ? input.p_weights : []) {
     const babyId = String(raw?.baby_id || '').trim();
     const weightG = Number(raw?.weight_g || 0);
@@ -113,7 +116,17 @@ export async function handleAtomicClinicalEncounterFinalization(request, env, ur
       created_at: now,
       updated_at: now,
     };
-    const baby = { ...babyEntry.record, owner_id: user.id, current_weight_g: weightG, updated_at: now };
+    const prior = [...previousWeights.filter(entry=>!entry.record?.voided_at),
+      ...previousMeasurements.filter(entry=>!entry.record?.weight_voided_at)]
+      .filter(entry=>String(entry.record?.baby_id)===babyId&&Number(entry.record?.weight_g)>0)
+      .map(entry=>Date.parse(entry.record.measured_at)).filter(Number.isFinite);
+    const lastTimestamp = Math.max(Date.parse(babyEntry.record.current_weight_measured_at)||0, ...prior, Number.NEGATIVE_INFINITY);
+    const keepCurrent = Date.parse(measuredAt) >= lastTimestamp;
+    const baby = {
+      ...babyEntry.record, owner_id: user.id,
+      ...(keepCurrent ? { current_weight_g: weightG, current_weight_measured_at: measuredAt } : {}),
+      updated_at: now
+    };
     statements.push(guardedRecordStatement(db, 'weights', weightId, weight, user.id, now));
     statements.push(guardedRecordStatement(db, 'babies', babyEntry.key, baby, user.id, now));
   }
