@@ -1,4 +1,3 @@
-import './weight-correction-feature.js';
 const V5_STYLE_ID='debora-weight-evolution-v5-style';
 if(!document.getElementById(V5_STYLE_ID)){
   const link=document.createElement('link');
