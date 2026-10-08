@@ -73,6 +73,28 @@ function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 }
 
+
+/** Os campos não possuem limite artificial de caracteres.
+ * Ajuste progressivo de altura, com teto visual para preservar a navegação mobile. */
+export function resizeOrientationTextarea(field, viewportHeight = null) {
+  if (!field || !field.style) return;
+  const vh = Number.isFinite(viewportHeight) && viewportHeight > 0
+    ? viewportHeight : (typeof window !== 'undefined' ? window.innerHeight : 750);
+  const maxHeight = Math.max(200, Math.min(640, Math.round(vh * 0.65)));
+  field.style.height = 'auto';
+  const contentHeight = Math.max(0, Number(field.scrollHeight) || 0);
+  if (!contentHeight) return;
+  field.style.height = Math.min(maxHeight, contentHeight + 2) + 'px';
+  field.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
+}
+
+function resizeOrientationFields(root) {
+  const selector = '[data-single-care-panel] textarea[data-encounter-field="instructions"], [data-weekly-instructions]';
+  for (const field of root?.querySelectorAll?.(selector) || []) {
+    if (!field.closest?.('[hidden]')) resizeOrientationTextarea(field);
+  }
+}
+
 function sectionOf(root) { return root?.querySelector?.('[data-weekly-care-plan]') || null; }
 
 export function selectedOrientationMode(root) {
@@ -89,6 +111,7 @@ function setOrientationMode(root, mode, weeklyPlan = null) {
   if (single) single.hidden = active !== 'single';
   const weekly = sectionOf(root);
   if (weekly) weekly.hidden = active !== 'weekly';
+  resizeOrientationFields(root);
 }
 
 export function collectWeeklyPlan(root) {
@@ -130,6 +153,7 @@ function render(root, value) {
   }).join('');
   const addButton = section.querySelector('[data-weekly-add]');
   if (addButton) addButton.textContent = weeks.length ? '+ Adicionar outra semana' : '+ Adicionar semana';
+  resizeOrientationFields(root);
 }
 
 export function applyWeeklyPlan(root, value, mode = null) {
@@ -151,6 +175,16 @@ export function mountWeeklyPlan(root) {
     setOrientationMode(root, event.target.value, collectWeeklyPlan(root));
   });
   setOrientationMode(root, 'single');
+  root.addEventListener('input', event => {
+    if (event.target?.matches?.('[data-weekly-instructions], [data-single-care-panel] textarea[data-encounter-field="instructions"]')) {
+      resizeOrientationTextarea(event.target);
+    }
+  });
+  root.addEventListener('focusin', event => {
+    if (event.target?.matches?.('[data-weekly-instructions], [data-single-care-panel] textarea[data-encounter-field="instructions"]')) {
+      resizeOrientationTextarea(event.target);
+    }
+  });
   section.addEventListener('click', event => {
     const add = event.target.closest('[data-weekly-add]');
     const remove = event.target.closest('[data-weekly-remove]');
