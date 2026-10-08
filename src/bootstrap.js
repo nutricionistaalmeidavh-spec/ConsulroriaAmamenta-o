@@ -16,6 +16,7 @@ const MODULE_PATHS = [
   'lib/auth-service.js',
   'lib/repositories.js',
   'lib/app-data.js',
+  'lib/weekly-care-plan.js',
   'lib/encounter-form.js',
   'lib/media-service.js',
   'lib/backup-service.js',
@@ -31,12 +32,14 @@ const CLINICAL_RUNTIME_PATHS = [
   'core/lib/auth-service.js',
   'core/lib/repositories.js',
   'core/lib/app-data.js',
+  'core/lib/weekly-care-plan.js',
   'core/lib/encounter-form.js',
   'core/lib/media-service.js',
   'core/lib/backup-service.js',
   'core/lib/pdf-service.js',
   'features/clinical-note-feature.js',
   'features/clinical-note-feature.css',
+  'features/weekly-care-plan.css',
   'features/patient-fixes.css',
 ];
 
@@ -249,7 +252,11 @@ async function boot() {
   const moduleUrls = {};
 
   for (const path of MODULE_PATHS) {
-    moduleUrls[path] = moduleUrl(genericizeRuntimeModule(path, runtime[`core/${path}`]));
+    let code = genericizeRuntimeModule(path, runtime[`core/${path}`]);
+    if (path === 'lib/encounter-form.js' || path === 'lib/pdf-service.js') {
+      code = code.replace("'./weekly-care-plan.js'", `'${moduleUrls['lib/weekly-care-plan.js']}'`);
+    }
+    moduleUrls[path] = moduleUrl(code);
   }
 
   const patientCareStatusUrl = new URL('/patient-care-status-core.js', window.location.origin).href;
@@ -275,6 +282,7 @@ async function boot() {
   let html = genericizeClinicalHtml(runtime['index.html']);
   html = html
     .replace('<link rel="stylesheet" href="./styles.css">', `<style>${css}</style>`)
+    .replace('<link rel="stylesheet" href="./features/weekly-care-plan.css">', `<style>${runtime['features/weekly-care-plan.css']}</style>`)
     .replaceAll('./icons/app-icon.svg', '/icon-512.png?v=1.12.1')
     .replace('<script src="./config.js"></script>', '')
     .replace('<script type="module" src="./app-shell.js"></script>', '')

@@ -91,11 +91,60 @@ test('final materialized build completes the critical clinical flow through real
   await expect(page.locator('[data-wizard-step="6"]')).toBeVisible();
 
   const objective = uniqueLabel('Final objective');
-  const instructions = uniqueLabel('Final instructions');
+  const instructions = uniqueLabel('Final instructions') + ' ' + 'Orientações clínicas completas para a família. '.repeat(250) + ' FIM_UNICO_2026';
   await page.locator('[data-wizard-step="6"] [data-encounter-field="objectives"]').fill(objective);
   await page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]').fill(instructions);
+  const modeSingle=page.locator('[name="care-orientation-mode"][value="single"]');
+  const modeWeekly=page.locator('[name="care-orientation-mode"][value="weekly"]');
+  await expect(modeSingle).toBeChecked();
+  await expect(page.locator('[data-single-care-panel]')).toBeVisible();
+  await expect(page.locator('[data-weekly-care-plan]')).toBeHidden();
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-wizard-step="7"]')).toBeVisible();
+  const singleDownload=page.waitForEvent('download');
+  await page.locator('[data-action="print-plan"]').click();
+  const singlePdf=await singleDownload;
+  const singleStream=await singlePdf.createReadStream();
+  const singleChunks=[];
+  for await (const chunk of singleStream) singleChunks.push(chunk);
+  const singleText=Buffer.concat(singleChunks).toString('latin1');
+  expect(singleText).toContain('FIM_UNICO_2026');
+  expect(singleText).toContain('Final instructions');
+  expect(singleText).toContain('Documento 2/');
+  expect(singleText).not.toContain('Orientações - Semana 1');
+  await page.locator('[data-wizard-prev]').click();
+  await expect(page.locator('[data-wizard-step="6"]')).toBeVisible();
+  await modeWeekly.check();
+  await expect(page.locator('[data-weekly-care-plan]')).toBeVisible();
+  await expect(page.locator('[data-single-care-panel]')).toBeHidden();
+  await modeSingle.check();
+  await expect(page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]')).toHaveValue(instructions);
+  await modeWeekly.check();
+  const weeklyInstructions = Array.from({ length: 4 }, (_, i) => uniqueLabel('Week-' + (i + 1)) + (i === 2 ? ' ' + 'Acompanhar a evolução com orientações detalhadas. '.repeat(180) + ' FIM_SEMANA_EXTENSA_2026' : ''));
+  await expect(page.locator('[data-weekly-entry]')).toHaveCount(0);
+  for (let i = 0; i < weeklyInstructions.length; i += 1) {
+    await page.locator('[data-weekly-add]').click();
+    await page.locator('[data-weekly-entry]').nth(i).locator('[data-weekly-instructions]').fill(weeklyInstructions[i]);
+  }
+  await page.locator('[data-weekly-start]').fill('2026-10-08');
+  await expect(page.locator('[data-weekly-entry]')).toHaveCount(4);
+  await page.locator('[data-wizard-next]').click();
+  await expect(page.locator('[data-wizard-step="7"]')).toBeVisible();
+  const pdfDownload = page.waitForEvent('download');
+  await page.locator('[data-action="print-plan"]').click();
+  const initialPdf = await pdfDownload;
+  const initialPdfStream = await initialPdf.createReadStream();
+  const pdfChunks = [];
+  for await (const chunk of initialPdfStream) pdfChunks.push(chunk);
+  const pdfText = Buffer.concat(pdfChunks).toString('latin1');
+  for (const n of [1, 2, 3, 4]) expect(pdfText).toContain('Orientações - Semana ' + n);
+  for (const [index, instruction] of weeklyInstructions.entries()) {
+    if (index === 2) {
+      expect(pdfText).toContain('FIM_SEMANA_EXTENSA_2026');
+      expect(pdfText).toContain('Week-3');
+    } else expect(pdfText).toContain(instruction);
+  }
+  expect(pdfText).not.toContain('FIM_UNICO_2026');
 
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName, { timeout: 20_000 });
@@ -112,6 +161,10 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.clinical_note).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
   expect(encounter?.care_plan?.instructions).toBe(instructions);
+  expect(encounter?.care_plan?.orientation_mode).toBe('weekly');
+  expect(encounter?.care_plan?.weekly_plan?.start_date).toBe('2026-10-08');
+  expect(encounter?.care_plan?.weekly_plan?.weeks?.map(w => w.instructions)).toEqual(weeklyInstructions);
+  await expect(page.locator('[data-action="print-care-plan-encounter"]:visible').first()).toBeVisible();
 
   const [appointment] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
   expect(appointment?.status).toBe('Realizado');

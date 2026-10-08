@@ -53,6 +53,7 @@ function latestWeightForBaby(entries, babyId) {
   let latestTimestamp = Number.NEGATIVE_INFINITY;
   for (const entry of entries || []) {
     const row = entry?.record || {};
+    if (row.voided_at || row.weight_voided_at) continue;
     if (String(row.baby_id || '') !== String(babyId)) continue;
     const weight = Number(row.weight_g);
     const timestamp = Date.parse(row.measured_at);
@@ -132,8 +133,10 @@ export async function handleCloudflareGrowthRuntime(request, env, url = new URL(
 
   let shouldUpdateCurrentWeight = false;
   if (weight !== null) {
-    const existingWeights = await ownerRows(db, 'weights', user.id);
-    const latestWeight = latestWeightForBaby(existingWeights, babyId);
+    const [existingWeights, existingMeasurements] = await Promise.all([
+      ownerRows(db, 'weights', user.id), ownerRows(db, 'growth_measurements', user.id),
+    ]);
+    const latestWeight = latestWeightForBaby([...existingWeights, ...existingMeasurements], babyId);
     const latestTimestamp = latestWeight ? Date.parse(latestWeight.measured_at) : Number.NEGATIVE_INFINITY;
     shouldUpdateCurrentWeight = Date.parse(measuredAt) >= latestTimestamp;
   }
