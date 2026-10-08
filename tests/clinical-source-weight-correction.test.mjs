@@ -80,6 +80,21 @@ test('corrected fields cannot be updated through stale or cross-account selectio
   assert.equal(r.status,404);
   assert.equal(db.get('weights','old').voided_at,undefined);
 });
+test('legacy weight records inherit ownership from the mother without tenant access leakage',async()=>{
+  const db=fixture();
+  db.put('mothers','mother','owner',{id:'mother',name:'Mãe legada'});
+  const baby=db.get('babies','baby');
+  db.put('babies','baby',null,{...baby,owner_id:undefined});
+  const weight=db.get('weights','old');
+  db.put('weights','old',null,{...weight,owner_id:undefined});
+  const request={p_action:'correct',p_weight_ids:['old'],p_expected_day:'2026-09-01',p_expected_weight_g:3300,p_weight_g:3400,p_measured_at:'2026-09-02'};
+  const ok=await post(db,request,'owner');
+  assert.equal(ok.status,200,await ok.text());
+  assert.equal(db.get('weights','old').weight_g,3400);
+  const other=await post(db,request,'other');
+  assert.equal(other.status,404);
+});
+
 test('V5 groups paired sources for edit and ignores invalidated weight while preserving the layout',()=>{
   const ctx={document:{head:{appendChild(){}},getElementById(){return null},createElement(){return{}}},console};
   ctx.window=ctx;ctx.globalThis=ctx;
