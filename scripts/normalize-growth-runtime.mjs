@@ -8,6 +8,7 @@ const GROWTH_FILE = new URL('../public/growth-feature.js', import.meta.url);
 
 export function normalizeGrowthRuntimeSource(source) {
   return String(source)
+    .replace("import './weight-evolution-v5.js';", "import './weight-correction-feature.js';import './weight-evolution-v5.js';")
     .replace(/async function db\(path,opt=\{\}\)\{[\s\S]*?\}const E=/, `async function db(path,opt={}){
       const client=window.DeboraRuntimeClient;
       if(client){
