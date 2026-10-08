@@ -53,7 +53,7 @@ export async function handleWeightCorrectionRuntime(request, env, url = new URL(
   const weightIds = input?.p_weight_ids;
   const measurementIds = input?.p_measurement_ids;
   if (!Array.isArray(weightIds) || !Array.isArray(measurementIds) || weightIds.length + measurementIds.length < 1 ||
-      weightIds.length + measurementIds.length > 8 ||
+      weightIds.length > 1 || measurementIds.length > 1 ||
       new Set(weightIds).size !== weightIds.length || new Set(measurementIds).size !== measurementIds.length) {
     return respond(400, { error: 'measurement_selection_invalid' });
   }
