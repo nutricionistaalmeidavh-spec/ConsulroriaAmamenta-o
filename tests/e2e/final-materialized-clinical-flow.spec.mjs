@@ -94,6 +94,30 @@ test('final materialized build completes the critical clinical flow through real
   const instructions = uniqueLabel('Final instructions');
   await page.locator('[data-wizard-step="6"] [data-encounter-field="objectives"]').fill(objective);
   await page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]').fill(instructions);
+  const modeSingle=page.locator('[name="care-orientation-mode"][value="single"]');
+  const modeWeekly=page.locator('[name="care-orientation-mode"][value="weekly"]');
+  await expect(modeSingle).toBeChecked();
+  await expect(page.locator('[data-single-care-panel]')).toBeVisible();
+  await expect(page.locator('[data-weekly-care-plan]')).toBeHidden();
+  await page.locator('[data-wizard-next]').click();
+  await expect(page.locator('[data-wizard-step="7"]')).toBeVisible();
+  const singleDownload=page.waitForEvent('download');
+  await page.locator('[data-action="print-plan"]').click();
+  const singlePdf=await singleDownload;
+  const singleStream=await singlePdf.createReadStream();
+  const singleChunks=[];
+  for await (const chunk of singleStream) singleChunks.push(chunk);
+  const singleText=Buffer.concat(singleChunks).toString('latin1');
+  expect(singleText).toContain(instructions);
+  expect(singleText).not.toContain('Orientações - Semana 1');
+  await page.locator('[data-wizard-prev]').click();
+  await expect(page.locator('[data-wizard-step="6"]')).toBeVisible();
+  await modeWeekly.check();
+  await expect(page.locator('[data-weekly-care-plan]')).toBeVisible();
+  await expect(page.locator('[data-single-care-panel]')).toBeHidden();
+  await modeSingle.check();
+  await expect(page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]')).toHaveValue(instructions);
+  await modeWeekly.check();
   const weeklyInstructions = Array.from({ length: 4 }, (_, i) => uniqueLabel('Week-' + (i + 1)));
   for (let i = 0; i < weeklyInstructions.length; i += 1) {
     await page.locator('[data-weekly-add]').click();
@@ -128,6 +152,7 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.clinical_note).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
   expect(encounter?.care_plan?.instructions).toBe(instructions);
+  expect(encounter?.care_plan?.orientation_mode).toBe('weekly');
   expect(encounter?.care_plan?.weekly_plan?.start_date).toBe('2026-10-08');
   expect(encounter?.care_plan?.weekly_plan?.weeks?.map(w => w.instructions)).toEqual(weeklyInstructions);
   await expect(page.locator('[data-action="print-care-plan-encounter"]:visible').first()).toBeVisible();

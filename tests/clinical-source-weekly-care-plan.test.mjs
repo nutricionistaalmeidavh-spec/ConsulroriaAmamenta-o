@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   normalizeWeeklyPlan, validStartDate, weeklyPlanError,
-  weeklyPlanPdfSections, weeklyPlanText, weekPeriodLabel
+  weeklyPlanPdfSections, weeklyPlanText, weekPeriodLabel, orientationMode
 } from '../patch-source/weekly-care-plan/core/lib/weekly-care-plan.js';
 import { buildEncounterPayload } from '../public/clinical-source/core/lib/encounter-form.js';
 
@@ -67,4 +67,26 @@ test('materialização canônica é a única entrada do editor semanal, sem mexe
   assert.match(overlay,/weekly_plan/);
   assert.doesNotMatch(overlay,/weight-evolution-v5|weight-changes-v5/);
   assert.match(v5,/gf-v5-timeline/);
+});
+
+test('modo único é padrão, mas planos semanais antigos continuam reconhecidos',()=>{
+  assert.equal(orientationMode(undefined,null),'single');
+  assert.equal(orientationMode(undefined,{start_date:'2026-10-08',weeks:[{instructions:'Semana um'}]}),'weekly');
+  assert.equal(orientationMode('single',{start_date:'2026-10-08',weeks:[{instructions:'texto preservado'}]}),'single');
+  assert.equal(orientationMode('weekly',null),'weekly');
+});
+
+test('apenas a orientação selecionada entra no PDF ou WhatsApp sem apagar o outro rascunho',()=>{
+  const weekly={start_date:'2026-10-08',weeks:[{instructions:'Texto semanal que será preservado'}]};
+  assert.deepEqual(weeklyPlanPdfSections(weekly,'single'),[]);
+  assert.equal(weeklyPlanText(weekly,'single'),'');
+  assert.equal(weeklyPlanError(weekly,'single'),null);
+  assert.equal(weeklyPlanPdfSections(weekly,'weekly').length,1);
+  assert.match(weeklyPlanText(weekly,'weekly'),/Texto semanal/);
+  assert.match(weeklyPlanError(null,'weekly'),/Adicione ao menos uma semana/);
+  const encounter=buildEncounterPayload({
+    motherId:'mae-1',state:{care_plan:{orientation_mode:'single',instructions:'Texto único',weekly_plan:weekly}}
+  });
+  assert.equal(encounter.care_plan.instructions,'Texto único');
+  assert.equal(encounter.care_plan.weekly_plan.weeks[0].instructions,'Texto semanal que será preservado');
 });

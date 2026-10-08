@@ -23,7 +23,7 @@ export function applyWeeklyCarePlan(resolved, sourceByPath, root) {
   patch('index.html', src => {
     src = once(src, '<link rel="stylesheet" href="./styles.css">',
       '<link rel="stylesheet" href="./styles.css">\n  <link rel="stylesheet" href="./features/weekly-care-plan.css">', 'css');
-    const widget = '<section class="weekly-care-plan" data-weekly-care-plan aria-label="Orientações por semana">' +
+    const widget = '<section class="weekly-care-plan" data-weekly-care-plan hidden aria-label="Orientações por semana">' +
       '<h3>Orientações por semana <small>(opcional)</small></h3>' +
       '<p>Planeje orientações para as próximas semanas deste mesmo atendimento. As orientações gerais acima continuam disponíveis.</p>' +
       '<div class="weekly-care-controls" data-weekly-controls hidden>' +
@@ -31,20 +31,26 @@ export function applyWeeklyCarePlan(resolved, sourceByPath, root) {
       '<small>As semanas são períodos consecutivos de sete dias.</small></div>' +
       '<div class="weekly-care-entries" data-weekly-entries></div>' +
       '<button type="button" class="ui-button ui-button-ghost" data-weekly-add>+ Adicionar semana</button></section>';
+    const singleField = '<label class="field"><span>Orientações e condutas</span><textarea rows="6" data-encounter-field="instructions" data-section="care_plan"></textarea></label>';
+    const selector = '<fieldset class="care-orientation-selector" data-care-orientation-selector>' +
+      '<legend>Como deseja organizar as orientações?</legend><div class="care-orientation-options">' +
+      '<label><input type="radio" name="care-orientation-mode" value="single" checked><span>Orientação única</span></label>' +
+      '<label><input type="radio" name="care-orientation-mode" value="weekly"><span>Por semanas</span></label></div></fieldset>';
+    src = once(src, singleField, selector + '<div data-single-care-panel>' + singleField + '</div>', 'alternância da Etapa 6');
     return once(src, '<label class="field"><span>Próximo acompanhamento</span>',
       widget + '<label class="field"><span>Próximo acompanhamento</span>', 'etapa-6');
   });
   patch('core/lib/encounter-form.js', src => {
-    src = once(src, 'const SECTIONS =', "import { collectWeeklyPlan, applyWeeklyPlan } from './weekly-care-plan.js';\n\nconst SECTIONS =", 'form-import');
+    src = once(src, 'const SECTIONS =', "import { collectWeeklyPlan, applyWeeklyPlan, selectedOrientationMode } from './weekly-care-plan.js';\n\nconst SECTIONS =", 'form-import');
     src = once(src, '  return state;\n}\n\nfunction savedValue',
-      '  const weeklyPlan = collectWeeklyPlan(root);\n  if (weeklyPlan) state.care_plan.weekly_plan = weeklyPlan;\n  return state;\n}\n\nfunction savedValue', 'form-collect');
+      '  const weeklyPlan = collectWeeklyPlan(root);\n  state.care_plan.orientation_mode = selectedOrientationMode(root);\n  if (weeklyPlan) state.care_plan.weekly_plan = weeklyPlan;\n  return state;\n}\n\nfunction savedValue', 'form-collect');
     return once(src, '  return state;\n}\n\nexport { SECTIONS',
-      '  applyWeeklyPlan(root, state.care_plan?.weekly_plan);\n  return state;\n}\n\nexport { SECTIONS', 'form-hydrate');
+      '  applyWeeklyPlan(root, state.care_plan?.weekly_plan, state.care_plan?.orientation_mode);\n  return state;\n}\n\nexport { SECTIONS', 'form-hydrate');
   });
   patch('core/app-shell.js', src => {
     src = once(src, "import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';",
       "import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';\n" +
-      "import { mountWeeklyPlan, resetWeeklyPlan, weeklyPlanError, weeklyPlanText } from './lib/weekly-care-plan.js';", 'shell-import');
+      "import { mountWeeklyPlan, resetWeeklyPlan, weeklyPlanError, weeklyPlanText, orientationMode } from './lib/weekly-care-plan.js';", 'shell-import');
     src = once(src, "const appointmentScreen = document.querySelector('[data-screen=\"appointment\"]');",
       "const appointmentScreen = document.querySelector('[data-screen=\"appointment\"]');\nmountWeeklyPlan(appointmentScreen);", 'mount');
     src = once(src, 'function resetWizard(selectedMotherId = currentPatientId) {\n  clearTimeout(encounterAutosaveTimer);',
@@ -52,13 +58,13 @@ export function applyWeeklyCarePlan(resolved, sourceByPath, root) {
     src = once(src, "const hasPlan = Boolean(String(plan.objectives || '').trim() || String(plan.instructions || '').trim() || (Array.isArray(plan.libraryItems) && plan.libraryItems.length));",
       "const hasPlan = Boolean(String(plan.objectives || '').trim() || String(plan.instructions || '').trim() || (Array.isArray(plan.libraryItems) && plan.libraryItems.length) || plan.weekly_plan?.weeks?.some(item => item.instructions?.trim()));", 'summary');
     src = once(src, '  const clinicalState = collectEncounterDraft(appointmentScreen);\n  const ident = clinicalState.identification || {};',
-      '  const clinicalState = collectEncounterDraft(appointmentScreen);\n  const weeklyError = weeklyPlanError(clinicalState.care_plan?.weekly_plan);\n  if (weeklyError) throw new Error(weeklyError);\n  const ident = clinicalState.identification || {};', 'validation');
-    src = once(src, '\n\nPróximo acompanhamento: \${draft.care_plan?.followup || \'a combinar\'}',
-      '\n\n\${weeklyPlanText(draft.care_plan?.weekly_plan)}\n\nPróximo acompanhamento: \${draft.care_plan?.followup || \'a combinar\'}', 'message');
+      '  const clinicalState = collectEncounterDraft(appointmentScreen);\n  const weeklyError = weeklyPlanError(clinicalState.care_plan?.weekly_plan, clinicalState.care_plan?.orientation_mode);\n  if (weeklyError) throw new Error(weeklyError);\n  const ident = clinicalState.identification || {};', 'validation');
+    src = once(src, "Orientações:\n${draft.care_plan?.instructions || ''}",
+      "Orientações:\n${orientationMode(draft.care_plan?.orientation_mode, draft.care_plan?.weekly_plan) === 'weekly' ? weeklyPlanText(draft.care_plan?.weekly_plan, 'weekly') : draft.care_plan?.instructions || ''}", 'message');
     src = once(src, 'function pdfEncounterData() {\n  const draft = collectEncounterDraft(appointmentScreen);\n  const selectedBabies = selectedWizardBabies();',
       'function pdfEncounterData(draft = collectEncounterDraft(appointmentScreen), selectedBabies = selectedWizardBabies()) {', 'pdf-record');
     src = once(src, "objectives: draft.care_plan?.objectives || '', instructions: draft.care_plan?.instructions || '', followup: draft.care_plan?.followup || 'A combinar', babySummaries",
-      "objectives: draft.care_plan?.objectives || '', instructions: draft.care_plan?.instructions || '', weeklyPlan: draft.care_plan?.weekly_plan || null, followup: draft.care_plan?.followup || 'A combinar', babySummaries", 'pdf-payload');
+      "objectives: draft.care_plan?.objectives || '', instructions: draft.care_plan?.instructions || '', weeklyPlan: draft.care_plan?.weekly_plan || null, orientationMode: draft.care_plan?.orientation_mode || null, followup: draft.care_plan?.followup || 'A combinar', babySummaries", 'pdf-payload');
     src = once(src, 'async function printPlan() {\n  const patient = selectedWizardPatient();',
       'async function printPlan({ encounter = null, patientOverride = null, babiesOverride = null } = {}) {\n  const patient = patientOverride || selectedWizardPatient();\n  const draft = encounter || collectEncounterDraft(appointmentScreen);\n  const babies = babiesOverride || selectedWizardBabies();', 'print-options');
     src = once(src, 'patient: patient || {}, encounter: pdfEncounterData()',
@@ -82,9 +88,13 @@ export function applyWeeklyCarePlan(resolved, sourceByPath, root) {
   });
   patch('core/lib/pdf-service.js', src => {
     src = once(src, 'function latin1Bytes(value) {',
-      "import { weeklyPlanPdfSections } from './weekly-care-plan.js';\n\nfunction latin1Bytes(value) {", 'pdf-import');
+      "import { weeklyPlanPdfSections, orientationMode } from './weekly-care-plan.js';\n\nfunction latin1Bytes(value) {", 'pdf-import');
+    src = once(src, "    { title: 'Orientações e condutas', lines: [encounter.instructions || 'Não informado'] },",
+      "    ...(orientationMode(encounter.orientationMode, encounter.weeklyPlan) === 'weekly' ? [] : [{ title: 'Orientações e condutas', lines: [encounter.instructions || 'Não informado'] }]),", 'pdf apenas modalidade escolhida');
+    src = once(src, 'if (text && !encounter?.objectives && !encounter?.instructions)',
+      'if (text && !encounter?.objectives && !encounter?.instructions && !encounter?.weeklyPlan)', 'pdf texto legado');
     src = once(src, '  return sections;\n}\n\nconst THEMES',
-      '  sections.splice(sections.length - 1, 0, ...weeklyPlanPdfSections(encounter.weeklyPlan));\n  return sections;\n}\n\nconst THEMES', 'pdf-sections');
+      '  sections.splice(sections.length - 1, 0, ...weeklyPlanPdfSections(encounter.weeklyPlan, encounter.orientationMode));\n  return sections;\n}\n\nconst THEMES', 'pdf-sections');
     const from = src.indexOf('function paginateSections(');
     const to = src.indexOf('\nexport function createCarePlanPdf(', from);
     if (from < 0 || to < 0) throw new Error('weekly-plan: paginador canônico ausente');

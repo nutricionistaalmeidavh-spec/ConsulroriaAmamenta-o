@@ -13,3 +13,14 @@
 .weekly-care-entry textarea{width:100%;min-height:100px;resize:vertical}
 .weekly-care-plan [data-weekly-add]{min-height:42px}
 @media(max-width:600px){.weekly-care-entry{padding:12px}.weekly-care-entry textarea{font-size:16px}}
+
+/* Escolha de modalidade no próprio fluxo, sem redesenho da Etapa 6. */
+.care-orientation-selector{border:0;padding:0;margin:14px 0 16px;min-width:0}
+.care-orientation-selector legend{padding:0;margin-bottom:8px;font-size:.9rem;font-weight:650}
+.care-orientation-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.care-orientation-options label{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:1px solid #e6dde4;border-radius:11px;padding:8px 10px;background:#fff;cursor:pointer;font-size:.88rem;font-weight:600;text-align:center}
+.care-orientation-options label:has(input:checked){border-color:#98779f;background:#f6f0f7;color:#523a5a}
+.care-orientation-options input{accent-color:#755786;margin:0;flex:none}
+.care-orientation-options label:focus-within{outline:2px solid #98779f;outline-offset:2px}
+[data-single-care-panel][hidden],.weekly-care-plan[hidden]{display:none!important}
+@media(max-width:380px){.care-orientation-options label{font-size:.8rem;padding:8px 6px}}
