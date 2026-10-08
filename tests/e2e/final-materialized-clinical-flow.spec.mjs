@@ -94,8 +94,24 @@ test('final materialized build completes the critical clinical flow through real
   const instructions = uniqueLabel('Final instructions');
   await page.locator('[data-wizard-step="6"] [data-encounter-field="objectives"]').fill(objective);
   await page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]').fill(instructions);
+  const weeklyInstructions = Array.from({ length: 4 }, (_, i) => uniqueLabel('Week-' + (i + 1)));
+  for (let i = 0; i < weeklyInstructions.length; i += 1) {
+    await page.locator('[data-weekly-add]').click();
+    await page.locator('[data-weekly-entry]').nth(i).locator('[data-weekly-instructions]').fill(weeklyInstructions[i]);
+  }
+  await page.locator('[data-weekly-start]').fill('2026-10-08');
+  await expect(page.locator('[data-weekly-entry]')).toHaveCount(4);
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-wizard-step="7"]')).toBeVisible();
+  const pdfDownload = page.waitForEvent('download');
+  await page.locator('[data-action="print-plan"]').click();
+  const initialPdf = await pdfDownload;
+  const initialPdfStream = await initialPdf.createReadStream();
+  const pdfChunks = [];
+  for await (const chunk of initialPdfStream) pdfChunks.push(chunk);
+  const pdfText = Buffer.concat(pdfChunks).toString('latin1');
+  for (const n of [1, 2, 3, 4]) expect(pdfText).toContain('Orientações - Semana ' + n);
+  for (const instruction of weeklyInstructions) expect(pdfText).toContain(instruction);
 
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName, { timeout: 20_000 });
@@ -112,6 +128,9 @@ test('final materialized build completes the critical clinical flow through real
   expect(encounter?.clinical_note).toBe(clinicalNote);
   expect(encounter?.care_plan?.objectives).toBe(objective);
   expect(encounter?.care_plan?.instructions).toBe(instructions);
+  expect(encounter?.care_plan?.weekly_plan?.start_date).toBe('2026-10-08');
+  expect(encounter?.care_plan?.weekly_plan?.weeks?.map(w => w.instructions)).toEqual(weeklyInstructions);
+  await expect(page.locator('[data-action="print-care-plan-encounter"]:visible').first()).toBeVisible();
 
   const [appointment] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
   expect(appointment?.status).toBe('Realizado');
