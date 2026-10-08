@@ -1,0 +1,15 @@
+
+/* Extensão local à Etapa 6; não altera a timeline canônica V5 de peso. */
+.weekly-care-plan{margin-top:20px;border-top:1px solid var(--lac-border,#e6e1e5);padding-top:18px}
+.weekly-care-plan h3{margin:0 0 6px;font-size:1rem}
+.weekly-care-plan p{margin:0 0 14px;line-height:1.5}
+.weekly-care-controls{margin:12px 0}
+.weekly-care-entries{display:grid;gap:12px;margin:12px 0}
+.weekly-care-entry{border:1px solid #e6dde4;border-radius:14px;padding:14px;background:#fff}
+.weekly-care-entry-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px}
+.weekly-care-entry-head div{display:grid;gap:3px;min-width:0}
+.weekly-care-entry-head small{font-size:.78rem;color:#686168}
+.weekly-care-entry .field{margin:0}
+.weekly-care-entry textarea{width:100%;min-height:100px;resize:vertical}
+.weekly-care-plan [data-weekly-add]{min-height:42px}
+@media(max-width:600px){.weekly-care-entry{padding:12px}.weekly-care-entry textarea{font-size:16px}}
