@@ -6,6 +6,7 @@ import { handleAtomicAppointmentEncounterStart } from './appointment-encounter-a
 import { handleAtomicClinicalEncounterFinalization } from './encounter-finalization-atomic-runtime.js';
 import { handleClinicalNoteVersioning } from './clinical-note-versioning-runtime.js';
 import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
+import { handleWeightCorrectionRuntime } from './weight-correction-runtime.js';
 import { handleCloudflareRelationGuard } from './cloudflare-relation-guard.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
@@ -64,6 +65,9 @@ export async function handleCloudflareClinicalRuntime(request, env) {
 
   const storageResponse = await handleConsistentStorageMutation(request, env, url);
   if (storageResponse) return storageResponse;
+
+  const weightRevisionResponse = await handleWeightCorrectionRuntime(request, env, url);
+  if (weightRevisionResponse) return weightRevisionResponse;
 
   const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
   if (growthResponse) return growthResponse;
