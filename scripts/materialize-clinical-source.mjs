@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { normalizeCloudflareFrontendSource } from './materialize-cloudflare-frontend.mjs';
+import { applyWeeklyCarePlan } from './lib/weekly-care-plan-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -347,6 +348,8 @@ for (const [outputPath, bytes] of resolved) {
     sourceByPath.set(outputPath, `${sourceByPath.get(outputPath)}+frontend-cloudflare-cutover`);
   }
 }
+
+applyWeeklyCarePlan(resolved, sourceByPath, ROOT);
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
