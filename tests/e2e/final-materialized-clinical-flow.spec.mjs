@@ -91,7 +91,7 @@ test('final materialized build completes the critical clinical flow through real
   await expect(page.locator('[data-wizard-step="6"]')).toBeVisible();
 
   const objective = uniqueLabel('Final objective');
-  const instructions = uniqueLabel('Final instructions');
+  const instructions = uniqueLabel('Final instructions') + ' ' + 'Orientações clínicas completas para a família. '.repeat(250) + ' FIM_UNICO_2026';
   await page.locator('[data-wizard-step="6"] [data-encounter-field="objectives"]').fill(objective);
   await page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]').fill(instructions);
   const modeSingle=page.locator('[name="care-orientation-mode"][value="single"]');
@@ -108,7 +108,9 @@ test('final materialized build completes the critical clinical flow through real
   const singleChunks=[];
   for await (const chunk of singleStream) singleChunks.push(chunk);
   const singleText=Buffer.concat(singleChunks).toString('latin1');
-  expect(singleText).toContain(instructions);
+  expect(singleText).toContain('FIM_UNICO_2026');
+  expect(singleText).toContain('Final instructions');
+  expect(singleText).toContain('Documento 2/');
   expect(singleText).not.toContain('Orientações - Semana 1');
   await page.locator('[data-wizard-prev]').click();
   await expect(page.locator('[data-wizard-step="6"]')).toBeVisible();
@@ -118,7 +120,8 @@ test('final materialized build completes the critical clinical flow through real
   await modeSingle.check();
   await expect(page.locator('[data-wizard-step="6"] [data-encounter-field="instructions"]')).toHaveValue(instructions);
   await modeWeekly.check();
-  const weeklyInstructions = Array.from({ length: 4 }, (_, i) => uniqueLabel('Week-' + (i + 1)));
+  const weeklyInstructions = Array.from({ length: 4 }, (_, i) => uniqueLabel('Week-' + (i + 1)) + (i === 2 ? ' ' + 'Acompanhar a evolução com orientações detalhadas. '.repeat(180) + ' FIM_SEMANA_EXTENSA_2026' : ''));
+  await expect(page.locator('[data-weekly-entry]')).toHaveCount(0);
   for (let i = 0; i < weeklyInstructions.length; i += 1) {
     await page.locator('[data-weekly-add]').click();
     await page.locator('[data-weekly-entry]').nth(i).locator('[data-weekly-instructions]').fill(weeklyInstructions[i]);
@@ -135,7 +138,13 @@ test('final materialized build completes the critical clinical flow through real
   for await (const chunk of initialPdfStream) pdfChunks.push(chunk);
   const pdfText = Buffer.concat(pdfChunks).toString('latin1');
   for (const n of [1, 2, 3, 4]) expect(pdfText).toContain('Orientações - Semana ' + n);
-  for (const instruction of weeklyInstructions) expect(pdfText).toContain(instruction);
+  for (const [index, instruction] of weeklyInstructions.entries()) {
+    if (index === 2) {
+      expect(pdfText).toContain('FIM_SEMANA_EXTENSA_2026');
+      expect(pdfText).toContain('Week-3');
+    } else expect(pdfText).toContain(instruction);
+  }
+  expect(pdfText).not.toContain('FIM_UNICO_2026');
 
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName, { timeout: 20_000 });
