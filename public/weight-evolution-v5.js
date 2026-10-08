@@ -20,7 +20,7 @@ function dateKey(value){
 
 function buildRows({baby=null,weights=[],measurements=[]}={}){
   const rows=[];
-  const seen=new Set();
+  const seen=new Map();
   const birthWeight=Number(baby?.birth_weight_g);
   const birthDate=String(baby?.birth_date||'').trim();
 
@@ -28,22 +28,28 @@ function buildRows({baby=null,weights=[],measurements=[]}={}){
     const day=birthDate.slice(0,10);
     const measuredAt=new Date(`${day}T12:00:00Z`).toISOString();
     const key=`${day}|${birthWeight}`;
-    seen.add(key);
-    rows.push({measuredAt,weight:birthWeight,birth:true});
+    const birthRow={measuredAt,weight:birthWeight,birth:true,records:[]};
+    rows.push(birthRow);
+    seen.set(key,birthRow);
   }
 
   const source=[
-    ...asArray(weights),
-    ...asArray(measurements).filter(item=>item?.weight_g!=null),
+    ...asArray(weights).filter(item=>!item?.voided_at).map(item=>({...item,sourceTable:'weights'})),
+    ...asArray(measurements).filter(item=>item?.weight_g!=null&&!item?.weight_voided_at).map(item=>({...item,sourceTable:'growth_measurements'})),
   ];
   for(const item of source){
     const weight=Number(item?.weight_g);
     const day=dateKey(item?.measured_at);
     if(!day||!Number.isFinite(weight)||weight<=0)continue;
     const key=`${day}|${weight}`;
-    if(seen.has(key))continue;
-    seen.add(key);
-    rows.push({measuredAt:item.measured_at,weight,birth:false});
+    if(seen.has(key)){
+      const existing=seen.get(key);
+      if(!existing.birth&&item.id&&existing.records.length<8)existing.records.push({table:item.sourceTable,id:String(item.id)});
+      continue;
+    }
+    const row={measuredAt:item.measured_at,weight,birth:false,records:item.id?[{table:item.sourceTable,id:String(item.id)}]:[]};
+    seen.set(key,row);
+    rows.push(row);
   }
 
   return rows.sort((a,b)=>new Date(a.measuredAt)-new Date(b.measuredAt));
@@ -83,7 +89,25 @@ function mount({host,baby=null,weights=[],measurements=[]}={}){
   const current=rows.at(-1)?.weight??null;
   const saldo=Number.isFinite(birth)&&Number.isFinite(current)?current-birth:null;
   const saldoPct=Number.isFinite(saldo)&&birth?saldo/birth*100:null;
-  const signature=rows.map(row=>`${dateKey(row.measuredAt)}:${row.weight}:${row.birth}`).join('|');
+  host.__gfV5Rows=rows;
+  host.__gfV5BabyId=baby?.id||null;
+  if(host.addEventListener&&!host.__gfV5EditBound){
+    const activate=(event)=>{
+      const entry=event.target?.closest?.('[data-gf-edit-row]');
+      if(!entry||!host.contains?.(entry))return;
+      const row=host.__gfV5Rows?.[Number(entry.dataset.gfEditRow)];
+      if(!row?.records?.length||!host.__gfV5BabyId)return;
+      window.dispatchEvent?.(new CustomEvent('debora:weight-correction',{detail:{
+        babyId:host.__gfV5BabyId,weight:row.weight,measuredAt:row.measuredAt,records:row.records
+      }}));
+    };
+    host.addEventListener('click',activate);
+    host.addEventListener('keydown',event=>{
+      if(event.key==='Enter'||event.key===' '){if(event.target?.matches?.('[data-gf-edit-row]')){event.preventDefault();activate(event)}}
+    });
+    host.__gfV5EditBound=true;
+  }
+  const signature=rows.map(row=>`${dateKey(row.measuredAt)}:${row.weight}:${row.birth}:${row.records?.map(r=>r.table+':'+r.id).join(',')}`).join('|');
   if(host.dataset.v5Signature===signature&&host.dataset.v5Enhanced==='1')return true;
 
   const timeline=rows.map((row,index)=>{
@@ -100,7 +124,7 @@ function mount({host,baby=null,weights=[],measurements=[]}={}){
     }
     return `<div class="gf-v5-timeline-row ${row.birth?'is-birth':''} ${isLatest?'is-latest':''}">
       <div class="gf-v5-marker" aria-hidden="true"><span></span></div>
-      <div class="gf-v5-entry">
+      <div class="gf-v5-entry" ${!row.birth&&row.records?.length?`role="button" tabindex="0" title="Toque para corrigir esta pesagem" aria-label="Corrigir pesagem de ${escapeHtml(formatDate(row.measuredAt))}, ${fmtInt(row.weight)} gramas" data-gf-edit-row="${index}"`:''}>
         <div class="gf-v5-entry-top"><span class="gf-v5-date">${escapeHtml(formatDate(row.measuredAt))}</span><strong>${fmtInt(row.weight)} g</strong></div>
         <div class="gf-v5-entry-detail">${detail}</div>
         ${secondary?`<small>${escapeHtml(secondary)}</small>`:''}
