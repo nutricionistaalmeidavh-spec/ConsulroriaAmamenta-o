@@ -1,3 +1,4 @@
+import './weight-correction-feature.js';
 import './weight-evolution-v5.js';
 
 const RG_PATIENT=/^#\/patient\/(?!form(?:\/|$))([^/?#]+)(?:[/?#]|$)/i;
