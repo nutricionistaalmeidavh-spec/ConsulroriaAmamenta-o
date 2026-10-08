@@ -44,15 +44,21 @@ function buildRows({baby=null,weights=[],measurements=[]}={}){
     const key=`${day}|${weight}`;
     if(seen.has(key)){
       const existing=seen.get(key);
-      if(!existing.birth&&item.id&&existing.records.length<8)existing.records.push({table:item.sourceTable,id:String(item.id)});
+      if(!existing.birth&&item.id&&existing.records.length<8)existing.records.push({table:item.sourceTable,id:String(item.id),measuredAt:item.measured_at});
       continue;
     }
-    const row={measuredAt:item.measured_at,weight,birth:false,records:item.id?[{table:item.sourceTable,id:String(item.id)}]:[]};
+    const row={measuredAt:item.measured_at,weight,birth:false,records:item.id?[{table:item.sourceTable,id:String(item.id),measuredAt:item.measured_at}]:[]};
     seen.set(key,row);
     rows.push(row);
   }
 
   return rows.sort((a,b)=>new Date(a.measuredAt)-new Date(b.measuredAt));
+}
+
+function canEditRow(row){
+  if(row.birth||!row.records?.length)return false;
+  if(new Set(row.records.map(record=>record.table)).size!==row.records.length)return false;
+  return row.records.every(record=>Date.parse(record.measuredAt)===Date.parse(row.measuredAt));
 }
 
 function tone(delta){return delta>0?'gain':delta<0?'loss':'neutral'}
@@ -96,7 +102,7 @@ function mount({host,baby=null,weights=[],measurements=[]}={}){
       const entry=event.target?.closest?.('[data-gf-edit-row]');
       if(!entry||!host.contains?.(entry))return;
       const row=host.__gfV5Rows?.[Number(entry.dataset.gfEditRow)];
-      if(!row?.records?.length||!host.__gfV5BabyId)return;
+      if(!canEditRow(row)||!host.__gfV5BabyId)return;
       window.dispatchEvent?.(new CustomEvent('debora:weight-correction',{detail:{
         babyId:host.__gfV5BabyId,weight:row.weight,measuredAt:row.measuredAt,records:row.records
       }}));
@@ -124,7 +130,7 @@ function mount({host,baby=null,weights=[],measurements=[]}={}){
     }
     return `<div class="gf-v5-timeline-row ${row.birth?'is-birth':''} ${isLatest?'is-latest':''}">
       <div class="gf-v5-marker" aria-hidden="true"><span></span></div>
-      <div class="gf-v5-entry" ${!row.birth&&row.records?.length?`role="button" tabindex="0" title="Toque para corrigir esta pesagem" aria-label="Corrigir pesagem de ${escapeHtml(formatDate(row.measuredAt))}, ${fmtInt(row.weight)} gramas" data-gf-edit-row="${index}"`:''}>
+      <div class="gf-v5-entry" ${canEditRow(row)?`role="button" tabindex="0" title="Toque para corrigir esta pesagem" aria-label="Corrigir pesagem de ${escapeHtml(formatDate(row.measuredAt))}, ${fmtInt(row.weight)} gramas" data-gf-edit-row="${index}"`:''}>
         <div class="gf-v5-entry-top"><span class="gf-v5-date">${escapeHtml(formatDate(row.measuredAt))}</span><strong>${fmtInt(row.weight)} g</strong></div>
         <div class="gf-v5-entry-detail">${detail}</div>
         ${secondary?`<small>${escapeHtml(secondary)}</small>`:''}
