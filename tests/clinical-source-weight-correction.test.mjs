@@ -80,6 +80,14 @@ test('corrected fields cannot be updated through stale or cross-account selectio
   assert.equal(r.status,404);
   assert.equal(db.get('weights','old').voided_at,undefined);
 });
+test('ambiguous same-day duplicates cannot be changed as a bulk selection',async()=>{
+  const db=fixture();
+  db.put('weights','other-old','owner',{id:'other-old',baby_id:'baby',weight_g:3300,measured_at:'2026-09-01T15:00:00.000Z'});
+  const response=await post(db,{p_action:'correct',p_weight_ids:['old','other-old'],p_expected_day:'2026-09-01',p_expected_weight_g:3300,p_weight_g:3550,p_measured_at:'2026-09-02'});
+  assert.equal(response.status,400);
+  assert.equal(db.get('weights','old').weight_g,3300);
+});
+
 test('legacy weight records inherit ownership from the mother without tenant access leakage',async()=>{
   const db=fixture();
   db.put('mothers','mother','owner',{id:'mother',name:'Mãe legada'});
