@@ -85,10 +85,15 @@ test('patient quick actions remain canonical after workspace enhancement and exe
   expect(decodeURIComponent(lastRoute)).toContain(activeAddress);
   expect(decodeURIComponent(lastRoute)).not.toContain(cancelledAddress);
 
-  page.once('dialog', dialog => dialog.accept('3456'));
-  const weightCreated = page.waitForResponse(response => response.url().includes('/api/clinical/records/weights') && response.request().method() === 'POST');
+  await page.waitForFunction(() => Boolean(window.DeboraWeightCorrection?.openNew));
   await quick.locator('[data-action="add-weight"]').click();
+  await expect(page.locator('#wc-dialog')).toBeVisible();
+  await page.locator('[data-wc-weight]').fill('3456');
+  await page.locator('[data-wc-date]').fill('2026-09-10');
+  const weightCreated = page.waitForResponse(response => response.url().includes('/api/clinical/rpc/record_growth_measurement') && response.request().method() === 'POST');
+  await page.locator('#wc-dialog button[type="submit"]').click();
   expect((await weightCreated).ok()).toBeTruthy();
+  await expect(page.locator('#wc-dialog')).toHaveCount(0);
   const weights = await page.request.get(`/api/clinical/records/weights?baby_id=eq.${encodeURIComponent(patient.babies[0].id)}&order=measured_at.desc&limit=1`, { headers });
   expect(weights.ok()).toBeTruthy();
   expect(Number((await weights.json())[0]?.weight_g)).toBe(3456);
