@@ -20,6 +20,11 @@ export function normalizeWeeklyPlan(value) {
   };
 }
 
+export function orientationMode(value, weeklyPlan = null) {
+  if (value === 'single' || value === 'weekly') return value;
+  return normalizeWeeklyPlan(weeklyPlan) ? 'weekly' : 'single';
+}
+
 export function weekPeriodLabel(startDate, week) {
   const start = validStartDate(startDate);
   if (!start) return '';
@@ -30,9 +35,10 @@ export function weekPeriodLabel(startDate, week) {
   return fmt(begin) + ' a ' + fmt(end);
 }
 
-export function weeklyPlanError(value) {
+export function weeklyPlanError(value, mode = null) {
+  if (mode === 'single') return null;
   const plan = normalizeWeeklyPlan(value);
-  if (!plan) return null;
+  if (!plan) return mode === 'weekly' ? 'Adicione ao menos uma semana de orientações.' : null;
   if (!plan.start_date) return 'Informe a data inicial das orientações por semana.';
   if (plan.weeks.some(({ instructions }) => !instructions.trim())) {
     return 'Preencha ou remova as semanas sem orientações antes de finalizar.';
@@ -40,7 +46,8 @@ export function weeklyPlanError(value) {
   return null;
 }
 
-export function weeklyPlanText(value) {
+export function weeklyPlanText(value, mode = null) {
+  if (orientationMode(mode, value) === 'single') return '';
   const plan = normalizeWeeklyPlan(value);
   if (!plan) return '';
   return plan.weeks.filter(entry => entry.instructions.trim()).map(({ week, instructions }) => {
@@ -49,7 +56,8 @@ export function weeklyPlanText(value) {
   }).join('\n\n');
 }
 
-export function weeklyPlanPdfSections(value) {
+export function weeklyPlanPdfSections(value, mode = null) {
+  if (orientationMode(mode, value) === 'single') return [];
   const plan = normalizeWeeklyPlan(value);
   if (!plan) return [];
   return plan.weeks.filter(entry => entry.instructions.trim()).map(({ week, instructions }) => ({
@@ -66,6 +74,22 @@ function esc(value) {
 }
 
 function sectionOf(root) { return root?.querySelector?.('[data-weekly-care-plan]') || null; }
+
+export function selectedOrientationMode(root) {
+  const selected = root?.querySelector?.('[name="care-orientation-mode"]:checked')?.value;
+  return selected === 'weekly' ? 'weekly' : 'single';
+}
+
+function setOrientationMode(root, mode, weeklyPlan = null) {
+  const active = orientationMode(mode, weeklyPlan);
+  for (const radio of root?.querySelectorAll?.('[name="care-orientation-mode"]') || []) {
+    radio.checked = radio.value === active;
+  }
+  const single = root?.querySelector?.('[data-single-care-panel]');
+  if (single) single.hidden = active !== 'single';
+  const weekly = sectionOf(root);
+  if (weekly) weekly.hidden = active !== 'weekly';
+}
 
 export function collectWeeklyPlan(root) {
   const section = sectionOf(root);
@@ -108,13 +132,25 @@ function render(root, value) {
   if (addButton) addButton.textContent = weeks.length ? '+ Adicionar outra semana' : '+ Adicionar semana';
 }
 
-export function applyWeeklyPlan(root, value) { render(root, value); }
-export function resetWeeklyPlan(root) { render(root, null); }
+export function applyWeeklyPlan(root, value, mode = null) {
+  render(root, value);
+  setOrientationMode(root, mode, value);
+}
+export function resetWeeklyPlan(root) {
+  render(root, null);
+  setOrientationMode(root, 'single');
+}
 
 export function mountWeeklyPlan(root) {
   const section = sectionOf(root);
   if (!section || section.dataset.weeklyMounted === '1') return;
   section.dataset.weeklyMounted = '1';
+  const selector = root.querySelector('[data-care-orientation-selector]');
+  selector?.addEventListener('change', event => {
+    if (event.target?.name !== 'care-orientation-mode') return;
+    setOrientationMode(root, event.target.value, collectWeeklyPlan(root));
+  });
+  setOrientationMode(root, 'single');
   section.addEventListener('click', event => {
     const add = event.target.closest('[data-weekly-add]');
     const remove = event.target.closest('[data-weekly-remove]');
