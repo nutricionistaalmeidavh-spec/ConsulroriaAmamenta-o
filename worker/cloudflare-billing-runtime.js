@@ -815,6 +815,14 @@ async function billingStatusForOwner(env, user, environment = 'production') {
 }
 
 async function handleCheckoutEvent(env, incoming, environment) {
+  // One Asaas account can send every checkout event to several registered webhooks.
+  // Foreign checkouts are NOT an error for this clinic. Acknowledge immediately,
+  // without querying the Asaas API or touching the clinical D1, so one storefront
+  // QA session cannot penalize the clinic's webhook queue.
+  const externalRef = String(incoming?.checkout?.externalReference || '');
+  if (externalRef && !parseCheckoutReference(externalRef)) {
+    return json(200, { status: 'ignored_foreign_checkout', environment });
+  }
   const id = String(incoming.checkout?.id || '');
   if (!/^[A-Za-z0-9_-]{3,128}$/.test(id)) return json(400, { error: 'invalid_checkout_id' });
   const config = asaasConfig(env, environment);
@@ -823,7 +831,13 @@ async function handleCheckoutEvent(env, incoming, environment) {
   const verifiedWebhookCheckout = String(payload?.id || '') === id && Boolean(payload?.status);
   if (!checkout) {
     const { response, payload: fetched } = await asaasFetch(env, `/checkouts/${encodeURIComponent(id)}`, {}, environment);
+    // A deleted/unmapped checkout in a shared provider account is not a clinic
+    // delivery failure. Other upstream failures still fail closed for retries.
+    if (response?.status === 404) return json(200, { status: 'ignored_unmapped_checkout', environment });
     if (!response?.ok || String(fetched?.id || '') !== id) return json(502, { error: 'asaas_checkout_verification_failed' });
+    if (fetched?.externalReference && !parseCheckoutReference(fetched.externalReference)) {
+      return json(200, { status: 'ignored_foreign_checkout', environment });
+    }
     payload = fetched;
     const requestId = parseCheckoutReference(payload.externalReference);
     if (requestId) {
