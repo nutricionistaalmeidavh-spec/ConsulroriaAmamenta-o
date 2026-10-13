@@ -37,6 +37,9 @@ jobs:
       - name: Verify plan billing idempotency and finance safety (P0)
         run: node --test tests/package-billing-reconciliation-p0.test.mjs
 
+      - name: Validate protected financial card cancellation
+        run: node --test tests/financial-card-cancel.test.mjs
+
       - name: Run accumulated runtime and integrity regressions without rebuilding
         run: |
           node --test \
