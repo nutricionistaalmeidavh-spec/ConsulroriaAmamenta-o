@@ -533,6 +533,12 @@ async function handleRpc(request, env, url) {
   }
 
   if (name === 'ensure_financial_entry_for_encounter') {
+    const linkedAppointment = p.p_appointment_id
+      ? await recordById(env, 'appointments', p.p_appointment_id, user.id) : null;
+    if (linkedAppointment && (['package_new','package_active'].includes(linkedAppointment.record?.billing_mode)
+      || linkedAppointment.record?.package_id)) {
+      return runtimeJson(409, { message: 'Este atendimento está vinculado a um plano e não pode gerar cobrança individual.' });
+    }
     const existing = (await scopedRows(env, 'financial_entries', user.id))
       .find((entry) => entry.record?.encounter_id === p.p_encounter_id && entry.record?.kind !== 'package');
     if (existing) return runtimeJson(200, existing.record);
@@ -556,6 +562,10 @@ async function handleRpc(request, env, url) {
     const appointment = await recordById(env, 'appointments', p.p_appointment_id, user.id);
     if (!appointment || !await recordOwnedByUser(env, 'appointments', appointment, user.id)) {
       return runtimeJson(404, { message: 'Agendamento não encontrado.' });
+    }
+    if (appointment.record?.billing_mode === 'package_new' && appointment.record?.package_id
+        && p.p_billing_mode !== 'package_new') {
+      return runtimeJson(409, { message: 'O plano já foi criado para este atendimento. Não é permitido converter a cobrança para individual sem cancelar o plano explicitamente.' });
     }
     let packageId = p.p_package_id || null;
     if (p.p_billing_mode === 'package_new') {
