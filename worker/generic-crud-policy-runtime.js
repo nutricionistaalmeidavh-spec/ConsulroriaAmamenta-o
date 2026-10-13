@@ -62,6 +62,13 @@ export function handleGenericCrudPolicy(request, url = new URL(request.url)) {
   }
 
   if (request.method === 'GET' || request.method === 'HEAD') return null;
+  // Financial deletion is an auditable state transition, never a hard DELETE.
+  if (table === 'financial_entries' && request.method === 'DELETE') {
+    return json(405, {
+      error: 'financial_entry_cancel_required',
+      message: 'Exclua o lançamento pelo fluxo protegido do Financeiro.',
+    });
+  }
   if (SPECIALIZED_RECORD_METHODS.get(table)?.has(request.method)) return null;
 
   if (GLOBAL_READ_TABLES.has(table) || DOMAIN_MANAGED_WRITE_TABLES.has(table)) {

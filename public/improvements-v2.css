@@ -260,3 +260,25 @@ svg {
     min-height: 44px;
   }
 }
+
+/* Financial card: discreet destructive action with mobile touch target. */
+.finance-card .finance-remove-action {
+  color: #9c4560;
+  border-color: #e8cbd3;
+  background: transparent;
+  min-height: 44px;
+  white-space: nowrap;
+  margin-inline-start: auto;
+}
+.finance-card .finance-remove-action:hover:not(:disabled) {
+  color: #762a42;
+  background: #fcf1f4;
+}
+.finance-card .finance-remove-action:focus-visible {
+  outline: 2px solid #9c4560;
+  outline-offset: 2px;
+}
+.finance-card .finance-remove-action:disabled {
+  opacity: .65;
+  cursor: wait;
+}

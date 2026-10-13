@@ -46,6 +46,7 @@ let currentDraftEncounterId = null;
 let currentAppointmentId = null;
 let encounterAutosaveTimer = null;
 let encounterAutosaveBusy = false;
+const financialCancellationPending = new Set();
 let encounterStartPromise = null;
 let wizardActionBusy = false;
 let pendingMediaFile = null;
@@ -658,8 +659,9 @@ function renderFinance() {
       : f.status === 'Pago'
         ? `${patientAction}<button data-action="undo-paid" data-finance-id="${f.id}">Desfazer pagamento</button>`
         : patientAction;
+    const removeAction = `<button type="button" class="finance-remove-action" data-action="cancel-finance" data-finance-id="${escapeHTML(f.id)}" aria-label="Excluir lançamento de ${escapeHTML(p?.mother?.name || 'paciente')}, ${escapeHTML(currency(f.amount_cents))}">Excluir</button>`;
     const due = f.due_at ? `<small>${overdue ? 'Venceu' : 'Vencimento'}: ${escapeHTML(dateLabel(f.due_at))}</small>` : '';
-    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span>${due}</div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(statusLabel)}</span><div class="agenda-actions">${actions}</div></article>`;
+    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span>${due}</div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(statusLabel)}</span><div class="agenda-actions">${actions}${removeAction}</div></article>`;
   }).join('') : '<div class="empty-live">Nenhum lançamento financeiro ativo.</div>';
 }
 
@@ -1337,6 +1339,49 @@ document.addEventListener('click', async (event) => {
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
     else if (action === 'followup-whatsapp') { const f = state.followups.find((x) => x.id === actionEl.dataset.followupId); await openWhatsApp(patientByMotherId(f?.mother_id), f?.notes || 'Olá! Como vocês estão hoje?'); }
     else if (action === 'new-finance') await createFinancialEntry();
+    else if (action === 'cancel-finance') {
+      const id = actionEl.dataset.financeId;
+      if (!id || financialCancellationPending.has(id)) return;
+      const finance = state.financial.find((item) => item.id === id && item.status !== 'Cancelado');
+      if (!finance) throw new Error('Este lançamento não está mais disponível. Atualize o Financeiro.');
+      if (finance.status === 'Pago' || finance.paid === true || finance.paid_at) {
+        toast('Desfaça primeiro a confirmação de pagamento antes de excluir este lançamento.');
+        return;
+      }
+      if (finance.status !== 'Pendente') throw new Error('Somente lançamentos pendentes podem ser excluídos.');
+      const patient = patientByMotherId(finance.mother_id);
+      const label = patient?.mother?.name || 'Paciente';
+      const packageWarning = finance.package_id
+        ? '\n\nEste lançamento está vinculado a um plano/pacote. Excluí-lo não cancela o plano e não desfaz pagamentos externos.'
+        : '';
+      if (!window.confirm(`Excluir o lançamento de ${label} no valor de ${currency(finance.amount_cents)}?\n\nEle sairá do Financeiro, mas ficará registrado para auditoria.${packageWarning}`)) return;
+      financialCancellationPending.add(id);
+      const originalLabel = actionEl.textContent;
+      actionEl.disabled = true;
+      actionEl.textContent = 'Excluindo…';
+      try {
+        const result = await appData.cancelFinancialEntry(id);
+        if (result?.status !== 'Cancelado' || String(result.id) !== String(id)) {
+          throw new Error('O banco não confirmou a exclusão do lançamento.');
+        }
+        const current = state.financial.find((item) => item.id === id);
+        if (current) current.status = 'Cancelado';
+        renderFinance();
+        try {
+          await refreshData();
+          toast(`Lançamento de ${label} excluído do Financeiro.`, 'success');
+        } catch (reloadError) {
+          console.warn('Financeiro: atualização após exclusão falhou', reloadError);
+          toast('Lançamento excluído. Atualize a tela para conferir os demais totais.', 'success');
+        }
+      } finally {
+        financialCancellationPending.delete(id);
+        if (actionEl.isConnected) {
+          actionEl.disabled = false;
+          actionEl.textContent = originalLabel;
+        }
+      }
+    }
     else if (action === 'mark-paid') {
       const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
       if (!finance) throw new Error('Lançamento financeiro não encontrado.');

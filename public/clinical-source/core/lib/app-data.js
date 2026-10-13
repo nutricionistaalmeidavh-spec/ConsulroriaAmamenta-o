@@ -273,6 +273,7 @@ export function createAppData(repos) {
       return repos.client.rest('consents', { method: 'POST', query: 'on_conflict=owner_id,mother_id,consent_type', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: rows });
     },
     listFinancialEntries: () => repos.financial.list({ query: 'select=*&order=created_at.desc' }),
+    cancelFinancialEntry: (id) => repos.client.rpc('cancel_financial_entry', { p_entry_id: id, p_confirmation: 'EXCLUIR' }),
     markFinancialPaid: (id, paymentMethod = 'Pix') => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: true, p_payment_method: paymentMethod || 'Pix' }),
     undoFinancialPaid: (id) => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: false, p_payment_method: '' })
   };
