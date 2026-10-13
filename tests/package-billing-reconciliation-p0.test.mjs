@@ -6,6 +6,8 @@ import { createLocalRuntime, credentials, userId } from './helpers/cloudflare-lo
 const billing = readFileSync('public/billing-v2.js','utf8');
 const shell = readFileSync('public/clinical-source/core/app-shell.js','utf8');
 const worker = readFileSync('worker/cloudflare-data-runtime.js','utf8');
+const materializer = readFileSync('scripts/materialize-clinical-source.mjs','utf8');
+const overlay = readFileSync('scripts/lib/package-billing-materialize.mjs','utf8');
 
 async function seed(db, table, id, record) {
   const now = new Date().toISOString();
@@ -91,4 +93,6 @@ test('P0/P1: visible package mode, stable request key, single-flight start and c
   assert.match(shell,/if \(wizardActionBusy\) return/);
   assert.match(shell,/nextButton\.disabled = true/);
   assert.match(worker,/não pode gerar cobrança individual/);
+  assert.match(materializer,/applyPackageBillingSafety\(resolved, sourceByPath\)/);
+  assert.match(overlay,/transformPackageBillingSafety/);
 });

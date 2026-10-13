@@ -5,6 +5,7 @@ import { unzipSync } from 'fflate';
 import { normalizeCloudflareFrontendSource } from './materialize-cloudflare-frontend.mjs';
 import { applyWeeklyCarePlan } from './lib/weekly-care-plan-materialize.mjs';
 import { applyWeightCorrection } from './lib/weight-correction-materialize.mjs';
+import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -352,6 +353,7 @@ for (const [outputPath, bytes] of resolved) {
 
 applyWeeklyCarePlan(resolved, sourceByPath, ROOT);
 applyWeightCorrection(resolved, sourceByPath);
+applyPackageBillingSafety(resolved, sourceByPath);
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
