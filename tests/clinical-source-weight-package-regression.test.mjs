@@ -60,6 +60,8 @@ test('three concurrent patient-plan remounts leave exactly one plan card',async(
         dataset:{},
         className:'',
         innerHTML:'',
+        setAttribute(){},
+        removeAttribute(){},
         querySelector(){return null},
         remove(){const index=hosts.indexOf(this);if(index>=0)hosts.splice(index,1)}
       };

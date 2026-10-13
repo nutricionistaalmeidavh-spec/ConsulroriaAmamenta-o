@@ -46,6 +46,8 @@ let currentDraftEncounterId = null;
 let currentAppointmentId = null;
 let encounterAutosaveTimer = null;
 let encounterAutosaveBusy = false;
+let encounterStartPromise = null;
+let wizardActionBusy = false;
 let pendingMediaFile = null;
 let appStarted = false;
 const state = { patients: [], appointments: [], encounters: [], followups: [], financial: [] };
@@ -719,7 +721,7 @@ function setActiveEncounterIds(encounterId, appointmentId) {
   }
   setEncounterIdentityLock(Boolean(currentDraftEncounterId || currentAppointmentId));
 }
-async function ensureEncounterStarted() {
+async function createOrResumeEncounter() {
   if (currentDraftEncounterId && currentAppointmentId) return { encounter_id: currentDraftEncounterId, appointment_id: currentAppointmentId };
   const patient = selectedWizardPatient();
   if (!patient) throw new Error('Selecione uma paciente antes de iniciar o atendimento.');
@@ -763,6 +765,14 @@ async function ensureEncounterStarted() {
   setActiveEncounterIds(result.encounter_id, result.appointment_id);
   await window.DeboraBilling?.bindAppointment?.(patient.mother.id, result.appointment_id, result.encounter_id, billingSelection);
   return result;
+}
+async function ensureEncounterStarted() {
+  if (currentDraftEncounterId && currentAppointmentId) return { encounter_id: currentDraftEncounterId, appointment_id: currentAppointmentId };
+  if (encounterStartPromise) return encounterStartPromise;
+  const pending = createOrResumeEncounter();
+  encounterStartPromise = pending;
+  try { return await pending; }
+  finally { if (encounterStartPromise === pending) encounterStartPromise = null; }
 }
 function scheduleEncounterAutosave() {
   if (!currentDraftEncounterId || encounterAutosaveBusy) return;
@@ -1259,6 +1269,10 @@ document.addEventListener('click', async (event) => {
     }
     if (event.target.closest('[data-wizard-close]')) navigate(previousScreen || 'home');
     if (event.target.closest('[data-wizard-next]')) {
+      if (wizardActionBusy) return;
+      const nextButton = event.target.closest('[data-wizard-next]');
+      wizardActionBusy = true;
+      nextButton.disabled = true;
       try {
         if (wizardStep < 7) {
           if (wizardStep === 1) await ensureEncounterStarted();
@@ -1266,6 +1280,10 @@ document.addEventListener('click', async (event) => {
           wizardStep += 1; renderWizard();
         } else await finalizeEncounter();
       } catch (error) { reportError(error); }
+      finally {
+        wizardActionBusy = false;
+        if (nextButton.isConnected) nextButton.disabled = false;
+      }
     }
     if (event.target.closest('[data-wizard-prev]')) { if (wizardStep > 1) { wizardStep -= 1; renderWizard(); } }
     return;

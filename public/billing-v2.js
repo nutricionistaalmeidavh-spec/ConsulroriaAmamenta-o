@@ -82,7 +82,11 @@ async function bvPackages(mid){
 }
 function bvInitial(mid,row,packages){
   const draft=bvReadDraft();
-  if(row)return{
+  if(row){
+    // An in-progress package selection belongs to this appointment until the server confirms it.
+    if(draft?.motherId===mid&&(!draft.appointmentId||draft.appointmentId===row.id)
+       &&draft.mode==='package_new'&&row.billing_mode!=='package_new')return draft;
+    return{
     mode:row.billing_mode||'individual',
     serviceLabel:row.service_label||bvAppointmentType(),
     paymentMethod:row.payment_method||'',
@@ -90,7 +94,8 @@ function bvInitial(mid,row,packages){
     packageId:row.package_id||null,
     packageTotalCents:row.package_total_cents,
     packageSessionsTotal:row.package_sessions_total
-  };
+    };
+  }
   if(draft?.motherId===mid)return draft;
   return{mode:packages.length?'package_active':'individual',serviceLabel:bvAppointmentType(),paymentMethod:'',valueCents:bvCents(bvValueInput()?.value||0),packageId:packages[0]?.id||null,packageTotalCents:null,packageSessionsTotal:null};
 }
@@ -102,7 +107,8 @@ function bvMarkup(selection,packages){
   '<div class="bv-grid">'+
     '<label class="field"><span>Tipo de cobrança</span><select data-bv-mode>'+
       '<option value="individual">Atendimento individual</option>'+
-      (packages.length?'<option value="package_active">Usar plano ativo</option>':'<option value="package_new">Novo plano / pacote</option>')+
+      (packages.length?'<option value="package_active">Usar plano ativo</option>':'')+
+      (!packages.length||selection.mode==='package_new'?'<option value="package_new">Novo plano / pacote</option>':'')+
     '</select></label>'+
     '<label class="field"><span>Serviço</span><select data-bv-service>'+
       ['Consulta inicial','Retorno','Acompanhamento','Pré-natal'].map(x=>'<option>'+x+'</option>').join('')+
@@ -179,7 +185,8 @@ async function bvBindAppointment(mid,appointmentId,encounterId,selection=null){
     p_payment_method:s.paymentMethod,
     p_package_total_cents:s.packageTotalCents,
     p_package_sessions_total:s.packageSessionsTotal,
-    p_package_id:s.packageId
+    p_package_id:s.packageId,
+    p_request_key:s.mode==='package_new'?'package-new:'+appointmentId:null
   });
   bvWriteDraft({motherId:mid,appointmentId,...s,at:Date.now()});
   bvLoadedAppointment=appointmentId;bvLoadedMother=mid;
@@ -240,16 +247,28 @@ async function bvMountPatientPlan(force=false){
     return;
   }
   const revision=++bvPatientPlanRevision;
-  const bundle=await bvPatientPackage(mid);
-  if(revision!==bvPatientPlanRevision||mid!==bvPatientMotherId())return;
-  const hosts=[...screen.querySelectorAll('[data-bv-patient-plan]')];
-  host=hosts.find(node=>node.dataset.motherId===mid)||hosts[0]||null;
-  hosts.forEach(node=>{if(node!==host)node.remove()});
   if(!host){
     const anchor=screen.querySelector('.baby-selector-wrap');if(!anchor)return;
     host=document.createElement('div');host.dataset.bvPatientPlan='';anchor.insertAdjacentElement('afterend',host);
   }
+  host.dataset.motherId=mid;
+  host.setAttribute('aria-busy','true');
+  host.innerHTML='<article class="detail-card bv-plan-card" role="status"><div class="section-heading"><div><span class="section-kicker">PLANO / PACOTE</span><h2>Carregando plano…</h2></div></div><p>Aguarde a confirmação dos dados.</p></article>';
+  let bundle;
+  try{bundle=await bvPatientPackage(mid)}
+  catch(error){
+    if(revision===bvPatientPlanRevision&&mid===bvPatientMotherId()){
+      host.innerHTML='<article class="detail-card bv-plan-card" role="alert"><h2>Não foi possível atualizar o plano</h2><p>Abra novamente a ficha para tentar novamente. Nenhum novo plano foi criado por esta consulta.</p></article>';
+      host.removeAttribute('aria-busy');
+    }
+    throw error;
+  }
+  if(revision!==bvPatientPlanRevision||mid!==bvPatientMotherId())return;
+  const hosts=[...screen.querySelectorAll('[data-bv-patient-plan]')];
+  host=hosts.find(node=>node.dataset.motherId===mid)||hosts[0]||host;
+  hosts.forEach(node=>{if(node!==host)node.remove()});
   host.dataset.motherId=mid;host.innerHTML=bvPlanMarkup(bundle);
+  host.removeAttribute('aria-busy');
   window.DeboraPackageCardGuard?.collapse?.();
 }
 function bvClosePlanDialog(){document.querySelector('[data-bv-plan-dialog]')?.remove()}
@@ -301,12 +320,12 @@ async function bvUsePlanItem(itemId,button){
     await bvMountPatientPlan(true);bvToast('Uso registrado no plano.','success');
   }catch(error){if(button)button.disabled=false;throw error}
 }
-function bvSchedule(){clearTimeout(bvTimer);bvTimer=setTimeout(()=>{bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}
+function bvSchedule(){if(bvTimer)return;bvTimer=setTimeout(()=>{bvTimer=null;bvMount().catch(e=>console.warn('Billing v2 mount',e));bvMountPatientPlan().catch(e=>console.warn('Plan mount',e))},120)}
 try{sessionStorage.removeItem('debora-billing-draft-v4')}catch{}
 window.DeboraBilling={beforeStart:bvBeforeStart,bindAppointment:bvBindAppointment,finalize:bvFinalize,getSelection:bvSelection,remount:()=>bvMount(true),remountPlan:()=>bvMountPatientPlan(true)};
 new MutationObserver(bvSchedule).observe(document.documentElement,{subtree:true,childList:true});
-window.addEventListener('hashchange',bvSchedule);
-window.addEventListener('focus',bvSchedule);
+window.addEventListener('hashchange',()=>{bvSchedule();bvMountPatientPlan(true).catch(e=>console.warn('Plan route refresh',e))});
+window.addEventListener('focus',()=>{bvSchedule();if(bvPatientMotherId())bvMountPatientPlan(true).catch(e=>console.warn('Plan focus refresh',e))});
 document.addEventListener('change',e=>{if(e.target.matches('[data-appointment-patient]'))setTimeout(()=>bvMount(true).catch(()=>{}),0)});
 document.addEventListener('click',e=>{const add=e.target.closest('[data-bv-add-item]'),use=e.target.closest('[data-bv-use-item]'),session=e.target.closest('[data-bv-use-session]'),close=e.target.closest('[data-bv-close-dialog]');if(session){e.preventDefault();bvUsePackageSession(session.dataset.bvUseSession,session).catch(err=>bvToast(err.message||String(err),'error'))}else if(add){e.preventDefault();bvOpenPlanDialog(add.dataset.bvAddItem)}else if(use){e.preventDefault();bvUsePlanItem(use.dataset.bvUseItem,use).catch(err=>bvToast(err.message||String(err),'error'))}else if(close){e.preventDefault();bvClosePlanDialog()}});
 document.addEventListener('submit',e=>{if(e.target.matches('[data-bv-plan-form]')){e.preventDefault();bvSubmitPlanItem(e.target).catch(err=>bvToast(err.message||String(err),'error'))}});

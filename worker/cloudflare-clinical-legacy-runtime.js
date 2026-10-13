@@ -645,6 +645,10 @@ async function handleRpc(request, env, url, name, user) {
   }
 
   if (name === 'ensure_financial_entry_for_encounter') {
+    const linkedAppointment = p.p_appointment_id ? await recordById(env, 'appointments', p.p_appointment_id, user.id) : null;
+    if (linkedAppointment && (['package_new','package_active'].includes(linkedAppointment.record?.billing_mode) || linkedAppointment.record?.package_id)) {
+      return runtimeJson(409, { message: 'Este atendimento está vinculado a um plano e não pode gerar cobrança individual.' });
+    }
     const existing = (await tableRows(env, 'financial_entries')).find((entry) => entry.record?.encounter_id === p.p_encounter_id && entry.record?.kind !== 'package');
     if (existing && await recordOwnedByUser(env, 'financial_entries', existing, user.id)) return runtimeJson(200, existing.record);
     return runtimeJson(200, await createOwnedRecord(env, 'financial_entries', { owner_id: user.id, mother_id: p.p_mother_id, appointment_id: p.p_appointment_id || null, encounter_id: p.p_encounter_id, description: p.p_description || 'Atendimento', amount_cents: Number(p.p_amount_cents || 0), due_at: p.p_due_at || null, status: 'Pendente', paid: false }, user));
@@ -658,6 +662,7 @@ async function handleRpc(request, env, url, name, user) {
   if (name === 'set_appointment_billing') {
     const appointment = await recordById(env, 'appointments', p.p_appointment_id);
     if (!appointment || !await recordOwnedByUser(env, 'appointments', appointment, user.id)) return runtimeJson(404, { message: 'Agendamento não encontrado.' });
+    if (appointment.record?.billing_mode === 'package_new' && appointment.record?.package_id && p.p_billing_mode !== 'package_new') return runtimeJson(409, { message: 'O plano já foi criado para este atendimento. Cancele explicitamente o plano antes de alterar a modalidade de cobrança.' });
     let packageId = p.p_package_id || null;
     if (p.p_billing_mode === 'package_new') {
       const created = await createOwnedRecord(env, 'care_packages', { owner_id: user.id, mother_id: appointment.record.mother_id, service_label: p.p_service_label || 'Plano', total_cents: Number(p.p_package_total_cents || 0), sessions_total: Number(p.p_package_sessions_total || 0), sessions_used: 0, status: 'active', payment_method: p.p_payment_method || '' }, user);
