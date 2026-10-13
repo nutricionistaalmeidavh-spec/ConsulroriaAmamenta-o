@@ -34,6 +34,9 @@ jobs:
       - name: Run complete clinical regression matrix on final artifact
         run: node --test tests/clinical-source-*.test.mjs
 
+      - name: Verify plan billing idempotency and finance safety (P0)
+        run: node --test tests/package-billing-reconciliation-p0.test.mjs
+
       - name: Run accumulated runtime and integrity regressions without rebuilding
         run: |
           node --test \
