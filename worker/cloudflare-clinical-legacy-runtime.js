@@ -655,6 +655,13 @@ async function handleRpc(request, env, url, name, user) {
   }
 
   if (name === 'set_financial_payment_state') {
+    const current = await recordById(env, 'financial_entries', p.p_entry_id);
+    if (!current || !await recordOwnedByUser(env, 'financial_entries', current, user.id)) {
+      return runtimeJson(404, { message: 'Lançamento não encontrado.' });
+    }
+    if (current.record?.status === 'Cancelado') {
+      return runtimeJson(409, { message: 'Lançamento excluído não pode receber alterações de pagamento.' });
+    }
     const row = await updateOwnedById(env, 'financial_entries', p.p_entry_id, { paid: Boolean(p.p_paid), status: p.p_paid ? 'Pago' : 'Pendente', payment_method: p.p_paid ? (p.p_payment_method || 'Pix') : '', paid_at: p.p_paid ? new Date().toISOString() : null }, user);
     return row ? runtimeJson(200, row) : runtimeJson(404, { message: 'Lançamento não encontrado.' });
   }

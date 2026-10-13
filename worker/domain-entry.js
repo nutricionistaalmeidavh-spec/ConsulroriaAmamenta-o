@@ -9,6 +9,7 @@ import { handleCloudflareGrowthRuntime } from './cloudflare-growth-runtime.js';
 import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
+import { handleFinancialEntryCancelRuntime } from './financial-entry-cancel-runtime.js';
 import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
@@ -226,6 +227,9 @@ export default {
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
     if (patientWriteResponse) return withNoIndex(patientWriteResponse);
+
+    const financialCancelResponse = await handleFinancialEntryCancelRuntime(request, env, url);
+    if (financialCancelResponse) return withNoIndex(financialCancelResponse);
 
     const atomicPackageSessionResponse = await handleAtomicPackageSessionRuntime(request, env, url);
     if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
