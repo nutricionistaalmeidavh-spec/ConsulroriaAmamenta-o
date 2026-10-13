@@ -16,6 +16,9 @@ test('Financeiro card excludes pending entry, preserves D1 history and blocks pa
   };
   const pending=await create(pendingLabel,'Pendente');
   const paid=await create(paidLabel,'Pago');
+  // The canonical finance projection is loaded at app startup, not on navigation.
+  await page.reload();
+  await expect(page.locator('[data-app-root]')).toBeVisible();
   await page.locator('[data-nav-target=finance]:visible').first().click();
   const pendingCard=page.locator('.finance-card').filter({hasText:pendingLabel});
   const paidCard=page.locator('.finance-card').filter({hasText:paidLabel});
