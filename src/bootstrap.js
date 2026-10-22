@@ -1,5 +1,6 @@
 import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
+import { enhanceClinicalNoteWithDateCorrection, encounterDateCorrectionCss } from './encounter-date-correction.js';
 
 window.__deboraUnzipSync = unzipSync;
 
@@ -274,7 +275,7 @@ async function boot() {
   );
 
   const shellUrl = moduleUrl(shell);
-  const clinicalUrl = moduleUrl(runtime['features/clinical-note-feature.js']);
+  const clinicalUrl = moduleUrl(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js']));
   const patientUrl = '/patient-fixes-v2.js';
   const css = runtime['styles.css'];
   const config = genericizeClinicalConfig(runtime['config.js']);
@@ -288,7 +289,7 @@ async function boot() {
     .replace('<script type="module" src="./app-shell.js"></script>', '')
     .replace(
       '</head>',
-      `<meta name="theme-color" content="#fbf7f4"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-512.png?v=1.12.1"><link rel="icon" type="image/png" href="/icon-192.png?v=1.12.1"><link rel="stylesheet" href="/growth-feature.css"><link rel="stylesheet" href="/member-feature.css"><link rel="stylesheet" href="/library-disabled.css"><link rel="stylesheet" href="/template-gallery.css"><link rel="stylesheet" href="/interaction-ui.css"><link rel="stylesheet" href="/improvements-v2.css"><link rel="stylesheet" href="/billing-v2.css"><link rel="stylesheet" href="/phase8-design.css"><link rel="stylesheet" href="/mobile-layout-integrity.css"><style>${runtime['features/clinical-note-feature.css']}</style><style>${runtime['features/patient-fixes.css']}</style></head>`,
+      `<meta name="theme-color" content="#fbf7f4"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-512.png?v=1.12.1"><link rel="icon" type="image/png" href="/icon-192.png?v=1.12.1"><link rel="stylesheet" href="/growth-feature.css"><link rel="stylesheet" href="/member-feature.css"><link rel="stylesheet" href="/library-disabled.css"><link rel="stylesheet" href="/template-gallery.css"><link rel="stylesheet" href="/interaction-ui.css"><link rel="stylesheet" href="/improvements-v2.css"><link rel="stylesheet" href="/billing-v2.css"><link rel="stylesheet" href="/phase8-design.css"><link rel="stylesheet" href="/mobile-layout-integrity.css"><style>${runtime['features/clinical-note-feature.css']}</style><style>${encounterDateCorrectionCss}</style><style>${runtime['features/patient-fixes.css']}</style></head>`,
     )
     .replace(
       '</body>',
