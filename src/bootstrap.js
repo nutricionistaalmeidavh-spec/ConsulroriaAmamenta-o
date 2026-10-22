@@ -2,6 +2,8 @@ import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 import { enhanceClinicalNoteWithDateCorrection, encounterDateCorrectionCss } from './encounter-date-correction.js';
 import { enhanceClinicalNoteWithRecovery } from './clinical-note-recovery.js';
+import { enhanceClinicalWizardWithRecovery } from './clinical-wizard-recovery.js';
+import wizardDraftStoreSource from './encrypted-wizard-drafts.js?raw';
 
 window.__deboraUnzipSync = unzipSync;
 
@@ -275,6 +277,8 @@ async function boot() {
     "navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => registration.update())",
   );
 
+  const wizardStorageUrl = moduleUrl(wizardDraftStoreSource);
+  shell = enhanceClinicalWizardWithRecovery(shell, wizardStorageUrl);
   const shellUrl = moduleUrl(shell);
   const clinicalUrl = moduleUrl(enhanceClinicalNoteWithRecovery(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js'])));
   const patientUrl = '/patient-fixes-v2.js';
