@@ -17,12 +17,13 @@ test('runtime P1 REST adapter composes with encounter date correction and encryp
   const p1Script = readFileSync('scripts/harden-p1-frontend.mjs', 'utf8');
   const restMatch = p1Script.match(/const noteRest = \`([\s\S]*?)\`;/);
   assert.ok(restMatch?.[1], 'P1 canonical REST adapter must exist');
+  const materializedRest = vm.runInNewContext('`' + restMatch[1] + '`');
   let withP1 = source;
   if (!withP1.includes('function cnClient()')) {
     const start = withP1.indexOf('async function cnRest(path,opt={}){');
     const end = withP1.indexOf('\nconst cnE=', start);
     assert.ok(start >= 0 && end > start, 'note REST replacement boundaries exist');
-    withP1 = withP1.slice(0, start) + restMatch[1] + withP1.slice(end);
+    withP1 = withP1.slice(0, start) + materializedRest + withP1.slice(end);
   }
   const dateRuntime = enhanceClinicalNoteWithDateCorrection(withP1);
   const finalRuntime = enhanceClinicalNoteWithRecovery(dateRuntime);
