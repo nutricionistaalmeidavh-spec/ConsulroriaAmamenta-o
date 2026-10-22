@@ -53,8 +53,8 @@ export function enhanceWizardShellWithRecovery(source, controllerModuleUrl) {
     "    finally { encounterAutosaveBusy = false; }",
     "    finally { encounterAutosaveBusy = false; if (encounterAutosaveAgain) { encounterAutosaveAgain = false; scheduleEncounterAutosave(); } }");
   result = replaceOnce(result,
-    "  applyEncounterDraft(appointmentScreen, encounter);\n  setEncounterIdentityLock(true);",
-    "  applyEncounterDraft(appointmentScreen, encounter);\n  await wizardRecovery.inspect();\n  setEncounterIdentityLock(true);");
+    "  applyEncounterDraft(appointmentScreen, encounter);\n  setEncounterIdentityLock(true);\n  wizardStep = 1;\n  renderWizard();",
+    "  applyEncounterDraft(appointmentScreen, encounter);\n  setEncounterIdentityLock(true);\n  wizardStep = 1;\n  renderWizard();\n  await wizardRecovery.inspect();");
   result = replaceOnce(result,
     "    renderWizard();\n  }\n  showScreen(screen);\n}",
     "    renderWizard();\n    if (!appointmentScreen?.querySelector('[data-wizard-recovery]')) await wizardRecovery.inspect();\n  }\n  showScreen(screen);\n}");
