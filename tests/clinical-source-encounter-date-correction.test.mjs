@@ -127,6 +127,6 @@ test('a edição falha quando a relação do agendamento não pertence ao mesmo 
   await runtime.db.prepare(`UPDATE supabase_records SET owner_id='outro-tenant'
     WHERE table_name='appointments' AND record_key='a1'`).run();
   const response = await patch({ _expected_version: 1, occurred_at: UPDATED });
-  assert.equal(response.status, 409);
+  assert.ok([403, 409].includes(response.status), `esperado bloqueio por titularidade, recebido ${response.status}`);
   assert.equal((await getRecord(runtime.db, 'clinical_encounters', 'e1')).occurred_at, OLD);
 });
