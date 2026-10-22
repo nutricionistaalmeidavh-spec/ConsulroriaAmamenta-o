@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { enhanceClinicalNoteWithRecovery } from '../src/clinical-note-recovery.js';
+import { enhanceClinicalNoteWithDateCorrection } from '../src/encounter-date-correction.js';
 
 // Materializers can temporarily expose the pre-versioned source during parallel tests.
 // Normalize in memory using the canonical hardener, without mutating shared files.
@@ -10,6 +11,28 @@ const hardener = readFileSync('scripts/harden-delivery3-versioning.mjs', 'utf8')
 const hardeningBlock = hardener.slice(hardener.indexOf('const stateLine ='), hardener.indexOf('function manifestWithNoteHash('));
 const harden = vm.runInNewContext(hardeningBlock + ';transform');
 const source = harden(readFileSync('public/clinical-source/features/clinical-note-feature.js', 'utf8'));
+
+
+test('runtime P1 REST adapter composes with encounter date correction and encrypted recovery', () => {
+  const p1Script = readFileSync('scripts/harden-p1-frontend.mjs', 'utf8');
+  const restMatch = p1Script.match(/const noteRest = \`([\s\S]*?)\`;/);
+  assert.ok(restMatch?.[1], 'P1 canonical REST adapter must exist');
+  let withP1 = source;
+  if (!withP1.includes('function cnClient()')) {
+    const start = withP1.indexOf('async function cnRest(path,opt={}){');
+    const end = withP1.indexOf('\nconst cnE=', start);
+    assert.ok(start >= 0 && end > start, 'note REST replacement boundaries exist');
+    withP1 = withP1.slice(0, start) + restMatch[1] + withP1.slice(end);
+  }
+  const dateRuntime = enhanceClinicalNoteWithDateCorrection(withP1);
+  const finalRuntime = enhanceClinicalNoteWithRecovery(dateRuntime);
+  assert.match(finalRuntime, /function cnClient\(\)/);
+  assert.match(finalRuntime, /cnClient\(\)\.rest\(table,/);
+  assert.match(finalRuntime, /cnDraftDatabaseName/);
+  assert.match(finalRuntime, /cnScheduleRetry\(error\)/);
+  assert.match(finalRuntime, /Corrigir data da consulta/);
+  assert.doesNotThrow(() => new vm.Script(finalRuntime));
+});
 
 test('clinical note recovery preserves canonical REST contract, guards draft restore and encrypts local content', () => {
   const result = enhanceClinicalNoteWithRecovery(source);
