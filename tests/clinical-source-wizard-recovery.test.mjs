@@ -91,3 +91,15 @@ test('new unsaved consultation cannot be offered inside a different persisted en
   assert.match(source, /wizardEncryptedStore\.scope\(ownerId, motherId, \{ encounterId \}\)/);
   assert.match(source, /wizardEncryptedStore\.scope\(ownerId, motherId, \{ appointmentId \}\)/);
 });
+
+test('a newly started encounter migrates its encrypted draft before the next appointment can open', () => {
+  const start = source.indexOf('if (wizardStep === 1) { await wizardPersistLocalSnapshot()');
+  const end = source.indexOf('wizardStep += 1; renderWizard();', start);
+  assert.ok(start >= 0 && end > start, 'first-step transition present');
+  const transition = source.slice(start, end);
+  const beforeStart = transition.indexOf('await wizardPersistLocalSnapshot().catch(wizardStorageWarning);');
+  const create = transition.indexOf('await ensureEncounterStarted();');
+  const afterStart = transition.indexOf('await wizardPersistLocalSnapshot().catch(wizardStorageWarning);', create);
+  assert.ok(beforeStart >= 0 && create > beforeStart && afterStart > create,
+    'first-step transition must wait for re-keyed encrypted copy before completing');
+});
