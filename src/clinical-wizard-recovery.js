@@ -55,7 +55,7 @@ const PATCHES = [
   ],
   [
     "        if (wizardStep < 7) {\n          if (wizardStep === 1) await ensureEncounterStarted();",
-    "        if (wizardStep < 7) {\n          if (wizardStep === 1) { await wizardPersistLocalSnapshot().catch(wizardStorageWarning); await ensureEncounterStarted(); }"
+    "        if (wizardStep < 7) {\n          if (wizardStep === 1) { await wizardPersistLocalSnapshot().catch(wizardStorageWarning); await ensureEncounterStarted(); await wizardPersistLocalSnapshot().catch(wizardStorageWarning); }"
   ],
   [
     "          wizardStep += 1; renderWizard();",
