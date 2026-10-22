@@ -72,6 +72,22 @@ const PATCHES = [
   [
     "window.addEventListener('hashchange', () => renderRoute().catch(reportError));",
     "window.addEventListener('online', () => { wizardClearRetry(); wizardAttemptPendingSave(); });\nwindow.addEventListener('hashchange', () => renderRoute().catch(reportError));"
+  ],
+  [
+    "function showLoggedOut() {\n  appStarted = false;",
+    "function showLoggedOut() {\n  wizardBeginNewSession();\n  appStarted = false;"
+  ],
+  [
+    "  syncEncounterAddressFromPatient({ force: true });\n});\ndocument.querySelector('[data-appointment-baby]')?.addEventListener('change', () => {",
+    "  syncEncounterAddressFromPatient({ force: true });\n  void wizardOfferRecovery(null).catch(wizardStorageWarning);\n});\ndocument.querySelector('[data-appointment-baby]')?.addEventListener('change', () => {"
+  ],
+  [
+    "  if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }\n  renderBabyClinicalSections();\n});\nappointmentScreen?.addEventListener",
+    "  if (currentDraftEncounterId) { setEncounterIdentityLock(true); return; }\n  renderBabyClinicalSections();\n  wizardCaptureLocal();\n});\nappointmentScreen?.addEventListener"
+  ],
+  [
+    "      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });",
+    "      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });\n      wizardCaptureLocal();"
   ]
 ];
 
