@@ -187,12 +187,13 @@ test('QA visual integral: paciente, consulta, prontuário, plano semanal e PDF r
       'Semana 3: revisar rotina de livre demanda e estratégias de descanso da família. Acompanhar evolução ponderal em avaliação profissional e observar sinais que indiquem necessidade de reavaliação.',
       'Semana 4: consolidar a autonomia na amamentação e revisar objetivos atingidos. Preparar plano de continuidade com contatos de suporte e recomendações para novas dúvidas ou sinais de alerta.',
     ];
-    await page.locator('[data-weekly-start]').fill('2026-10-22');
     for (let i = 0; i < plans.length; i++) {
       await page.locator('[data-weekly-add]').click();
       await page.locator('[data-weekly-entry]').nth(i).locator('[data-weekly-instructions]').fill(plans[i]);
     }
     await expect(page.locator('[data-weekly-entry]')).toHaveCount(4);
+    await expect(page.locator('[data-weekly-start]')).toBeVisible();
+    await page.locator('[data-weekly-start]').fill('2026-10-22');
     await capture(page, '14-orientacoes-semanais', 'Etapa 6 — quatro semanas de orientações', 'Plano semanal com conteúdo individualizado e quatro semanas completas.', '[data-weekly-care-plan]');
     await next(page, 7);
     await capture(page, '15-finalizacao', 'Etapa 7 — finalização', 'Resumo real do atendimento e escolha do PDF para a família.', '[data-wizard-step="7"]');
