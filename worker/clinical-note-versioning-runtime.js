@@ -41,7 +41,7 @@ function clinicDateTime(iso) {
 
 function validClinicalDate(value, now) {
   const raw = typeof value === 'string' ? value : '';
-  if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(raw)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(raw)) return false;
   const date = new Date(raw);
   return Number.isFinite(date.getTime()) && date.toISOString() === raw
     && date.getTime() <= Date.parse(now) + 5 * 60_000;
