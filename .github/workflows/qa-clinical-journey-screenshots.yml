@@ -37,10 +37,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
-      - name: Install from lockfile
-        run: npm ci --no-audit --no-fund
+      - name: Install dependencies without changing repository lockfiles
+        run: npm install --no-audit --no-fund --no-package-lock
 
       - name: Build real application with existing materialization flow
         run: npm run build
