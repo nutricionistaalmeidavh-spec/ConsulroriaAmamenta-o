@@ -26,7 +26,32 @@ function currentVersion(record) {
 function cleanPatch(input) {
   const patch = { ...(input || {}) };
   delete patch._expected_version;
+  delete patch._date_correction_reason;
   return patch;
+}
+
+function validEncounterDate(raw, now) {
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(raw)) return '';
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed) || new Date(parsed).getUTCFullYear() < 2000 || parsed > Date.parse(now) + 5 * 60000) return '';
+  return new Date(parsed).toISOString();
+}
+
+function dateCorrectionAudit({ before, nextDate, encounterId, user, now, reason }) {
+  return {
+    id: crypto.randomUUID(),
+    owner_id: user.id,
+    encounter_id: encounterId,
+    appointment_id: before.appointment_id || null,
+    previous_occurred_at: before.occurred_at || null,
+    corrected_occurred_at: nextDate,
+    changed_at: now,
+    professional_id: user.id,
+    author_email: user.email || '',
+    reason: String(reason || '').trim().slice(0, 500) || 'Correção de data informada pela profissional',
+    created_at: now,
+    updated_at: now,
+  };
 }
 
 function noteChanged(before, patch) {
@@ -96,6 +121,23 @@ async function handleEncounterPatch(request, env, url) {
   }
 
   const now = new Date().toISOString();
+  const correctingDate = Object.prototype.hasOwnProperty.call(patch, 'occurred_at');
+  const nextDate = correctingDate ? validEncounterDate(patch.occurred_at, now) : '';
+  if (correctingDate && !nextDate) {
+    return json(400, { error: 'invalid_encounter_date', message: 'Informe uma data válida, não futura, para o atendimento.' });
+  }
+  const dateChanged = correctingDate && Date.parse(nextDate) !== Date.parse(before.occurred_at || '');
+  let appointmentEntry = null;
+  if (dateChanged && before.appointment_id) {
+    appointmentEntry = await recordByIdForOwner(env.CLINICAL_DB, 'appointments', before.appointment_id, user.id);
+    if (!appointmentEntry || appointmentEntry.record?.mother_id !== before.mother_id) {
+      return json(409, { error: 'appointment_link_invalid', message: 'O agendamento vinculado não foi encontrado. Nenhuma data foi alterada.' });
+    }
+  }
+  if (correctingDate) {
+    patch.occurred_at = nextDate;
+    patch.identification = { ...(before.identification || {}), ...(patch.identification || {}), startsAt: nextDate };
+  }
   const afterVersion = beforeVersion + 1;
   const next = {
     ...before,
@@ -106,6 +148,25 @@ async function handleEncounterPatch(request, env, url) {
     updated_at: now,
   };
   const statements = [];
+
+  if (dateChanged) {
+    const audit = dateCorrectionAudit({
+      before, nextDate, encounterId, user, now, reason: input._date_correction_reason,
+    });
+    statements.push(guardedRecordStatement(
+      env.CLINICAL_DB, 'clinical_encounter_date_revisions', audit.id, audit, user.id, now,
+    ));
+    if (appointmentEntry) {
+      statements.push(guardedRecordStatement(
+        env.CLINICAL_DB,
+        'appointments',
+        appointmentEntry.key,
+        { ...appointmentEntry.record, starts_at: nextDate, owner_id: user.id, updated_at: now },
+        user.id,
+        now,
+      ));
+    }
+  }
 
   if (beforeStatus === 'finalized' && noteChanged(before, patch)) {
     const revision = revisionRecord({
