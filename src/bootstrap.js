@@ -2,11 +2,8 @@ import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 import { enhanceClinicalNoteWithDateCorrection, encounterDateCorrectionCss } from './encounter-date-correction.js';
 import { enhanceClinicalNoteWithRecovery } from './clinical-note-recovery.js';
-import { enhanceWizardShellWithRecovery } from './clinical-wizard-shell-enhancer.js';
 import wizardDraftStoreSource from './encrypted-wizard-drafts.js?raw';
-import wizardControllerSource from './clinical-wizard-controller.js?raw';
 import { enhanceClinicalWizardWithRecovery } from './clinical-wizard-recovery.js';
-import wizardDraftStoreSource from './encrypted-wizard-drafts.js?raw';
 
 window.__deboraUnzipSync = unzipSync;
 
@@ -267,11 +264,7 @@ async function boot() {
   }
 
   const patientCareStatusUrl = new URL('/patient-care-status-core.js', window.location.origin).href;
-  const wizardStoreUrl = moduleUrl(wizardDraftStoreSource);
-  const controllerImport = "'./encrypted-wizard-drafts.js'";
-  if (!wizardControllerSource.includes(controllerImport)) throw new Error('Armazenamento seguro do atendimento não encontrado.');
-  const wizardControllerUrl = moduleUrl(wizardControllerSource.replace(controllerImport, JSON.stringify(wizardStoreUrl)));
-  let shell = enhanceWizardShellWithRecovery(genericizeClinicalShell(runtime['core/app-shell.js']), wizardControllerUrl);
+  let shell = genericizeClinicalShell(runtime['core/app-shell.js']);
   for (const path of MODULE_PATHS) {
     shell = shell.replace(`'./${path}'`, `'${moduleUrls[path]}'`);
   }
