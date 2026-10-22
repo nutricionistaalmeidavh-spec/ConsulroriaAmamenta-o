@@ -77,7 +77,7 @@ const PATCHES = [
 
 export function enhanceClinicalWizardWithRecovery(source, storageModuleUrl) {
   if (typeof source !== 'string') throw new TypeError('O shell clínico deve ser código JavaScript.');
-  if (!storageModuleUrl || !/^(?:blob:|https?:\\/\\/)/.test(storageModuleUrl)) throw new Error('Módulo criptográfico do atendimento ausente.');
+  if (!storageModuleUrl || !['blob:', 'https://', 'http://'].some(prefix => storageModuleUrl.startsWith(prefix))) throw new Error('Módulo criptográfico do atendimento ausente.');
   if (source.includes('const wizardEncryptedStore =')) return source;
   let output = source;
   for (const [before, after] of PATCHES) {
@@ -87,5 +87,5 @@ export function enhanceClinicalWizardWithRecovery(source, storageModuleUrl) {
     }
     output = output.slice(0, index) + after + output.slice(index + before.length);
   }
-  return "import { createEncryptedWizardDraftStore } from '" + storageModuleUrl + "';\\n" + output;
+  return "import { createEncryptedWizardDraftStore } from '" + storageModuleUrl + "';\n" + output;
 }
