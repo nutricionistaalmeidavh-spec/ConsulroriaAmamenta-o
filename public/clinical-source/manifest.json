@@ -61,7 +61,7 @@
     "features/clinical-note-feature.js": {
       "promoted": true,
       "source": "release:features/clinical-note-feature.js+frontend-cloudflare-cutover+delivery3-versioning",
-      "sha256": "9400de2e91d560bf8c2500074146f08e109141ccc3fc8c7dfb2da254b0e44f66"
+      "sha256": "a7d8a9dde5d8bc6ecaee38c30ff67dd4469e44240325a4dcee816e4c5000c9a0"
     },
     "features/patient-fixes.css": {
       "promoted": true,
