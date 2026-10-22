@@ -29,6 +29,24 @@ function cleanPatch(input) {
   return patch;
 }
 
+// All historical corrections use the clinic's São Paulo civil time, not the device timezone.
+function clinicDateTime(iso) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}`;
+}
+
+function validClinicalDate(value, now) {
+  const raw = typeof value === 'string' ? value : '';
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(raw)) return false;
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) && date.toISOString() === raw
+    && date.getTime() <= Date.parse(now) + 5 * 60_000;
+}
+
 function noteChanged(before, patch) {
   return Object.prototype.hasOwnProperty.call(patch, 'clinical_note')
     && String(patch.clinical_note ?? '') !== String(before?.clinical_note ?? '');
@@ -96,6 +114,57 @@ async function handleEncounterPatch(request, env, url) {
   }
 
   const now = new Date().toISOString();
+  let correctedAppointment = null;
+  let correctedAppointmentKey = '';
+  const history = Array.isArray(before.identification?.dateCorrections)
+    ? before.identification.dateCorrections : [];
+
+  // A generic edit cannot erase the correction history kept with the canonical encounter.
+  if (patch.identification && typeof patch.identification === 'object' && !Array.isArray(patch.identification)) {
+    patch.identification = { ...patch.identification, dateCorrections: history };
+    if (beforeStatus === 'finalized'
+      && Object.hasOwn(patch.identification, 'startsAt')
+      && patch.identification.startsAt !== before.identification?.startsAt
+      && !Object.hasOwn(patch, 'occurred_at')) {
+      return json(400, { error: 'encounter_date_correction_required',
+        message: 'Corrija a data da consulta pelo campo próprio do prontuário.' });
+    }
+  }
+
+  if (Object.hasOwn(patch, 'occurred_at')) {
+    if (!validClinicalDate(patch.occurred_at, now)) {
+      return json(400, { error: 'invalid_encounter_date',
+        message: 'Informe uma data e hora válidas, não posteriores ao momento atual.' });
+    }
+    const linkedId = String(before.appointment_id || '');
+    if (!linkedId) return json(409, { error: 'appointment_link_required',
+      message: 'Não foi possível localizar o agendamento vinculado ao prontuário.' });
+    const linked = await recordByIdForOwner(env.CLINICAL_DB, 'appointments', linkedId, user.id);
+    if (!linked || linked.record?.mother_id !== before.mother_id) {
+      return json(409, { error: 'appointment_link_invalid',
+        message: 'O agendamento vinculado não está disponível para corrigir a data.' });
+    }
+    const oldTime = String(before.occurred_at || linked.record?.starts_at || '');
+    const changed = !Number.isFinite(Date.parse(oldTime))
+      || Date.parse(oldTime) !== Date.parse(patch.occurred_at);
+    const previousIdentification = before.identification && typeof before.identification === 'object'
+      && !Array.isArray(before.identification) ? before.identification : {};
+    patch.identification = {
+      ...previousIdentification, ...(patch.identification || {}),
+      startsAt: clinicDateTime(patch.occurred_at),
+      dateCorrections: changed ? [...history, {
+        previous: oldTime || null, corrected: patch.occurred_at,
+        changedAt: now, professionalId: user.id,
+      }] : history,
+    };
+    patch.occurred_at = new Date(patch.occurred_at).toISOString();
+    if (changed) {
+      correctedAppointmentKey = linked.key;
+      correctedAppointment = {
+        ...linked.record, starts_at: patch.occurred_at, updated_at: now, owner_id: user.id,
+      };
+    }
+  }
   const afterVersion = beforeVersion + 1;
   const next = {
     ...before,
@@ -124,6 +193,13 @@ async function handleEncounterPatch(request, env, url) {
       revision,
       user.id,
       now,
+    ));
+  }
+
+  if (correctedAppointment) {
+    statements.push(guardedRecordStatement(
+      env.CLINICAL_DB, 'appointments', correctedAppointmentKey,
+      correctedAppointment, user.id, now,
     ));
   }
 
