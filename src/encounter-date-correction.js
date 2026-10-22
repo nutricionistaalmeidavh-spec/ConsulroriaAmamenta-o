@@ -13,8 +13,13 @@ export function enhanceClinicalNoteWithDateCorrection(source) {
     next = next.slice(0, first) + to + next.slice(first + from.length);
   }
   replaceExactlyOnce('function cnHeaderHtml(enc){', HELPER + 'function cnHeaderHtml(enc){');
-  replaceExactlyOnce('occurred_at,updated_at,record_version&limit=1',
-    'occurred_at,created_at,updated_at,record_version&limit=1');
+  const originalProjection = 'occurred_at,updated_at,record_version&limit=1';
+  const completeProjection = 'occurred_at,created_at,updated_at,record_version&limit=1';
+  if (next.includes(originalProjection)) {
+    replaceExactlyOnce(originalProjection, completeProjection);
+  } else if (!next.includes(completeProjection)) {
+    throw new Error('Clinical date correction: unsupported encounter date projection');
+  }
   replaceExactlyOnce('<div class="cn-body"><div class="cn-editor-head">',
     '<div class="cn-body">' + '${cnEncounterDateEditor(enc)}' + '<div class="cn-editor-head">');
   replaceExactlyOnce("o.querySelector('#cn-addendum-save')?.addEventListener('click',cnAddAddendum)}",
