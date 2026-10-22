@@ -61,3 +61,25 @@ test('saves preserve in-flight edits and only clean local copies after SQL succe
   const encryptedAt = source.lastIndexOf('await wizardPersistLocalSnapshot().catch(wizardStorageWarning);', startedAt);
   assert.ok(encryptedAt >= 0 && encryptedAt < startedAt, 'write local copy before first network call');
 });
+
+
+test('input, checkbox, baby-target choices and seven-step controls persist encrypted local drafts before SQL confirmation', () => {
+  assert.match(source, /appointmentScreen\?\.addEventListener\('input', scheduleEncounterAutosave\)/);
+  assert.match(source, /appointmentScreen\?\.addEventListener\('change', scheduleEncounterAutosave\)/);
+  assert.match(source, /wizardCaptureLocal\(\);/);
+  assert.match(source, /if \(capture\?\.target\?\.matches\?\.\('\[data-appointment-patient\]'\)\) return/);
+  assert.match(source, /if \(selected && choice\.dataset\.field === 'format'\)[^\n]+\n\s+wizardCaptureLocal\(\)/);
+  assert.match(source, /if \(wizardStep > 1\)[^\n]+wizardCaptureLocal\(\)/);
+  assert.match(source, /const wizardSavedSnapshot = await wizardPersistLocalSnapshot\(clinicalState\)/);
+  assert.match(source, /await wizardConfirmSaved\(wizardSavedSnapshot\)/);
+  assert.match(source, /wizardLocalRevision > wizardConfirmedRevision/);
+});
+
+test('recovery must not read a previous patient into the next patient and does not save while decision is pending', () => {
+  assert.match(source, /motherId !== selectedWizardPatient\(\)\?\.mother\?\.id/);
+  assert.match(source, /wizardRecoveryOpen = true/);
+  assert.match(source, /appointmentScreen\.inert = true/);
+  assert.match(source, /if \(!currentDraftEncounterId \|\| wizardRecoveryOpen\) return/);
+  assert.match(source, /await wizardEncryptedStore\.clear\(key, value\)/);
+  assert.match(source, /wizardDismissRecovery\(\)/);
+});
