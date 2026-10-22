@@ -84,6 +84,10 @@ const PATCHES = [
   [
     "      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });",
     "      if (selected && choice.dataset.field === 'format') syncEncounterAddressFromPatient({ force: true, format: choice.dataset.value });\n      wizardCaptureLocal();"
+  ],
+  [
+    "appointmentScreen?.addEventListener('input', scheduleEncounterAutosave);\nappointmentScreen?.addEventListener('change', scheduleEncounterAutosave);",
+    "appointmentScreen?.addEventListener('input', scheduleEncounterAutosave);\nappointmentScreen?.addEventListener('change', scheduleEncounterAutosave);\n// Clicks on choice pills are mutated by the document listener; save after bubbling completes.\nappointmentScreen?.addEventListener('click', (event) => {\n  if (event.target.closest?.('[data-encounter-choice], .choice, .tag-choice, .chip')) {\n    queueMicrotask(wizardCaptureLocal);\n  }\n});"
   ]
 ];
 
