@@ -97,12 +97,16 @@ function mountEncounterDateCorrection() {
   const overlay = document.querySelector('#cn-overlay');
   const consultation = overlay?.querySelector('.cn-meta > div:nth-child(2)');
   if (!consultation || consultation.querySelector('[data-encounter-date-edit]')) return;
-  const encounterId = overlay.querySelector('.cn-patient-main span')?.textContent || '';
-  // The header renders only a shortened identifier: use the canonical encounter id
-  // exposed by the active wizard or the clicked persisted history card instead.
-  const fullId = document.querySelector('[data-screen="appointment"]')?.dataset.encounterId ||
-    window.__encounterDateHistoryId || '';
-  if (!DATE_UUID.test(fullId)) return;
+  const shortId = overlay.querySelector('.cn-patient-main span')?.textContent?.match(/([0-9a-f]{8})\s*$/i)?.[1]?.toLowerCase() || '';
+  // Match the canonical UUID against the identifier printed by the note itself,
+  // so a previously visited patient cannot become the correction target.
+  const candidates = [
+    window.__encounterDateHistoryId,
+    document.querySelector('[data-screen="appointment"]')?.dataset.encounterId,
+  ];
+  const fullId = candidates.find(id => DATE_UUID.test(id || '') &&
+    id.slice(0, 8).toLowerCase() === shortId);
+  if (!fullId) return;
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'encounter-date-edit';
@@ -151,10 +155,9 @@ function mountEncounterDateCorrection() {
 // History buttons carry the canonical encounter UUID; keep it only in memory,
 // never in cache or browser storage.
 document.addEventListener('click', (event) => {
-  const history = event.target?.closest?.('[data-pf-encounter]');
-  if (history && DATE_UUID.test(history.dataset.pfEncounter || '')) {
-    window.__encounterDateHistoryId = history.dataset.pfEncounter;
-  }
+  const history = event.target?.closest?.('[data-pf-encounter],[data-encounter-id]');
+  const clickedId = history?.dataset.pfEncounter || history?.dataset.encounterId || '';
+  if (DATE_UUID.test(clickedId)) window.__encounterDateHistoryId = clickedId;
 }, true);
 
 new MutationObserver(mountEncounterDateCorrection).observe(document.documentElement, { childList: true, subtree: true });
