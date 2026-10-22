@@ -97,8 +97,7 @@ export function enhanceClinicalWizardWithRecovery(source, storageModuleUrl) {
     if (index < 0) {
       // Generated P1 address/choice listeners vary by materializer.
       // Only their additive UI hooks are optional; all persistence anchors remain mandatory.
-      const optionalUiHook = before.includes("syncEncounterAddressFromPatient({ force: true });\\n});\\ndocument.querySelector('[data-appointment-baby]')")
-        || before.includes("renderBabyClinicalSections();\\n});\\nappointmentScreen?.addEventListener")
+      const optionalUiHook = before.includes("renderBabyClinicalSections();")
         || before.includes("if (selected && choice.dataset.field === 'format')");
       if (optionalUiHook) continue;
       throw new Error('Âncora canônica do atendimento ausente: ' + before.slice(0, 96));
