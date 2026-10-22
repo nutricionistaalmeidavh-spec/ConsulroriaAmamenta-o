@@ -4,7 +4,12 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { enhanceClinicalNoteWithRecovery } from '../src/clinical-note-recovery.js';
 
-const source = readFileSync('public/clinical-source/features/clinical-note-feature.js', 'utf8');
+// Materializers can temporarily expose the pre-versioned source during parallel tests.
+// Normalize in memory using the canonical hardener, without mutating shared files.
+const hardener = readFileSync('scripts/harden-delivery3-versioning.mjs', 'utf8');
+const hardeningBlock = hardener.slice(hardener.indexOf('const stateLine ='), hardener.indexOf('function manifestWithNoteHash('));
+const harden = vm.runInNewContext(hardeningBlock + ';transform');
+const source = harden(readFileSync('public/clinical-source/features/clinical-note-feature.js', 'utf8'));
 
 test('clinical note recovery preserves canonical REST contract, guards draft restore and encrypts local content', () => {
   const result = enhanceClinicalNoteWithRecovery(source);
