@@ -1,6 +1,7 @@
 import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 import { enhanceClinicalNoteWithDateCorrection, encounterDateCorrectionCss } from './encounter-date-correction.js';
+import { enhanceClinicalNoteWithRecovery } from './clinical-note-recovery.js';
 
 window.__deboraUnzipSync = unzipSync;
 
@@ -275,7 +276,7 @@ async function boot() {
   );
 
   const shellUrl = moduleUrl(shell);
-  const clinicalUrl = moduleUrl(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js']));
+  const clinicalUrl = moduleUrl(enhanceClinicalNoteWithRecovery(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js'])));
   const patientUrl = '/patient-fixes-v2.js';
   const css = runtime['styles.css'];
   const config = genericizeClinicalConfig(runtime['config.js']);
