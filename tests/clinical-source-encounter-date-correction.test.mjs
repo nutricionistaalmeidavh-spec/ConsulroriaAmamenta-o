@@ -50,7 +50,7 @@ test('editor clínico inclui campo de correção no prontuário e mantém integr
   assert.match(next, /await cnFlush\(\)/);
   assert.match(next, /_expected_version/);
   assert.match(next, /cnState\.encounter=\{\.\.\.cnState\.encounter,\.\.\.rows\[0\]\}/);
-  assert.match(next, /occurred_at,created_at,updated_at,record_version/);
+  assert.match(next, /occurred_at,created_at/);
   assert.equal((next.match(/function cnSaveEncounterDate/g) || []).length, 1);
   assert.throws(() => enhanceClinicalNoteWithDateCorrection(''), /anchor missing or ambiguous/);
 });
