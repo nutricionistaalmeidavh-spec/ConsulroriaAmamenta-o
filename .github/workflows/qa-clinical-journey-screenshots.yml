@@ -1,0 +1,78 @@
+name: QA Visual - Jornada Clinica Completa
+
+on:
+  push:
+    branches:
+      - qa/clinical-journey-print-evidence
+    paths:
+      - '.github/workflows/qa-clinical-journey-screenshots.yml'
+      - 'tests/e2e/qa-clinical-screenshots.spec.mjs'
+      - 'scripts/generate-clinical-qa-pdf.py'
+  pull_request:
+    paths:
+      - '.github/workflows/qa-clinical-journey-screenshots.yml'
+      - 'tests/e2e/qa-clinical-screenshots.spec.mjs'
+      - 'scripts/generate-clinical-qa-pdf.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-clinical-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clinical-journey:
+    name: E2E local + prints reais + relatorio PDF
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: true
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+
+      - name: Node.js open source
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Build real application with existing materialization flow
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture full synthetic clinical journey
+        run: npx playwright test tests/e2e/qa-clinical-screenshots.spec.mjs --config=playwright.config.mjs
+
+      - name: Install open-source PDF generation tools
+        if: always()
+        run: python -m pip install --disable-pip-version-check "reportlab>=4,<5" "Pillow>=10,<13" "pymupdf>=1.24,<2"
+
+      - name: Make high quality screenshot PDF (also on partial QA failure)
+        if: always()
+        run: python scripts/generate-clinical-qa-pdf.py
+
+      - name: Upload QA evidence and exported family PDF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestao-Amamentacao-QA-Visual-${{ github.run_id }}
+          path: |
+            artifacts/qa-clinical/
+            artifacts/e2e-results/
+            artifacts/playwright-report/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
+
+      - name: No production mutation
+        if: always()
+        run: |
+          echo "Somente banco local isolado, sem Cloudflare deploy, secrets, contas reais ou email."
