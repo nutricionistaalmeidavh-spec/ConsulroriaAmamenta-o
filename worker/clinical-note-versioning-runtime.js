@@ -34,7 +34,9 @@ function validEncounterDate(raw, now) {
   if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(raw)) return '';
   const parsed = Date.parse(raw);
   if (!Number.isFinite(parsed) || new Date(parsed).getUTCFullYear() < 2000 || parsed > Date.parse(now) + 5 * 60000) return '';
-  return new Date(parsed).toISOString();
+  const normalized = new Date(parsed).toISOString();
+  if (raw.slice(0, 19) !== normalized.slice(0, 19)) return '';
+  return normalized;
 }
 
 function dateCorrectionAudit({ before, nextDate, encounterId, user, now, reason }) {
