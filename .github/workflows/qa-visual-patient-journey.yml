@@ -1,0 +1,81 @@
+name: QA Visual - Jornada da Paciente
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'qa/**'
+    paths:
+      - '.github/workflows/qa-visual-patient-journey.yml'
+      - 'tests/e2e/qa-visual-journey.spec.mjs'
+      - 'playwright.qa.config.mjs'
+      - 'scripts/qa-visual-report.py'
+  pull_request:
+    paths:
+      - '.github/workflows/qa-visual-patient-journey.yml'
+      - 'tests/e2e/qa-visual-journey.spec.mjs'
+      - 'playwright.qa.config.mjs'
+      - 'scripts/qa-visual-report.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clinical-journey:
+    name: Telas reais desktop/mobile e orientacoes em PDF
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      TZ: America/Sao_Paulo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencias open source
+        run: npm ci --no-audit --no-fund
+      - name: Contratos e sintaxe
+        run: |
+          node --check tests/e2e/qa-visual-journey.spec.mjs
+          node --check playwright.qa.config.mjs
+          node --test tests/clinical-source-delivery2-autosave.test.mjs tests/clinical-source-app-runtime-ui.test.mjs
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Construir frontend canonico do sistema para QA local
+        run: npm run build
+      - name: Executar atendimento completo com prints reais
+        run: npx playwright test --config=playwright.qa.config.mjs
+      - name: Gerar PDF de todos os prints e orientacoes exportadas
+        if: always()
+        run: |
+          python -m pip install --disable-pip-version-check --quiet reportlab pillow pypdf
+          python scripts/qa-visual-report.py
+      - name: Exibir sumario das evidencias
+        if: always()
+        run: |
+          if [ -f artifacts/qa-visual/report-summary.json ]; then
+            cat artifacts/qa-visual/report-summary.json
+          else
+            echo "QA incompleto: verificar erros anteriores" >&2
+          fi
+      - name: Disponibilizar PDF + capturas originais + exportacoes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-gestao-amamentacao-${{ github.run_id }}
+          path: |
+            artifacts/qa-visual/qa-gestao-amamentacao-evidencias.pdf
+            artifacts/qa-visual/report-summary.json
+            artifacts/qa-visual/manifest-*.json
+            artifacts/qa-visual/screenshots/
+            artifacts/qa-visual/downloads/
+            artifacts/qa-visual/playwright-results/
+            artifacts/qa-visual/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
