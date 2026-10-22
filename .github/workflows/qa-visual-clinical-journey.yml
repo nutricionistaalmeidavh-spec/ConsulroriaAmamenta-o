@@ -1,0 +1,92 @@
+name: QA Visual - Jornada da Paciente
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/qa-visual-clinical-journey.yml'
+      - 'tests/e2e/qa-visual-journey.spec.mjs'
+      - 'playwright.qa.config.mjs'
+      - 'scripts/qa/build-visual-report.py'
+      - 'tests/e2e/**'
+      - 'tests/helpers/**'
+      - 'src/**'
+      - 'public/**'
+      - 'app/**'
+      - 'worker/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+concurrency:
+  group: qa-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  visual-qa:
+    name: QA E2E e evidencias desktop/mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: 'true'
+      TZ: America/Sao_Paulo
+    steps:
+      - name: Checkout isolado
+        uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias do projeto
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Build canonico (sem deploy)
+        run: npm run build
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Capturar jornada real no navegador
+        run: npx playwright test --config=playwright.qa.config.mjs
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: PDF open-source, sem servicos pagos
+        run: python -m pip install --disable-pip-version-check 'reportlab>=4,<5' 'Pillow>=11,<13' 'pypdf>=5,<8'
+      - name: Gerar relatorio completo e anexar a orientacao exportada
+        run: python scripts/qa/build-visual-report.py artifacts/qa-visual
+      - name: Verificar as evidencias e o PDF
+        shell: bash
+        run: |
+          test -s artifacts/qa-visual/gestao-amamentacao-qa-visual.pdf
+          test -s artifacts/qa-visual/downloads/desktop/orientacoes-marina-elisa.pdf
+          test -s artifacts/qa-visual/downloads/mobile/orientacoes-marina-elisa.pdf
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('artifacts/qa-visual/qa-summary.json').read_text())
+          assert result['screenshots'] >= 46, result
+          assert result['pdfPages'] >= 46, result
+          print('Visual QA:', result)
+          PY
+      - name: Publicar relatorio e screenshots (mesmo quando um teste falhar)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-visual-gestao-amamentacao-${{ github.run_id }}
+          path: |
+            artifacts/qa-visual/gestao-amamentacao-qa-visual.pdf
+            artifacts/qa-visual/qa-summary.json
+            artifacts/qa-visual/manifest-*.json
+            artifacts/qa-visual/screenshots/**
+            artifacts/qa-visual/downloads/**
+            artifacts/qa-visual/playwright-report/**
+            artifacts/qa-visual/playwright-results/**
+          if-no-files-found: warn
+          retention-days: 14
