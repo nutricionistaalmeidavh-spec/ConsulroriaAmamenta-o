@@ -83,3 +83,10 @@ test('recovery must not read a previous patient into the next patient and does n
   assert.match(source, /await wizardEncryptedStore\.clear\(key, value\)/);
   assert.match(source, /wizardDismissRecovery\(\)/);
 });
+
+
+test('new unsaved consultation cannot be offered inside a different persisted encounter', () => {
+  assert.match(source, /!encounterId\s*&&\s*!appointmentId/);
+  assert.match(source, /wizardEncryptedStore\.scope\(ownerId, motherId, \{ encounterId \}\)/);
+  assert.match(source, /wizardEncryptedStore\.scope\(ownerId, motherId, \{ appointmentId \}\)/);
+});
