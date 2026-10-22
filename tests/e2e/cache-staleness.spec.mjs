@@ -7,7 +7,27 @@ const OFFLINE_PATHS = ['/app/', '/comercial/'];
 test.use({ serviceWorkers: 'allow' });
 
 async function installServiceWorkerAndSeedStaleRoot(page) {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') pageErrors.push(message.text());
+  });
   await page.goto('/app/', { waitUntil: 'domcontentloaded' });
+  try {
+    await expect.poll(() => page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration('/');
+      return Boolean(registration?.active);
+    }), { timeout: 15000, intervals: [250, 500, 1000] }).toBe(true);
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => ({
+      url: location.href,
+      title: document.title,
+      hasBootstrap: Boolean(document.querySelector('script[src*="bootstrap"]')),
+      readyState: document.readyState,
+      runtimeMessage: document.body?.innerText?.slice(0, 800),
+    }));
+    throw new Error('Service Worker não ativou: ' + JSON.stringify({ diagnostic, pageErrors }) + ' - ' + error.message);
+  }
   await page.evaluate(async () => {
     const registration = await navigator.serviceWorker.ready;
     await registration.update();
