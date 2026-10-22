@@ -13,12 +13,23 @@ export function enhanceClinicalNoteWithDateCorrection(source) {
     next = next.slice(0, first) + to + next.slice(first + from.length);
   }
   replaceExactlyOnce('function cnHeaderHtml(enc){', HELPER + 'function cnHeaderHtml(enc){');
-  const originalProjection = 'occurred_at,updated_at,record_version&limit=1';
-  const completeProjection = 'occurred_at,created_at,updated_at,record_version&limit=1';
-  if (next.includes(originalProjection)) {
-    replaceExactlyOnce(originalProjection, completeProjection);
-  } else if (!next.includes(completeProjection)) {
-    throw new Error('Clinical date correction: unsupported encounter date projection');
+  // Materializers may briefly expose the original unversioned source to parallel
+  // tests. Preserve its existing projection and only add the creation timestamp.
+  const queryStart = 'clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=';
+  const queryPosition = next.indexOf(queryStart);
+  const projectionStart = queryPosition + queryStart.length;
+  const projectionEnd = next.indexOf('&limit=1', projectionStart);
+  if (queryPosition < 0 || projectionEnd < projectionStart
+    || next.indexOf(queryStart, queryPosition + 1) >= 0) {
+    throw new Error('Clinical date correction: missing canonical encounter projection');
+  }
+  const projection = next.slice(projectionStart, projectionEnd).split(',');
+  if (!projection.includes('occurred_at')) {
+    throw new Error('Clinical date correction: encounter date must be in projection');
+  }
+  if (!projection.includes('created_at')) {
+    projection.splice(projection.indexOf('occurred_at') + 1, 0, 'created_at');
+    next = next.slice(0, projectionStart) + projection.join(',') + next.slice(projectionEnd);
   }
   replaceExactlyOnce('<div class="cn-body"><div class="cn-editor-head">',
     '<div class="cn-body">' + '${cnEncounterDateEditor(enc)}' + '<div class="cn-editor-head">');
