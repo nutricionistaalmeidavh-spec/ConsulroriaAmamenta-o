@@ -68,7 +68,8 @@ test('input, checkbox, baby-target choices and seven-step controls persist encry
   assert.match(source, /appointmentScreen\?\.addEventListener\('change', scheduleEncounterAutosave\)/);
   assert.match(source, /wizardCaptureLocal\(\);/);
   assert.match(source, /if \(capture\?\.target\?\.matches\?\.\('\[data-appointment-patient\]'\)\) return/);
-  assert.match(source, /if \(selected && choice\.dataset\.field === 'format'\)[^\n]+\n\s+wizardCaptureLocal\(\)/);
+  assert.match(source, /appointmentScreen\?\.addEventListener\('click', \(event\) =>/);
+  assert.match(source, /queueMicrotask\(wizardCaptureLocal\)/);
   assert.match(source, /if \(wizardStep > 1\)[^\n]+wizardCaptureLocal\(\)/);
   assert.match(source, /const wizardSavedSnapshot = await wizardPersistLocalSnapshot\(clinicalState\)/);
   assert.match(source, /await wizardConfirmSaved\(wizardSavedSnapshot\)/);
