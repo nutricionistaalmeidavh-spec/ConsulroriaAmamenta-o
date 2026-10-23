@@ -179,6 +179,11 @@ export default {
       return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
     }
 
+    if (url.pathname === '/api/member/availability' && request.method === 'GET') {
+      return withNoIndex(new Response(JSON.stringify({
+        enabled:String(env.MOTHER_PORTAL_ENABLED || 'false').toLowerCase() === 'true',
+      }), {headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}));
+    }
     if (url.pathname === '/api/seo/login' && request.method === 'POST') {
       return withNoIndex(await handleSeoPasswordLogin(request, env));
     }
