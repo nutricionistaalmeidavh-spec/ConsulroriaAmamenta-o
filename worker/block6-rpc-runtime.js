@@ -328,6 +328,7 @@ export async function handleBlock6RpcRuntime(request, env, url = new URL(request
   const user = await authenticate(request, env);
   if (!user?.id) return json(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada. Entre novamente.' });
   const access = await claimedAccess(env, user);
+  if (access && !MEMBER_PORTAL_TABLES.has(table)) return json(403,{error:'mother_private_portal_table_denied'});
   if (!MEMBER_PORTAL_TABLES.has(table) && !['member_portal_access','member_content_unlocks'].includes(table)) {
     return access ? json(403,{error:'mother_clinical_records_denied'}) : null;
   }
