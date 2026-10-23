@@ -53,7 +53,7 @@ for (const [tier, expected] of [
   test(`portal_content enforces ${tier} tier`, async () => {
     const db = new FakeD1();
     seedBase(db, tier);
-    const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db }, new URL(req().url), { authenticate });
+    const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req().url), { authenticate });
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).map((row) => row.id), expected);
   });
@@ -68,7 +68,7 @@ test('an explicit bonus unlock grants one higher-tier content item only to the c
   db.seed('member_content_unlocks', 'unlock-other', 'professional-1', {
     id: 'unlock-other', owner_id: 'professional-1', mother_id: 'mother-2', content_id: 'essential', active: true,
   });
-  const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db }, new URL(req().url), { authenticate });
+  const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req().url), { authenticate });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).map((row) => row.id), ['free', 'premium']);
 });
