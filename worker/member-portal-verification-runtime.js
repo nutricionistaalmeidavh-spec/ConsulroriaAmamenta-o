@@ -20,13 +20,13 @@ function randomSalt() {
   crypto.getRandomValues(b);
   return [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-async function availableInvite(db, email) {
+async function availableInvite(db, email, userId) {
   const rows = await db.prepare(`SELECT record_key, record_json FROM supabase_records
     WHERE table_name='member_portal_access' AND lower(trim(json_extract(record_json,'$.email')))=?
     AND COALESCE(json_extract(record_json,'$.active'),1) NOT IN (0,'false','inactive','disabled')`)
     .bind(email).all();
   const available = (rows.results || []).map(row=>{try{return {id:row.record_key,record:JSON.parse(row.record_json)}}catch{return null}})
-    .filter(x=>x && active(x.record.active) && !String(x.record.member_user_id || '').trim());
+    .filter(x=>x && active(x.record.active) && !String(x.record.member_verified_at||'').trim() && (!String(x.record.member_user_id||'').trim() || String(x.record.member_user_id)===String(userId)));
   if (!available.length) return {error:reply(404,{error:'member_invite_not_found',message:'Convite disponível não encontrado. Entre em contato com sua consultora.'})};
   if (available.length !== 1) return {error:reply(409,{error:'member_invite_ambiguous',message:'Há mais de um convite para este e-mail. Solicite a correção à consultora.'})};
   return {invite:available[0]};
@@ -34,7 +34,7 @@ async function availableInvite(db, email) {
 export async function requestMemberVerification(env, user) {
   if (!user?.id || !emailOf(user.email)) return reply(401,{error:'member_identity_required'});
   const db = env.CLINICAL_DB, email=emailOf(user.email);
-  const {invite,error} = await availableInvite(db,email);
+  const {invite,error} = await availableInvite(db,email,user.id);
   if (error) return error;
   const now = isoNow();
   const previous = await db.prepare('SELECT created_at FROM member_portal_challenges WHERE user_id=?').bind(user.id).first();
@@ -74,14 +74,15 @@ export async function verifyMemberVerification(env,user,request) {
   }
   const now=isoNow();
   const applied=await db.prepare(`UPDATE supabase_records SET
-    record_json=json_set(record_json,'$.member_user_id',?,'$.claimed_at',?,'$.updated_at',?),
+    record_json=json_set(record_json,'$.member_user_id',?,'$.claimed_at',?,'$.member_verified_at',?,'$.updated_at',?),
     source_updated_at=?
     WHERE table_name='member_portal_access' AND record_key=?
     AND lower(trim(json_extract(record_json,'$.email')))=?
     AND COALESCE(json_extract(record_json,'$.active'),1) NOT IN (0,'false','inactive','disabled')
     AND (json_extract(record_json,'$.member_user_id') IS NULL OR
-         json_extract(record_json,'$.member_user_id')='')`)
-    .bind(user.id,now,now,now,challenge.access_id,challenge.email).run();
+         json_extract(record_json,'$.member_user_id')='' OR json_extract(record_json,'$.member_user_id')=?)
+    AND (json_extract(record_json,'$.member_verified_at') IS NULL OR json_extract(record_json,'$.member_verified_at')='')`)
+    .bind(user.id,now,now,now,now,challenge.access_id,challenge.email,user.id).run();
   await db.prepare('DELETE FROM member_portal_challenges WHERE user_id=?').bind(user.id).run();
   if (Number(applied.meta?.changes || 0)!==1) return reply(409,{error:'invite_already_claimed',message:'Esse convite já foi vinculado. Entre em contato com a consultora.'});
   const bound=await db.prepare(`SELECT record_json FROM supabase_records WHERE table_name='member_portal_access'
