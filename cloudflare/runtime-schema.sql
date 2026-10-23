@@ -364,3 +364,12 @@ CREATE TABLE IF NOT EXISTS calendar_google_events (
 );
 CREATE INDEX IF NOT EXISTS calendar_google_events_owner_idx
   ON calendar_google_events(owner_id, calendar_id);
+
+-- Apple Calendario subscription: only a hashed bearer token per professional.
+-- There are no iCloud passwords, shared patient names, or clinical notes here.
+CREATE TABLE IF NOT EXISTS calendar_apple_feeds (
+  owner_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
