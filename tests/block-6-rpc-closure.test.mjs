@@ -76,7 +76,7 @@ for (const rpc of ['bootstrap_demo_data', 'delete_appointment', 'delete_clinical
   test(`${rpc} is explicitly retired and cannot mutate D1`, async () => {
     const db = new FakeD1();
     const req = request(`/api/clinical/rpc/${rpc}`, { body: { p_confirmation: 'EXCLUIR' } });
-    const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db }, new URL(req.url), { authenticate });
+    const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req.url), { authenticate });
     assert.ok(response, 'Block 6 runtime must close the retired RPC explicitly');
     assert.equal(response.status, 410);
     const payload = await response.json();
@@ -85,25 +85,21 @@ for (const rpc of ['bootstrap_demo_data', 'delete_appointment', 'delete_clinical
   });
 }
 
-test('claim_member_portal binds an invited e-mail once and is idempotent', async () => {
+test('claim_member_portal requires email proof before binding, then remains idempotent', async () => {
   const db = new FakeD1();
-  db.seed('member_portal_access', 'access-1', 'professional-1', {
-    id: 'access-1', owner_id: 'professional-1', mother_id: 'mother-1', email: member.email,
-    member_user_id: null, tier: 'essential', active: true, show_progress: true,
-  });
-  const req = request('/api/clinical/rpc/claim_member_portal', { body: {} });
-  const first = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db }, new URL(req.url), { authenticate });
-  assert.equal(first.status, 200);
-  const firstPayload = await first.json();
-  assert.equal(firstPayload.member_user_id, member.id);
-  assert.equal(db.table('member_portal_access')[0].member_user_id, member.id);
-
-  const secondReq = request('/api/clinical/rpc/claim_member_portal', { body: {} });
-  const second = await handleBlock6RpcRuntime(secondReq, { CLINICAL_DB: db }, new URL(secondReq.url), { authenticate });
-  assert.equal(second.status, 200);
-  assert.equal((await second.json()).member_user_id, member.id);
-  assert.equal(db.table('member_portal_access').length, 1);
+  const invited={id:'access-1',owner_id:'professional-1',mother_id:'mother-1',email:member.email,member_user_id:null,tier:'essential',active:true};
+  db.seed('member_portal_access','access-1','professional-1',invited);
+  const req=request('/api/clinical/rpc/claim_member_portal',{body:{}});
+  const first=await handleBlock6RpcRuntime(req,{CLINICAL_DB:db,MOTHER_PORTAL_ENABLED:'true'},new URL(req.url),{authenticate});
+  assert.equal(first.status,409);
+  assert.equal((await first.json()).error,'member_verification_required');
+  assert.equal(db.table('member_portal_access')[0].member_user_id,null);
+  db.seed('member_portal_access','access-1','professional-1',{...invited,member_user_id:member.id});
+  const second=await handleBlock6RpcRuntime(req,{CLINICAL_DB:db,MOTHER_PORTAL_ENABLED:'true'},new URL(req.url),{authenticate});
+  assert.equal(second.status,200);
+  assert.equal((await second.json()).member_user_id,member.id);
 });
+
 
 test('member portal reads are scoped to the claimed mother and owner', async () => {
   const db = new FakeD1();
@@ -112,13 +108,13 @@ test('member portal reads are scoped to the claimed mother and owner', async () 
     member_user_id: member.id, tier: 'essential', active: true, show_progress: true,
   });
   db.seed('member_shared_items', 'shared-1', 'professional-1', {
-    id: 'shared-1', owner_id: 'professional-1', mother_id: 'mother-1', title: 'Meu material', published: true,
+    id: 'shared-1', owner_id: 'professional-1', mother_id: 'mother-1', kind:'orientation', title: 'Meu material', body:'Texto', published: true,
   });
   db.seed('member_shared_items', 'shared-2', 'professional-1', {
-    id: 'shared-2', owner_id: 'professional-1', mother_id: 'mother-2', title: 'Outro material', published: true,
+    id: 'shared-2', owner_id: 'professional-1', mother_id: 'mother-2', kind:'orientation', title: 'Outro material', body:'Outro texto', published: true,
   });
   const req = request('/api/clinical/records/member_shared_items?select=*&owner_id=eq.professional-1&order=occurred_at.desc', { method: 'GET' });
-  const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db }, new URL(req.url), { authenticate });
+  const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req.url), { authenticate });
   assert.equal(response.status, 200);
   const rows = await response.json();
   assert.deepEqual(rows.map((row) => row.id), ['shared-1']);
@@ -134,7 +130,7 @@ test('member engagement writes cannot forge professional or mother ownership', a
     owner_id: 'professional-evil', mother_id: 'mother-evil', member_access_id: 'access-evil',
     event_type: 'portal_visit', event_key: '2026-09-22', item_kind: 'portal', item_id: null,
   }});
-  const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db }, new URL(req.url), { authenticate });
+  const response = await handleBlock6RpcRuntime(req, { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req.url), { authenticate });
   assert.equal(response.status, 201);
   const [event] = db.table('member_engagement_events');
   assert.equal(event.owner_id, 'professional-1');
