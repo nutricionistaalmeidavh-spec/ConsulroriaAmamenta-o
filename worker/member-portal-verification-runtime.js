@@ -62,7 +62,7 @@ export async function requestMemberVerification(env, user) {
 export async function verifyMemberVerification(env,user,request) {
   if (!user?.id || !emailOf(user.email)) return reply(401,{error:'member_identity_required'});
   const {code} = await request.json().catch(()=>({}));
-  if (!/^\\d{6}$/.test(String(code || ''))) return reply(400,{error:'invalid_verification_code',message:'Informe o código de seis dígitos.'});
+  if (!/^\d{6}$/.test(String(code || ''))) return reply(400,{error:'invalid_verification_code',message:'Informe o código de seis dígitos.'});
   const db=env.CLINICAL_DB,challenge=await db.prepare('SELECT * FROM member_portal_challenges WHERE user_id=?').bind(user.id).first();
   if (!challenge || challenge.email!==emailOf(user.email) || Date.parse(challenge.expires_at)<=Date.now() || Number(challenge.attempts)>=5) {
     return reply(403,{error:'verification_expired',message:'Código expirado ou limite atingido. Solicite outro.'});
