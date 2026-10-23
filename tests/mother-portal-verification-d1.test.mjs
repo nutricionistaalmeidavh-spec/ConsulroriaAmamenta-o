@@ -68,3 +68,22 @@ test('different mothers with identical names retain separate UUID-based file gra
     assert.equal(await authorizeMemberAttachment(env,user,'clinical-media','consultant-a/guides/a.pdf'),false);
   }finally{db.close()}
 });
+
+test('legacy email-only claims must verify again before accessing private material',async()=>{
+  const {db,env,messages}=fixture();
+  try{
+    await seed(db,'member_portal_access','old-invite','consultant-a',{
+      id:'old-invite',owner_id:'consultant-a',mother_id:'mother-unique-1',
+      email:user.email,member_user_id:user.id,member_verified_at:null,tier:'free',active:true,
+    });
+    await seed(db,'member_shared_items','old-doc','consultant-a',{
+      id:'old-doc',owner_id:'consultant-a',mother_id:'mother-unique-1',
+      kind:'document',title:'Material liberado',attachment_path:'consultant-a/guides/old.pdf',published:true,
+    });
+    assert.equal(await authorizeMemberAttachment(env,user,'clinical-media','consultant-a/guides/old.pdf'),false);
+    assert.equal((await requestMemberVerification(env,user)).status,200);
+    const code=messages[0].text.match(/\b\d{6}\b/)[0];
+    assert.equal((await verifyMemberVerification(env,user,verifyRequest(code))).status,200);
+    assert.equal(await authorizeMemberAttachment(env,user,'clinical-media','consultant-a/guides/old.pdf'),true);
+  }finally{db.close()}
+});
