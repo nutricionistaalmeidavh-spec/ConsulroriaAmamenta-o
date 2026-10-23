@@ -16,6 +16,7 @@ import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.j
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
+import { handleAppleCalendarIntegration } from './apple-calendar-integration.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -203,6 +204,9 @@ export default {
 
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
+
+    const appleCalendarResponse = await handleAppleCalendarIntegration(request, env, url);
+    if (appleCalendarResponse) return withNoIndex(appleCalendarResponse);
 
     if (requiresCloudflareIdentity(request, url)) {
       if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
