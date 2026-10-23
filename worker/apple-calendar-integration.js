@@ -81,6 +81,11 @@ export async function handleAppleCalendarIntegration(request, env, url = new URL
     const user = await authenticateClinicalRequest(request, env);
     if (!user?.id) return response(401, { error: 'cloudflare_auth_required' });
 
+    // The Cloudflare Git deploy publishes Worker code and assets, not necessarily
+    // the optional D1 schema. Provision the additive table on first authorized
+    // access, keeping Apple functional without a manual post-deploy command.
+    await env.CLINICAL_DB.prepare('CREATE TABLE IF NOT EXISTS calendar_apple_feeds (owner_id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)').run();
+
     if (url.pathname === '/api/calendar/apple/status' && request.method === 'GET') {
       const row = await env.CLINICAL_DB.prepare(
         'SELECT created_at,updated_at FROM calendar_apple_feeds WHERE owner_id=? LIMIT 1',
