@@ -8,8 +8,9 @@ if (container && !container.querySelector('[data-calendar-integrations]')) {
     '<div class="section-heading"><div><span class="section-kicker">AGENDA</span>',
     '<h2>Integrações de calendário</h2><p>Sincronize seus horários sem compartilhar prontuários ou informações das pacientes.</p></div></div>',
     '<div style="display:grid;gap:12px;margin-top:14px">',
-    '<label class="field" style="display:grid;gap:6px"><span>Calendário de destino</span>',
+    '<label class="field" style="display:grid;gap:6px"><span>Qual calendário deseja configurar?</span>',
     '<select data-calendar-provider><option value="google">Google Agenda</option><option value="apple">Apple Calendário</option></select></label>',
+    '<p style="font-size:.83rem;opacity:.8;margin:0">Google e Apple podem ficar ativos ao mesmo tempo. Para usar apenas um, desconecte o outro.</p>',
     '<div data-calendar-status role="status" aria-live="polite">Consultando sua conexão…</div>',
     '<div data-calendar-google>',
     '<div data-calendar-connected hidden>',
@@ -107,8 +108,10 @@ if (container && !container.querySelector('[data-calendar-integrations]')) {
     refresh();
   });
   let busy = false;
+  let refreshQueued = false;
   async function refresh() {
-    if (!sessionToken() || busy) return;
+    if (!sessionToken()) return;
+    if (busy) { refreshQueued = true; return; }
     busy = true;
     try {
       const apple = providerSelect.value === 'apple';
@@ -147,7 +150,10 @@ if (container && !container.querySelector('[data-calendar-integrations]')) {
       select.value = status.calendar_id || '';
     } catch (err) {
       notice(err.message || 'Não foi possível carregar a integração.', true);
-    } finally { busy = false; }
+    } finally {
+      busy = false;
+      if (refreshQueued) { refreshQueued = false; void refresh(); }
+    }
   }
   action('[data-apple-create]', async () => {
     const existing = await request('/api/calendar/apple/status');
