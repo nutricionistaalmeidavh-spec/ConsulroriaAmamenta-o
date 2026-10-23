@@ -134,7 +134,7 @@ async function portalSignup(){
   if(password.length<8){status.textContent='Use uma senha com pelo menos 8 caracteres.';return}
   button.disabled=true;status.textContent='Criando acesso…';
   try{
-    const session=await auth('signup',{email,password});
+    const session=await auth('signup',{email,password,data:{signup_context:'mother_portal'}});
     if(session.access_token){
       saveMSession(session);portal.session=session;await loadPortalData();renderPortal();
     }else status.textContent='Acesso criado. Confira o e-mail recebido e depois entre.';
