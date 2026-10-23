@@ -1,3 +1,4 @@
+import { buildSafeMotherShare } from './mother-portal-contract.js';
 const CCF_SB_URL=(globalThis.location?.origin || '');
 const CCF_SB_KEY='cloudflare-runtime';
 const CCF_MOTHER_SESSION='debora-mother-portal-session-v1';
@@ -52,6 +53,10 @@ function dedupeLines(values=[]){
 
 export function buildMotherSafeEncounterShare(encounter={}){
   const plan=asObject(encounter.care_plan);
+  if (plan.orientation_mode==='weekly' || (plan.orientation_mode!=='single' && Array.isArray(plan.weekly_plan?.weeks) && plan.weekly_plan.weeks.length)) {
+    const shared=buildSafeMotherShare(encounter);
+    return {...shared,title:shared.title+(encounter.occurred_at?' · '+new Date(encounter.occurred_at).toLocaleDateString('pt-BR'):'')};
+  }
   const structured=buildCarePlanInstructions(plan);
   const sections=[];
   if(clean(plan.objectives))sections.push(`Objetivos\n${clean(plan.objectives)}`);
