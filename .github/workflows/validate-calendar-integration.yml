@@ -39,6 +39,7 @@ jobs:
       - name: Calendar security and iCalendar tests
         run: node --test tests/calendar-integration.test.mjs
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
       - name: Build canonical clinical shell
         run: npm run build
