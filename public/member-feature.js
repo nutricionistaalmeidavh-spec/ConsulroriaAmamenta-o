@@ -41,7 +41,7 @@ async function saveAccess(){
   const email=document.querySelector('#mf-email').value.trim().toLowerCase();
   const tier=document.querySelector('#mf-tier').value,active=document.querySelector('#mf-active').checked;
   const show_progress=document.querySelector('#mf-progress').checked;
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){toast('Informe um e-mail válido');return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Informe um e-mail válido');return}
   btn.disabled=true;const previous=btn.textContent;btn.textContent='Salvando acesso…';
   try{
     const old=accessFor(m.id),payload={mother_id:m.id,email,tier,active,show_progress};
