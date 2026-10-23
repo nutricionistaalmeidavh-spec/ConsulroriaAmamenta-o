@@ -71,7 +71,7 @@ test('patient route guard preserves weight card for migrated or non-UUID patient
   };
   context.window=context;
   context.globalThis=context;
-  const executable=routeGuardSource.replace(/^import .*?;\s*/,'');
+  const executable=routeGuardSource.replace(/^(?:import [^\n]+;\s*)+/,'');
   vm.runInNewContext(executable,context,{filename:'p0-route-guard.js'});
   assert.equal(weightCard.removed,false,'valid patient route must not lose the weight evolution card');
 });
@@ -95,7 +95,7 @@ test('patient route guard still clears patient-only weight UI after leaving the 
   };
   context.window=context;
   context.globalThis=context;
-  const executable=routeGuardSource.replace(/^import .*?;\s*/,'');
+  const executable=routeGuardSource.replace(/^(?:import [^\n]+;\s*)+/,'');
   vm.runInNewContext(executable,context,{filename:'p0-route-guard.js'});
   assert.equal(weightCard.removed,true,'weight card must be cleaned up after leaving patient routes');
 });
