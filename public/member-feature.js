@@ -105,8 +105,40 @@ async function openSharedLegacy(id){const x=portal.items.find(v=>v.id===id);if(!
 async function openContentLegacy(id){const x=portal.content.find(v=>v.id===id);if(!x)return;await track('content_view',id,'content',id);const done=completedSet().has(id);openReader(x.title,x.category,x.body,done?'Concluído':'Marcar como concluído',async()=>{if(!await track('content_complete',id,'content',id)){toast('Falha ao salvar conclusão. Tente novamente.');return}portal.events.unshift({event_type:'content_complete',event_key:id});document.querySelector('#mf-reader')?.remove();renderPortal();toast('Conteúdo concluído')})}
 function openReaderLegacy(title,meta,body,action,onAction){document.querySelector('#mf-reader')?.remove();const o=document.createElement('div');o.id='mf-reader';o.innerHTML=`<div class="mf-backdrop" data-close></div><section class="mp-reader"><header><div><span>${E(meta)}</span><h2>${E(title)}</h2></div><button data-close>×</button></header><div class="mp-reader-body">${E(body).replace(/\n/g,'<br>')}</div>${action?`<footer><button id="mp-reader-action" class="mf-primary">${E(action)}</button></footer>`:''}</section>`;document.body.appendChild(o);o.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>o.remove());if(action&&action!=='Concluído')document.querySelector('#mp-reader-action').onclick=onAction;if(action==='Concluído')document.querySelector('#mp-reader-action').disabled=true}
 function renderPortalLogin(message=''){document.body.classList.add('mf-portal-page');document.body.innerHTML=`<main class="mp-login"><section class="mp-login-card"><span class="mp-brand">Gestão Amamentação</span><h1>Área das Mães</h1><p>Entre com o e-mail que foi liberado para você.</p><label class="mf-field"><span>E-mail</span><input id="mp-email" type="email" autocomplete="email"></label><label class="mf-field"><span>Senha</span><input id="mp-password" type="password" autocomplete="current-password"></label><p id="mp-status" class="mp-status" role="alert">${E(message)}</p><button id="mp-login" class="mf-primary">Entrar</button><button id="mp-signup" class="mp-secondary">Criar meu acesso</button><a href="./" class="mp-back">Voltar para a área profissional</a></section></main>`;document.querySelector('#mp-login').onclick=portalLogin;document.querySelector('#mp-signup').onclick=portalSignup}
-async function portalLogin(){const email=document.querySelector('#mp-email').value.trim().toLowerCase(),password=document.querySelector('#mp-password').value,status=document.querySelector('#mp-status');if(!email||!password){status.textContent='Preencha e-mail e senha.';return}status.textContent='Entrando…';try{const s=await auth('token?grant_type=password',{email,password});saveMSession(s);portal.session=s;await loadPortalData();renderPortal()}catch(e){if(e.code==='member_verification_required'){portalFailure(e);return}status.textContent=e.message.includes('Invalid login')?'E-mail ou senha inválidos.':e.message}}
-async function portalSignup(){const email=document.querySelector('#mp-email').value.trim().toLowerCase(),password=document.querySelector('#mp-password').value,status=document.querySelector('#mp-status');if(!email||!email.includes('@')){status.textContent='Informe um e-mail válido.';return}if(password.length<8){status.textContent='Use uma senha com pelo menos 8 caracteres.';return}status.textContent='Criando acesso…';try{const s=await auth('signup',{email,password});if(s.access_token){saveMSession(s);portal.session=s;await loadPortalData();renderPortal()}else status.textContent='Acesso criado. Confirme o e-mail recebido e depois entre por aqui.'}catch(e){if(e.code==='member_verification_required'){portalFailure(e);return}status.textContent=e.message}}
+async function portalLogin(){
+  const button=document.querySelector('#mp-login'),status=document.querySelector('#mp-status');
+  if(!button||button.disabled)return;
+  const email=document.querySelector('#mp-email').value.trim().toLowerCase();
+  const password=document.querySelector('#mp-password').value;
+  if(!email||!password){status.textContent='Preencha e-mail e senha.';return}
+  button.disabled=true;status.textContent='Entrando…';
+  try{
+    const session=await auth('token?grant_type=password',{email,password});
+    saveMSession(session);portal.session=session;
+    await loadPortalData();renderPortal();
+  }catch(error){
+    if(error.code==='member_verification_required'){portalFailure(error);return}
+    status.textContent=error.message.includes('Invalid login')?'E-mail ou senha inválidos.':error.message;
+  }finally{if(button.isConnected)button.disabled=false}
+}
+async function portalSignup(){
+  const button=document.querySelector('#mp-signup'),status=document.querySelector('#mp-status');
+  if(!button||button.disabled)return;
+  const email=document.querySelector('#mp-email').value.trim().toLowerCase();
+  const password=document.querySelector('#mp-password').value;
+  if(!email||!email.includes('@')){status.textContent='Informe um e-mail válido.';return}
+  if(password.length<8){status.textContent='Use uma senha com pelo menos 8 caracteres.';return}
+  button.disabled=true;status.textContent='Criando acesso…';
+  try{
+    const session=await auth('signup',{email,password});
+    if(session.access_token){
+      saveMSession(session);portal.session=session;await loadPortalData();renderPortal();
+    }else status.textContent='Acesso criado. Confira o e-mail recebido e depois entre.';
+  }catch(error){
+    if(error.code==='member_verification_required'){portalFailure(error);return}
+    status.textContent=error.message;
+  }finally{if(button.isConnected)button.disabled=false}
+}
 function renderPortalVerification(message=''){
   document.body.classList.add('mf-portal-page');
   document.body.innerHTML='<main class="mp-login"><section class="mp-login-card"><span class="mp-brand">Gestão Amamentação</span><h1>Confirme seu e-mail</h1><p>Para proteger suas orientações, confirme o e-mail que recebeu o convite da consultora.</p><label class="mf-field"><span>Código de seis dígitos</span><input id="mp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"></label><p id="mp-status" class="mp-status" role="status">'+E(message)+'</p><button id="mp-send" class="mp-secondary">Enviar código</button><button id="mp-verify" class="mf-primary">Confirmar e entrar</button><button id="mp-back" class="mp-secondary">Voltar ao login</button></section></main>';
