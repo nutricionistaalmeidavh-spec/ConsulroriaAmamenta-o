@@ -52,7 +52,7 @@ test('different mothers with identical names retain separate UUID-based file gra
   try{
     await seed(db,'member_portal_access','invite-a','consultant-a',{
       id:'invite-a',owner_id:'consultant-a',mother_id:'mother-unique-1',
-      email:user.email,member_user_id:user.id,tier:'free',active:true,
+      email:user.email,member_user_id:user.id,member_verified_at:'2026-10-23T00:00:00Z',tier:'free',active:true,
     });
     await seed(db,'member_shared_items','share-a','consultant-a',{
       id:'share-a',owner_id:'consultant-a',mother_id:'mother-unique-1',
