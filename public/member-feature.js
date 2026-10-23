@@ -58,7 +58,7 @@ async function publishItem(){
   if(!title||!body){toast('Preencha título e conteúdo');return}
   btn.disabled=true;const previous=btn.textContent;btn.textContent='Publicando…';
   try{
-    await rest('member_shared_items',{method:'POST',body:JSON.stringify({mother_id:motherId,kind,title,body,published:true,occurred_at:new Date().toISOString()})});
+    await rest('member_shared_items',{method:'POST',body:JSON.stringify({mother_id:motherId,kind,title,body,published:true,occurred_at:new Date().toISOString(),source_table:btn.dataset.sourceTable||null,source_id:btn.dataset.sourceId||null})});
     await loadAdmin();renderAdmin();toast('Publicado para a paciente selecionada.');
   }catch(error){toast(error.message||'Publicação não concluída. Confira e tente novamente.')}
   finally{if(btn.isConnected){btn.disabled=false;btn.textContent=previous}}
@@ -70,6 +70,8 @@ function prepareEncounter(id){
   document.querySelector('#mf-kind').value=safe.kind;
   document.querySelector('#mf-title').value=safe.title+' · '+D(x.occurred_at);
   document.querySelector('#mf-body').value=safe.body;
+  document.querySelector('#mf-publish').dataset.sourceTable='clinical_encounters';
+  document.querySelector('#mf-publish').dataset.sourceId=x.id;
   document.querySelector('#mf-body').focus();
   toast(safe.body?'Plano preparado para revisão':'Este atendimento não contém orientações publicáveis');
 }
@@ -82,6 +84,8 @@ function prepareNextAppointment(id){
   const date=new Date(appointment.starts_at);
   const formatted=Number.isNaN(date.getTime())?'Data a confirmar':date.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
   document.querySelector('#mf-body').value='Data: '+formatted+'\nTipo: '+(appointment.appointment_type||'Retorno');
+  document.querySelector('#mf-publish').dataset.sourceTable='appointments';
+  document.querySelector('#mf-publish').dataset.sourceId=appointment.id;
   document.querySelector('#mf-body').focus();
   toast('Retorno preparado. Confira antes de publicar.');
 }
