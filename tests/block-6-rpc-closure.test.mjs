@@ -94,7 +94,7 @@ test('claim_member_portal requires email proof before binding, then remains idem
   assert.equal(first.status,409);
   assert.equal((await first.json()).error,'member_verification_required');
   assert.equal(db.table('member_portal_access')[0].member_user_id,null);
-  db.seed('member_portal_access','access-1','professional-1',{...invited,member_user_id:member.id});
+  db.seed('member_portal_access','access-1','professional-1',{...invited,member_user_id:member.id,member_verified_at:'2026-10-23T00:00:00Z'});
   const second=await handleBlock6RpcRuntime(req,{CLINICAL_DB:db,MOTHER_PORTAL_ENABLED:'true'},new URL(req.url),{authenticate});
   assert.equal(second.status,200);
   assert.equal((await second.json()).member_user_id,member.id);
@@ -105,7 +105,7 @@ test('member portal reads are scoped to the claimed mother and owner', async () 
   const db = new FakeD1();
   db.seed('member_portal_access', 'access-1', 'professional-1', {
     id: 'access-1', owner_id: 'professional-1', mother_id: 'mother-1', email: member.email,
-    member_user_id: member.id, tier: 'essential', active: true, show_progress: true,
+    member_user_id: member.id, member_verified_at:'2026-10-23T00:00:00Z', tier: 'essential', active: true, show_progress: true,
   });
   db.seed('member_shared_items', 'shared-1', 'professional-1', {
     id: 'shared-1', owner_id: 'professional-1', mother_id: 'mother-1', kind:'orientation', title: 'Meu material', body:'Texto', published: true,
@@ -124,7 +124,7 @@ test('member engagement writes cannot forge professional or mother ownership', a
   const db = new FakeD1();
   db.seed('member_portal_access', 'access-1', 'professional-1', {
     id: 'access-1', owner_id: 'professional-1', mother_id: 'mother-1', email: member.email,
-    member_user_id: member.id, tier: 'essential', active: true, show_progress: true,
+    member_user_id: member.id, member_verified_at:'2026-10-23T00:00:00Z', tier: 'essential', active: true, show_progress: true,
   });
   const req = request('/api/clinical/records/member_engagement_events', { body: {
     owner_id: 'professional-evil', mother_id: 'mother-evil', member_access_id: 'access-evil',
