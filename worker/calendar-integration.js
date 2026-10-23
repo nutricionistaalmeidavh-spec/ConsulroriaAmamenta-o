@@ -150,8 +150,11 @@ async function accessToken(env, ownerId, row) {
     refresh_token: fresh.refresh_token || tokens.refresh_token,
     access_token: fresh.access_token, expires_at: Date.now() + Number(fresh.expires_in || 3500) * 1000,
   };
+  const ciphertext = await encryptTokens(env, ownerId, updated);
   await env.CLINICAL_DB.prepare('UPDATE calendar_google_connections SET tokens_cipher=?,updated_at=? WHERE owner_id=?')
-    .bind(await encryptTokens(env, ownerId, updated), new Date().toISOString(), ownerId).run();
+    .bind(ciphertext, new Date().toISOString(), ownerId).run();
+  // Reuse the refreshed token throughout this synchronization batch.
+  row.tokens_cipher = ciphertext;
   return updated.access_token;
 }
 async function googleApi(env, ownerId, conn, path, { method = 'GET', body } = {}) {
