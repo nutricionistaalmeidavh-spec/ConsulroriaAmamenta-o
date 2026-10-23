@@ -120,3 +120,20 @@ test('Apple subscription works with HEAD and never returns a token body', async 
   assert.equal(response.status, 200);
   assert.equal(await response.text(), '');
 });
+
+test('The clinical settings lets consultants choose Google or Apple without removing the manual ICS option', async () => {
+  const { readFileSync } = await import('node:fs');
+  const script = readFileSync(new URL('../public/calendar-integration-feature.js', import.meta.url), 'utf8');
+  assert.match(script, /data-calendar-provider/);
+  assert.match(script, /value=\\"google\\"/);
+  assert.match(script, /value=\\"apple\\"/);
+  assert.match(script, /data-calendar-apple/);
+  assert.match(script, /data-apple-create/);
+  assert.match(script, /data-apple-revoke/);
+  assert.match(script, /data-apple-copy/);
+  assert.match(script, /data-apple-open/);
+  assert.match(script, /data-calendar-ics/);
+  assert.match(script, /localStorage/);
+  assert.match(script, /sessionStorage/);
+  assert.match(script, /refreshQueued/);
+});
