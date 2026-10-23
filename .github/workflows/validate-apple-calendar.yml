@@ -1,0 +1,50 @@
+name: Validate standalone Apple Calendar
+on:
+  pull_request:
+    paths:
+      - 'worker/apple-calendar-integration.js'
+      - 'worker/apple-calendar-ics.js'
+      - 'worker/domain-entry.js'
+      - 'public/apple-calendar-feature.js'
+      - 'src/bootstrap.js'
+      - 'cloudflare/runtime-schema.sql'
+      - 'cloudflare/migrations/0012-calendar-apple.sql'
+      - 'tests/apple-calendar-integration.test.mjs'
+      - '.github/workflows/validate-apple-calendar.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'worker/apple-calendar-integration.js'
+      - 'worker/apple-calendar-ics.js'
+      - 'worker/domain-entry.js'
+      - 'public/apple-calendar-feature.js'
+      - 'src/bootstrap.js'
+      - 'cloudflare/runtime-schema.sql'
+      - 'cloudflare/migrations/0012-calendar-apple.sql'
+      - 'tests/apple-calendar-integration.test.mjs'
+permissions:
+  contents: read
+jobs:
+  apple-calendar-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax
+        run: |
+          node --check worker/apple-calendar-integration.js
+          node --check worker/apple-calendar-ics.js
+          node --check worker/domain-entry.js
+          node --check public/apple-calendar-feature.js
+          node --check src/bootstrap.js
+      - name: Test Apple Calendar privacy and canonical integration
+        run: node --test tests/apple-calendar-integration.test.mjs
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Build final app
+        run: npm run build
+      - name: Verify public Apple feature emitted
+        run: test -f dist/apple-calendar-feature.js
