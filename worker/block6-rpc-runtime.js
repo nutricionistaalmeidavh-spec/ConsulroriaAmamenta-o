@@ -244,6 +244,15 @@ async function validateProfessionalShare(request,env,url,user) {
   for(const row of candidates) {
     if(!mothers.some(e=>String(e.record.id||e.key)===String(row.mother_id||'')))
       return json(403,{error:'mother_not_owned'});
+    if (row.published !== false && (row.source_table || row.source_id)) {
+      const sourceTable=String(row.source_table||''),sourceId=String(row.source_id||'');
+      if(!['clinical_encounters','appointments','library_items'].includes(sourceTable)||!sourceId)
+        return json(422,{error:'member_share_invalid_source'});
+      const source=(await tableRows(env,sourceTable,user.id))
+        .find(entry=>String(entry.record.id||entry.key)===sourceId);
+      if(!source || (sourceTable!=='library_items' && String(source.record.mother_id||'')!==String(row.mother_id||'')))
+        return json(403,{error:'member_share_source_outside_mother'});
+    }
     if(row.published !== false && !canPublishToMother(row)) return json(422,{
       error:'unsafe_member_publication',
       message:'Publique apenas plano de cuidado, orientações, retornos e arquivos autorizados. Anamnese e avaliações internas permanecem privadas.'
