@@ -17,6 +17,7 @@ import { handleUsageObservabilityRuntime } from './usage-observability-runtime.j
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { handleCalendarIntegration, isCalendarMutation, observeCalendarMutation } from './calendar-integration.js';
+import { handleAppleCalendarIntegration } from './apple-calendar-integration.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -205,6 +206,9 @@ export default {
 
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
+
+    const appleCalendarResponse = await handleAppleCalendarIntegration(request, env, url);
+    if (appleCalendarResponse) return withNoIndex(appleCalendarResponse);
 
     const calendarIntegrationResponse = await handleCalendarIntegration(request, env, url);
     if (calendarIntegrationResponse) return withNoIndex(calendarIntegrationResponse);
