@@ -33,7 +33,7 @@ test('email proof is mandatory before binding a mother; the code is single-use',
     const request=await requestMemberVerification(env,user);
     assert.equal(request.status,200);
     assert.equal(messages.length,1);
-    const code=messages[0].text.match(/\\b\\d{6}\\b/)[0];
+    const code=messages[0].text.match(/\b\d{6}\b/)[0];
     const wrong=await verifyMemberVerification(env,user,verifyRequest('000000'===code?'999999':'000000'));
     assert.equal(wrong.status,403);
     const before=await db.prepare("SELECT record_json FROM supabase_records WHERE table_name='member_portal_access'").first();
