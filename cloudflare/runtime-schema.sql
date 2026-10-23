@@ -337,3 +337,11 @@ CREATE INDEX IF NOT EXISTS billing_checkout_observability_idx
   ON billing_checkout_requests(provider, status, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS subscriptions_observability_idx
   ON subscriptions(provider, status, plan_code, updated_at DESC, owner_id);
+
+-- Apple read-only subscriptions; only salted-free SHA-256 hashes of random 256-bit bearer tokens.
+CREATE TABLE IF NOT EXISTS calendar_apple_feeds (
+  owner_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
