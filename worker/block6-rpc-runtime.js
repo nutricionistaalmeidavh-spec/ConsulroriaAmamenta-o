@@ -106,6 +106,8 @@ function tierRank(value, fallback = -1) {
   return Object.hasOwn(TIER_RANK, key) ? TIER_RANK[key] : fallback;
 }
 
+export async function isAuthenticatedMother(env,user){return Boolean(env.CLINICAL_DB && user?.id && await claimedAccess(env,user));}
+
 async function claimedAccess(env, user) {
   if (!user?.id) return null;
   const rows = await accessRowsByMember(env, user.id);
