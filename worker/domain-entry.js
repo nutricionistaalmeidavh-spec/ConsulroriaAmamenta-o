@@ -303,6 +303,11 @@ export default {
   },
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(reconcileBilling(env).catch((error) => console.error('billing reconciliation failed', error)));
+    if (String(env.MOTHER_PORTAL_ENABLED || 'false').toLowerCase()==='true' && env.CLINICAL_DB) {
+      ctx.waitUntil(env.CLINICAL_DB.prepare('DELETE FROM member_portal_challenges WHERE expires_at < ?')
+        .bind(new Date().toISOString()).run()
+        .catch(error=>console.error('mother_portal_challenge_cleanup_failed',error?.message||'unknown')));
+    }
     if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     ctx.waitUntil(
