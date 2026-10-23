@@ -58,7 +58,7 @@ test('patient route guard preserves weight card for migrated or non-UUID patient
   const context={
     document:{
       querySelectorAll(selector){
-        if(selector.includes('[data-weight-changes-v4]'))return [weightCard];
+        if(selector.includes('[data-weight-history-v5]'))return [weightCard];
         return [];
       }
     },
@@ -82,7 +82,7 @@ test('patient route guard still clears patient-only weight UI after leaving the 
   const context={
     document:{
       querySelectorAll(selector){
-        if(selector.includes('[data-weight-changes-v4]'))return [weightCard];
+        if(selector.includes('[data-weight-history-v5]'))return [weightCard];
         return [];
       }
     },
