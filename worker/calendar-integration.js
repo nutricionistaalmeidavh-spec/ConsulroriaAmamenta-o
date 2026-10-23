@@ -168,7 +168,7 @@ async function googleApi(env, ownerId, conn, path, { method = 'GET', body } = {}
   if (!response.ok) return { status: response.status, data: null };
   return { status: response.status, data: response.status === 204 ? null : await response.json() };
 }
-async function appointmentRows(env, ownerId, limit = 500) {
+export async function appointmentRows(env, ownerId, limit = 500) {
   const query = await env.CLINICAL_DB.prepare(
     'SELECT record_json FROM supabase_records WHERE table_name=? AND (owner_id=? OR (owner_id IS NULL AND json_extract(record_json,\'$.owner_id\')=?)) LIMIT ?',
   ).bind('appointments', ownerId, ownerId, limit).all();
