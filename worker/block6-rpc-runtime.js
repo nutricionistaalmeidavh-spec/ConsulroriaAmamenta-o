@@ -111,14 +111,14 @@ export async function isAuthenticatedMother(env,user){return Boolean(env.CLINICA
 async function claimedAccess(env, user) {
   if (!user?.id) return null;
   const rows = await accessRowsByMember(env, user.id);
-  return rows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id)) || null;
+  return rows.find((entry) => isActive(entry.record?.active) && Boolean(Date.parse(entry.record?.member_verified_at || '')) && String(entry.record?.member_user_id || '') === String(user.id)) || null;
 }
 
 async function claimMemberPortal(env, user) {
   const email = normalizedEmail(user?.email);
   if (!user?.id || !email) return json(401, { error: 'member_identity_required', message: 'Entre com o e-mail convidado para acessar a Área da Mãe.' });
   const alreadyRows = await accessRowsByMember(env, user.id);
-  const already = alreadyRows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id));
+  const already = alreadyRows.find((entry) => isActive(entry.record?.active) && Boolean(Date.parse(entry.record?.member_verified_at || '')) && String(entry.record?.member_user_id || '') === String(user.id));
   if (already) return json(200, already.record);
 
   // E-mail não comprova titularidade: o primeiro vínculo exige código entregue à caixa postal.
@@ -289,7 +289,7 @@ async function writeProfessionalPortalRecord(request,env,url,user,table) {
       active:input.active===undefined ? old?.record.active!==false : input.active===true,
       show_progress:input.show_progress===undefined ? Boolean(old?.record.show_progress) : input.show_progress===true});
     if(!old || email!==normalizedEmail(old.record.email)){
-      row.member_user_id=null;row.claimed_at=null;
+      row.member_user_id=null;row.claimed_at=null;row.member_verified_at=null;
     }
   } else if(table==='portal_content') {
     const title=String(input.title??old?.record.title??'').trim();
