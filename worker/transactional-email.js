@@ -26,7 +26,7 @@ export function transactionalTemplate(kind, data = {}) {
   }
   if (kind === 'mother_portal_code') {
     const code = text(data.code);
-    if (!/^\\d{6}$/.test(code)) throw new TypeError('invalid_mother_portal_code');
+    if (!/^\d{6}$/.test(code)) throw new TypeError('invalid_mother_portal_code');
     return {
       subject: 'Código de acesso à Área das Mães — Gestão Amamentação',
       text: 'Seu código de acesso é ' + code + '. Válido por 15 minutos. Não compartilhe este código.',
