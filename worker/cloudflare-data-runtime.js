@@ -1,4 +1,5 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { authorizeMemberAttachment } from './block6-rpc-runtime.js';
 import { resolveProductAccess } from './product-access-runtime.js';
 import {
   guardedRecordStatement,
@@ -640,11 +641,14 @@ async function handleFiles(request, env, url) {
     if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada.' });
     const [bucket, ...parts] = relative.slice('object/sign/'.length).split('/');
     const path = parts.map(decodeURIComponent).join('/');
-    if (!path.startsWith(`${user.id}/`) || path.includes('..')) return runtimeJson(403, { message: 'Arquivo fora do escopo da conta.' });
+    if (path.includes('..')) return runtimeJson(403, { message: 'Arquivo fora do escopo da conta.' });
+    const owned = path.startsWith(user.id + '/');
+    const delegated = !owned && await authorizeMemberAttachment(env,user,bucket,path);
+    if (!owned && !delegated) return runtimeJson(403,{message:'Arquivo não autorizado para este acesso.'});
     const input = await request.json().catch(() => ({}));
     const ttl = Math.max(60, Math.min(3600, Number(input?.expiresIn || 300)));
     const now = Math.floor(Date.now() / 1000);
-    const token = await signFileToken({ typ: 'file', sub: user.id, bucket, path, iat: now, exp: now + ttl }, env);
+    const token = await signFileToken({ typ: 'file', sub: user.id, bucket, path, member:delegated, iat: now, exp: now + ttl }, env);
     const signedURL = `/api/files/object/${encodeURIComponent(bucket)}/${path.split('/').map(encodeURIComponent).join('/')}?token=${encodeURIComponent(token)}`;
     return runtimeJson(200, { signedURL });
   }
@@ -658,12 +662,15 @@ async function handleFiles(request, env, url) {
   if (request.method === 'GET' && url.searchParams.get('token')) {
     const grant = await verifyFileToken(url.searchParams.get('token'), env);
     if (!grant || grant.bucket !== bucket || grant.path !== path) return runtimeJson(403, { message: 'Link expirado ou inválido.' });
+    if (grant.member && !await authorizeMemberAttachment(env,{id:grant.sub},bucket,path)) {
+      return runtimeJson(403,{message:'Acesso ao arquivo revogado.'});
+    }
     const object = await env.CLINICAL_FILES?.get(storageKey(bucket, path));
     if (!object) return runtimeJson(404, { message: 'Arquivo não encontrado.' });
     const headers = new Headers();
     object.writeHttpMetadata?.(headers);
     if (object.httpEtag) headers.set('etag', object.httpEtag);
-    headers.set('cache-control', 'private, max-age=300');
+    headers.set('cache-control', grant.member ? 'private, no-store' : 'private, max-age=300');
     return new Response(object.body, { status: 200, headers });
   }
 
