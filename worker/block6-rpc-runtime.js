@@ -203,7 +203,7 @@ async function writeMemberEngagement(env, user, request) {
     mother_id: access.mother_id,
     member_access_id: access.id,
     member_user_id: user.id,
-    created_at: input?.created_at || now,
+    created_at: now,
     updated_at: now,
   };
   const entry = { key: event.id, ownerId: access.owner_id, record: event };
@@ -242,12 +242,62 @@ async function validateProfessionalShare(request,env,url,user) {
   for(const row of candidates) {
     if(!mothers.some(e=>String(e.record.id||e.key)===String(row.mother_id||'')))
       return json(403,{error:'mother_not_owned'});
-    if(!canPublishToMother(row)) return json(422,{
+    if(row.published !== false && !canPublishToMother(row)) return json(422,{
       error:'unsafe_member_publication',
       message:'Publique apenas plano de cuidado, orientações, retornos e arquivos autorizados. Anamnese e avaliações internas permanecem privadas.'
     });
   }
   return null;
+}
+
+async function writeProfessionalPortalRecord(request,env,url,user,table) {
+  if (!['POST','PATCH'].includes(request.method)) return null;
+  const input=await request.clone().json().catch(()=>null);
+  if (!input || Array.isArray(input) || typeof input!=='object') return json(400,{error:'invalid_portal_payload'});
+  const rows=await tableRows(env,table,user.id);
+  const old=request.method==='PATCH'
+    ? rows.find(entry=>url.searchParams.get('id')==='eq.'+String(entry.record.id||entry.key))
+    : null;
+  if (request.method==='PATCH' && !old) return json(404,{error:'portal_record_not_found'});
+  const motherId=old?.record.mother_id || input.mother_id;
+  if (table==='member_portal_access' || (table==='member_perks' && motherId)) {
+    const mothers=await tableRows(env,'mothers',user.id);
+    if(!mothers.some(x=>String(x.record.id||x.key)===String(motherId))) return json(403,{error:'mother_not_owned'});
+  }
+  if(table==='member_portal_access' && request.method==='POST'
+    && rows.some(x=>String(x.record.mother_id)===String(motherId))) return json(409,{error:'portal_access_exists'});
+  const now=new Date().toISOString();
+  const row={...(old?.record||{}),id:old?.record.id||crypto.randomUUID(),owner_id:user.id,
+    created_at:old?.record.created_at||now,updated_at:now};
+  if(table==='member_portal_access') {
+    const email=normalizedEmail(input.email??old?.record.email);
+    const tier=String(input.tier??old?.record.tier??'free');
+    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !Object.hasOwn(TIER_RANK,tier))
+      return json(400,{error:'invalid_portal_access'});
+    Object.assign(row,{mother_id:motherId,email,tier,
+      active:input.active===undefined ? old?.record.active!==false : input.active===true,
+      show_progress:input.show_progress===undefined ? Boolean(old?.record.show_progress) : input.show_progress===true});
+    if(!old || email!==normalizedEmail(old.record.email)){
+      row.member_user_id=null;row.claimed_at=null;
+    }
+  } else if(table==='portal_content') {
+    const title=String(input.title??old?.record.title??'').trim();
+    const body=String(input.body??old?.record.body??'').trim();
+    const path=String(input.attachment_path??old?.record.attachment_path??'').trim();
+    const tier=String(input.min_tier??old?.record.min_tier??'free');
+    if(!title || (!body && !path) || !Object.hasOwn(TIER_RANK,tier)) return json(400,{error:'invalid_portal_content'});
+    Object.assign(row,{title,body,attachment_path:path||null,min_tier:tier,
+      category:String(input.category??old?.record.category??'Geral').slice(0,100),
+      summary:String(input.summary??old?.record.summary??'').slice(0,400),
+      active:input.active===undefined ? old?.record.active!==false : input.active===true});
+  } else if(table==='member_perks') {
+    const title=String(input.title??old?.record.title??'').trim();
+    if(!title) return json(400,{error:'invalid_member_perk'});
+    Object.assign(row,{mother_id:motherId||null,title,note:String(input.note??old?.record.note??'').slice(0,500),
+      active:input.active===undefined ? old?.record.active!==false : input.active===true});
+  } else return null;
+  await saveEntry(env,table,{key:old?.key||row.id,ownerId:user.id},row);
+  return json(request.method==='POST'?201:200,[row]);
 }
 
 export async function handleBlock6RpcRuntime(request, env, url = new URL(request.url), deps = {}) {
@@ -268,18 +318,25 @@ export async function handleBlock6RpcRuntime(request, env, url = new URL(request
       if (name === 'request_member_verification') return requestMemberVerification(env, user);
       return verifyMemberVerification(env, user, request);
     }
+    const user=await authenticate(request,env);
+    if(user?.id && await claimedAccess(env,user)) return json(403,{error:'mother_clinical_rpc_denied'});
     return null;
   }
 
   if (!url.pathname.startsWith('/api/clinical/records/')) return null;
   const table = decodeURIComponent(url.pathname.slice('/api/clinical/records/'.length).split('/')[0] || '');
-  if (!MEMBER_PORTAL_TABLES.has(table)) return null;
   const user = await authenticate(request, env);
   if (!user?.id) return json(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada. Entre novamente.' });
   const access = await claimedAccess(env, user);
+  if (!MEMBER_PORTAL_TABLES.has(table) && !['member_portal_access','member_content_unlocks'].includes(table)) {
+    return access ? json(403,{error:'mother_clinical_records_denied'}) : null;
+  }
   if (!access) {
     if (table === 'member_shared_items' && (request.method === 'POST' || request.method === 'PATCH')) {
       return validateProfessionalShare(request,env,url,user);
+    }
+    if (['member_portal_access','portal_content','member_perks'].includes(table)) {
+      return writeProfessionalPortalRecord(request,env,url,user,table);
     }
     return null;
   }
