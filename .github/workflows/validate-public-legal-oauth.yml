@@ -1,0 +1,42 @@
+name: Validate public legal pages
+on:
+  pull_request:
+    paths:
+      - 'public/comercial/privacidade/**'
+      - 'public/comercial/termos/**'
+      - 'public/comercial/legal.css'
+      - 'public/comercial/index.html'
+      - 'src/public-host-routing.js'
+      - 'tests/public-legal-oauth-pages.test.mjs'
+      - '.github/workflows/validate-public-legal-oauth.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'public/comercial/privacidade/**'
+      - 'public/comercial/termos/**'
+      - 'public/comercial/legal.css'
+      - 'public/comercial/index.html'
+      - 'src/public-host-routing.js'
+      - 'tests/public-legal-oauth-pages.test.mjs'
+permissions:
+  contents: read
+jobs:
+  legal-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate Google OAuth public legal content and navigation
+        run: node --test tests/public-legal-oauth-pages.test.mjs
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Build static legal pages
+        run: npm run build
+      - name: Verify built legal assets
+        run: |
+          test -f dist/comercial/privacidade/index.html
+          test -f dist/comercial/termos/index.html
+          test -f dist/comercial/legal.css
