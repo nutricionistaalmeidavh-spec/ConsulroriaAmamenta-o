@@ -125,8 +125,8 @@ test('The clinical settings lets consultants choose Google or Apple without remo
   const { readFileSync } = await import('node:fs');
   const script = readFileSync(new URL('../public/calendar-integration-feature.js', import.meta.url), 'utf8');
   assert.match(script, /data-calendar-provider/);
-  assert.match(script, /value=\\"google\\"/);
-  assert.match(script, /value=\\"apple\\"/);
+  assert.match(script, /value="google"/);
+  assert.match(script, /value="apple"/);
   assert.match(script, /data-calendar-apple/);
   assert.match(script, /data-apple-create/);
   assert.match(script, /data-apple-revoke/);
