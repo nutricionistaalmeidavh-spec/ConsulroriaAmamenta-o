@@ -272,7 +272,7 @@ async function writeProfessionalPortalRecord(request,env,url,user,table) {
   if(table==='member_portal_access') {
     const email=normalizedEmail(input.email??old?.record.email);
     const tier=String(input.tier??old?.record.tier??'free');
-    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !Object.hasOwn(TIER_RANK,tier))
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !Object.hasOwn(TIER_RANK,tier))
       return json(400,{error:'invalid_portal_access'});
     Object.assign(row,{mother_id:motherId,email,tier,
       active:input.active===undefined ? old?.record.active!==false : input.active===true,
