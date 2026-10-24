@@ -82,9 +82,14 @@ function assertCurrentBackup(backup) {
 export function createBackupService(client) {
   if (!client?.workerRequest) throw new Error('Cliente de dados é obrigatório.');
 
-  async function exportAll() {
-    const backup = await client.workerRequest('/api/clinical/backup/export');
+  async function exportAll({metadataOnly = false} = {}) {
+    const backup = await client.workerRequest('/api/clinical/backup/export' + (metadataOnly ? '?metadataOnly=1' : ''));
     return assertCurrentBackup(backup);
+  }
+
+  async function previewRestore(backup) {
+    assertCurrentBackup(backup);
+    return client.workerRequest('/api/clinical/backup/preview',{method:'POST',body:backup});
   }
 
   async function restoreAll(backup) {
@@ -92,7 +97,7 @@ export function createBackupService(client) {
     return client.workerRequest('/api/clinical/backup/restore', { method: 'POST', body: backup });
   }
 
-  return { exportAll, restoreAll, encryptBackup, decryptBackup };
+  return { exportAll, previewRestore, restoreAll, encryptBackup, decryptBackup };
 }
 
 export { BACKUP_TABLES as backupTables, BACKUP_FORMAT as backupFormat, BACKUP_VERSION as backupVersion };
@@ -178,6 +183,7 @@ function worksheet(name, records, { metadata = false } = {}) {
   const header = columns.map((item)=>item.name);
   let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   xml += '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+  xml += '<sheetPr><tabColor rgb="FFEC92B0"/></sheetPr>';
   xml += '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
   xml += '<sheetFormatPr defaultRowHeight="18"/><cols>';
   for(let j=0;j<columns.length;j++) xml += '<col min="'+(j+1)+'" max="'+(j+1)+'" width="'+(j===0?24:22)+'" customWidth="1"/>';
@@ -192,7 +198,7 @@ function worksheet(name, records, { metadata = false } = {}) {
     xml += buildCells(i+2,row);
   }
   xml += '</sheetData><autoFilter ref="A1:'+excelCol(columns.length-1)+Math.max(1,records.length+1)+'"/>';
-  xml += '<sheetPr><tabColor rgb="FFEC92B0"/></sheetPr></worksheet>';
+  xml += '</worksheet>';
   return xml;
 }
 
