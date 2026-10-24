@@ -12,6 +12,7 @@ import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runt
 import { handleFinancialEntryCancelRuntime } from './financial-entry-cancel-runtime.js';
 import { handleBlock6RpcRuntime, isAuthenticatedMother } from './block6-rpc-runtime.js';
 import { handleMotherAiChat } from './mother-ai-chat-runtime.js';
+import { handleMotherAiHistory } from './mother-ai-history-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
@@ -245,6 +246,9 @@ export default {
       }
     }
 
+    const motherAiHistoryResponse = await handleMotherAiHistory(request, env, url);
+    if (motherAiHistoryResponse) return withNoIndex(motherAiHistoryResponse);
+
     const motherAiResponse = await handleMotherAiChat(request, env, url);
     if (motherAiResponse) return withNoIndex(motherAiResponse);
 
@@ -321,6 +325,11 @@ export default {
       ctx.waitUntil(env.CLINICAL_DB.prepare('DELETE FROM member_portal_challenges WHERE expires_at < ?')
         .bind(new Date().toISOString()).run()
         .catch(error=>console.error('mother_portal_challenge_cleanup_failed',error?.message||'unknown')));
+    }
+    if ((!_controller.cron || _controller.cron === '17 4 * * *') && env.CLINICAL_DB) {
+      ctx.waitUntil(env.CLINICAL_DB.prepare('DELETE FROM mother_ai_history WHERE expires_at < ?')
+        .bind(new Date().toISOString()).run()
+        .catch(error=>console.error('mother_ai_history_cleanup_failed',error?.message||'unknown')));
     }
     if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
