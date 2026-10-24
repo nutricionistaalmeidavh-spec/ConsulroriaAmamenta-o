@@ -369,3 +369,10 @@ CREATE TABLE IF NOT EXISTS calendar_outlook_feeds (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- Independent user authorization for revealing mother names to connected calendars.
+CREATE TABLE IF NOT EXISTS calendar_event_display_preferences (
+  owner_id TEXT PRIMARY KEY,
+  show_patient_name INTEGER NOT NULL DEFAULT 0 CHECK (show_patient_name IN (0,1)),
+  updated_at TEXT NOT NULL
+);
