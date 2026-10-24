@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 24
       - name: Install existing test dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund --no-package-lock
       - name: Validate JavaScript syntax
         run: |
           node --check worker/mother-ai-chat-runtime.js
