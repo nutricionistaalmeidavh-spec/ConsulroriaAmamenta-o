@@ -1,5 +1,6 @@
 import {authenticateClinicalRequest} from './cloudflare-auth-runtime.js';
 import {verifiedMotherAiAccess} from './mother-ai-identity.js';
+import {isMotherAiPilotAllowed} from './mother-ai-pilot.js';
 
 const HOURS_30_DAYS=30*86400000;
 const json=(status,body)=>new Response(JSON.stringify(body),{status,headers:{
@@ -61,6 +62,13 @@ export async function handleMotherAiHistory(request,env,url=new URL(request.url)
  try{access=await verifiedMotherAiAccess(env.CLINICAL_DB,user)}
  catch{return json(503,{error:'authorization_unavailable'})}
  if(!access)return json(403,{error:'verified_mother_access_required'});
+ // Right-to-delete remains available even after a pilot invitation expires or is withdrawn.
+ if(!(path==='/api/member/ai/history' && request.method==='DELETE')) {
+  let allowed=false;
+  try{allowed=await isMotherAiPilotAllowed(env,access)}
+  catch{return json(503,{error:'pilot_authorization_unavailable'})}
+  if(!allowed)return json(403,{error:'mother_ai_pilot_not_authorized'});
+ }
  const db=env.CLINICAL_DB;
  try{
   if(path==='/api/member/ai/history') {
