@@ -1,3 +1,4 @@
+import { calendarEventTitlesForOwner, GENERIC_EVENT_TITLE, escapeIcsText } from './calendar-event-display.js';
 import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-auth-runtime.js';
 
 // Calendar integrations are owner-scoped and are deliberately independent of the clinical record format.
@@ -39,11 +40,11 @@ function durationMs(item) {
 function isCancelled(item) { return /^(cancelad[oa]|exclu[ií]d[oa])$/i.test(String(item?.status || '')); }
 function validAppointment(item) { return Boolean(item?.id && validDate(item?.starts_at) && !isCancelled(item)); }
 
-export function appointmentToEvent(item) {
+export function appointmentToEvent(item, title=GENERIC_EVENT_TITLE) {
   if (!validAppointment(item)) return null;
   const start = new Date(item.starts_at);
   return {
-    summary: 'Atendimento - Gestão Amamentação',
+    summary: title,
     start: { dateTime: start.toISOString() },
     end: { dateTime: new Date(start.getTime() + durationMs(item)).toISOString() },
     visibility: 'private',
@@ -52,7 +53,7 @@ export function appointmentToEvent(item) {
     reminders: { useDefault: true },
   };
 }
-export function appointmentsToIcs(items, ownerId) {
+export function appointmentsToIcs(items, ownerId, titles=new Map()) {
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gestao Amamentacao//Agenda//PT-BR',
     'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
@@ -65,7 +66,7 @@ export function appointmentsToIcs(items, ownerId) {
     lines.push('BEGIN:VEVENT', 'UID:' + uid + '@gestao-amamentacao',
       'DTSTAMP:' + now, 'DTSTART:' + toUtc(start),
       'DTEND:' + toUtc(new Date(start.getTime() + durationMs(item))),
-      'SUMMARY:Atendimento - Gestao Amamentacao', 'CLASS:PRIVATE',
+      'SUMMARY:' + escapeIcsText(titles.get(item.id) || GENERIC_EVENT_TITLE), 'CLASS:PRIVATE',
       'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
@@ -235,14 +236,15 @@ export async function syncCalendarAppointment(env, ownerId, appointmentId) {
       .bind(ownerId, appointmentId).run();
   }
   if (!validAppointment(item)) return { deleted: Boolean(linked) };
+  const title=(await calendarEventTitlesForOwner(env,ownerId,[item])).get(item.id) || GENERIC_EVENT_TITLE;
   const eventId = await googleEventId(ownerId, appointmentId);
   const path = '/calendars/' + encodeURIComponent(conn.calendar_id) + '/events';
-  const event = { ...appointmentToEvent(item), id: eventId };
-  const edited = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item) });
+  const event = { ...appointmentToEvent(item, title), id: eventId };
+  const edited = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, title) });
   if (edited.status === 404) {
     const created = await googleApi(env, ownerId, conn, path, { method: 'POST', body: event });
     if (created.status === 409) {
-      const retry = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item) });
+      const retry = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, title) });
       if (retry.status !== 200) throw new Error('google_calendar_upsert_failed');
     } else if (created.status !== 200 && created.status !== 201) {
       throw new Error('google_calendar_create_failed');
@@ -319,7 +321,8 @@ export async function handleGoogleCalendarIntegration(request, env, url = new UR
     const ownerId = user.id;
     if (url.pathname === '/api/calendar/appointments.ics' && request.method === 'GET') {
       const items = await appointmentRows(env, ownerId, 2000);
-      return new Response(appointmentsToIcs(items, ownerId), {
+      const titles=await calendarEventTitlesForOwner(env,ownerId,items);
+      return new Response(appointmentsToIcs(items, ownerId, titles), {
         headers: {
           'content-type': 'text/calendar; charset=utf-8',
           'content-disposition': 'attachment; filename="agenda-gestao-amamentacao.ics"',
