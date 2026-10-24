@@ -460,12 +460,8 @@ replaceText('index.html',
   '<button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Verifica o arquivo antes de atualizar registros. Aceita backups antigos .json.</small></div><b>›</b></button>\n          <p class="form-message" data-backup-status role="status">Nenhuma exportação registrada neste aparelho.</p>',
   'backup-restore-guidance');
 
-// A patient-detail load may finish after navigation has already returned to
-// the appointment wizard. Never allow an outdated async route to hide it.
-replaceText('core/app-shell.js',
-  "  showScreen('patient');\n}\nfunction renderBabySelector",
-  "  if (hashToScreen() === 'patient' && patientIdFromHash() === patient.mother.id) showScreen('patient');\n}\nfunction renderBabySelector",
-  'patient-navigation-prevent-stale-show');
+// Preserve the existing clinical revision guard, and prevent the outer route
+// renderer from reactivating an outdated patient screen after navigation.
 replaceText('core/app-shell.js',
   "  const screen = hashToScreen();\n  if (screen === 'patient') {",
   "  const screen = hashToScreen();\n  const routeAtStart = location.hash;\n  if (screen === 'patient') {",
