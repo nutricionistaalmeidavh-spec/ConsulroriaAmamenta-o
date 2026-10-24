@@ -361,3 +361,11 @@ CREATE TABLE IF NOT EXISTS calendar_google_events (
 );
 CREATE INDEX IF NOT EXISTS calendar_google_events_owner_idx
   ON calendar_google_events(owner_id, calendar_id);
+
+-- Outlook private read-only iCalendar subscription, independent of Apple and Google.
+CREATE TABLE IF NOT EXISTS calendar_outlook_feeds (
+  owner_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
