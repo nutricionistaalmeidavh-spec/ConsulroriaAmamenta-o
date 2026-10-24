@@ -52,7 +52,8 @@ if (calendarSettings) {
       checkbox.checked = showPatientName;
       checkbox.disabled = !loaded || saving || fetching;
       const notice = panel.querySelector('[data-calendar-display-status]');
-      notice.textContent = currentMessage;
+      // Avoid MutationObserver loops: unchanged text must not mutate the DOM.
+      if (notice.textContent !== currentMessage) notice.textContent = currentMessage;
       notice.hidden = !currentMessage;
     }
   }
