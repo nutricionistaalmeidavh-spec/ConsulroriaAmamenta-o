@@ -39,9 +39,9 @@ export async function createLocalRuntime({ port = 0, assets = false, outboundSer
     'cloudflare/migrations/0009-billing-recovery.sql',
     'cloudflare/migrations/0010-billing-reconciliation.sql',
     'cloudflare/migrations/0011-mother-portal-challenges.sql',
-    'cloudflare/migrations/0013-mother-ai-budget.sql',
-    'cloudflare/migrations/0014-mother-ai-history.sql',
-    'cloudflare/migrations/0015-mother-ai-pilot-telemetry.sql',
+    'cloudflare/migrations/0014-mother-ai-budget.sql',
+    'cloudflare/migrations/0015-mother-ai-history.sql',
+    'cloudflare/migrations/0016-mother-ai-pilot-telemetry.sql',
   ]) {
     const sql = (await readFile(path, 'utf8')).replace(/^--.*$/gm, '');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();

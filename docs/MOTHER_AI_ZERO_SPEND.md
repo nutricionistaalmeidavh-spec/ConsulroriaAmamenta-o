@@ -6,7 +6,7 @@ Branch: `feat/mother-ai-zero-spend-foundation`, baseada na branch da PR #106 (`f
 ## Infraestrutura existente
 - Worker atual: endpoint `POST /api/member/ai/chat`.
 - Autenticação Bearer com o mecanismo D1 já canônico; busca do vínculo no D1 a partir de `member_user_id`. `owner_id`, `mother_id` e `member_verified_at` são lidos apenas no servidor.
-- Migração SQL aditiva `cloudflare/migrations/0013-mother-ai-budget.sql`, executada pelo mesmo fluxo de migrações existente (nenhum Wrangler JSON, secret, rota existente ou banco novo alterado).
+- Migração SQL aditiva `cloudflare/migrations/0014-mother-ai-budget.sql`, executada pelo mesmo fluxo de migrações existente (nenhum Wrangler JSON, secret, rota existente ou banco novo alterado).
 - Não há frontend de chat nesta fase: a fase 5 cobrirá a interface e o consentimento visual da mãe.
 - Não há histórico persistente, mensagens nem dados clínicos sensíveis salvos no D1.
 
@@ -73,7 +73,7 @@ A lista contém referências do Ministério da Saúde e da OMS verificadas quant
 - A interface usa os tokens rosa/sálvia existentes do portal e adapta largura, foco e botões para celular.
 
 ### Fase 6: histórico, feedback e consentimento
-- Migração SQL **aditiva** `cloudflare/migrations/0014-mother-ai-history.sql`.
+- Migração SQL **aditiva** `cloudflare/migrations/0015-mother-ai-history.sql`.
 - O padrão é `save_to_history=false`. Quando houver opção de salvamento escolhida, a resposta é armazenada somente no D1 da conta, sempre vinculada a `owner_id`, `mother_id` e `member_user_id`.
 - Data de expiração: 30 dias. A limpeza automática usa o job diário existente. Durante consulta de histórico, registros expirados não aparecem antes mesmo da limpeza.
 - A consultora **não tem acesso** a mensagens particulares. Ela vê somente aquelas que a mãe decidiu encaminhar, mediante confirmação explícita, no painel de Engajamento da paciente correta.
