@@ -54,3 +54,37 @@ A lista contém referências do Ministério da Saúde e da OMS verificadas quant
 - Migração 0013 aplicada antes de qualquer habilitação.
 - UI com consentimento e identidade de IA explícitos; política de privacidade e retenção.
 - Nenhuma ativação automática via branch, PR, CI ou deploy.
+
+## Fases 4–6 — orientações publicadas, interface e privacidade (PR #112)
+
+### Fase 4: fonte clínica canônica, sem duplicar prontuário
+- A única fonte clínica consultável pela assistente é `member_shared_items` com `published=true`, tipo `orientation` ou `care_plan`, mesmo `owner_id` e `mother_id` da conta autenticada.
+- Orientações únicas e semanais podem aparecer na mesma lista: a projeção é o **texto explicitamente publicado pela consultora**, não um novo cálculo ou cópia do prontuário clínico.
+- Sem informação da paciente no modelo por padrão. A caixa `Considerar orientações liberadas` abre apenas o contexto local; para enviar o conteúdo ao modelo, precisa marcar consentimento específico além do consentimento para a pergunta.
+- Exclusão/despublicação no portal remove a orientação da seleção na próxima consulta.
+- Respostas nunca alteram conteúdo canônico nem geram ordens médicas.
+
+### Fase 5: fluxo mobile-first
+- O chat aparece dentro da Área das Mães **apenas quando a mãe está autenticada e `MOTHER_AI_ENABLED=true`**. Uma configuração desligada mantém a interface oculta, sem inferência.
+- A assistente indica quando opera em modo "somente referências oficiais" em vez de fingir resposta gerada por um modelo.
+- Fluxo: abrir assistente, digitar dúvida ou escolher pergunta, selecionar consentimentos, enviar, conferir fonte, opcionalmente salvar, avaliar e compartilhar com a consultora.
+- Estados: pendente bloqueia novo envio; falha mantém texto digitado; sucesso só é mostrado depois de resposta da API. Falha ao salvar histórico é comunicada como **sucesso parcial**, preservando a resposta.
+- O histórico não é copiado para `localStorage`; mensagens não salvas só permanecem na memória da página durante aquela sessão.
+- A interface usa os tokens rosa/sálvia existentes do portal e adapta largura, foco e botões para celular.
+
+### Fase 6: histórico, feedback e consentimento
+- Migração SQL **aditiva** `cloudflare/migrations/0014-mother-ai-history.sql`.
+- O padrão é `save_to_history=false`. Quando houver opção de salvamento escolhida, a resposta é armazenada somente no D1 da conta, sempre vinculada a `owner_id`, `mother_id` e `member_user_id`.
+- Data de expiração: 30 dias. A limpeza automática usa o job diário existente. Durante consulta de histórico, registros expirados não aparecem antes mesmo da limpeza.
+- A consultora **não tem acesso** a mensagens particulares. Ela vê somente aquelas que a mãe decidiu encaminhar, mediante confirmação explícita, no painel de Engajamento da paciente correta.
+- A mãe pode retirar o compartilhamento, avaliar uma resposta como útil/não útil e apagar o histórico inteiro; a exclusão também elimina os itens compartilhados da fila da consultora.
+- Isso não apaga cópias que a profissional tenha registrado legalmente por outros meios; não há envio automático de e-mail ou integração silenciosa com prontuários.
+- Não são persistidos identificadores de outras mães, prontuários, anexos ou todos os tokens enviados ao modelo.
+- O sistema não afirma que a consultora recebeu/visualizou notificação: sucesso indica apenas que o item ficou acessível na fila dela.
+
+### Gates de segurança ainda exigidos antes da disponibilização
+- `npm run test:mother-ai` com SQLite real; `npm run test:block6`; demais gates do repositório sem falhas.
+- Auditoria de risco clínico de respostas e protocolos/links por profissional habilitado; revisão LGPD e aceites de consentimento.
+- QA E2E em dispositivo móvel e profissional, isolamento entre homônimas e revogação de convite; screenshots com dados fictícios.
+- Validação da migração `0014` no pipeline sem mudanças de secrets/rotas canônicas.
+- A funcionalidade permanece desativada até autorização para merge e configuração de release. **Nem a flag de AI nem a permissão para inferência devem ser ativadas automaticamente.**
