@@ -460,6 +460,21 @@ replaceText('index.html',
   '<button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Verifica o arquivo antes de atualizar registros. Aceita backups antigos .json.</small></div><b>›</b></button>\n          <p class="form-message" data-backup-status role="status">Nenhuma exportação registrada neste aparelho.</p>',
   'backup-restore-guidance');
 
+// A patient-detail load may finish after navigation has already returned to
+// the appointment wizard. Never allow an outdated async route to hide it.
+replaceText('core/app-shell.js',
+  "  if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');",
+  "  if (navigateRoute) navigate('patient', patient.mother.id); else if (hashToScreen() === 'patient' && patientIdFromHash() === patient.mother.id) showScreen('patient');",
+  'patient-navigation-prevent-stale-show');
+replaceText('core/app-shell.js',
+  "  const screen = hashToScreen();\n  if (screen === 'patient') {",
+  "  const screen = hashToScreen();\n  const routeAtStart = location.hash;\n  if (screen === 'patient') {",
+  'route-capture-latest-location');
+replaceText('core/app-shell.js',
+  "  showScreen(screen);\n}\n\nfunction renderPatientList",
+  "  if (location.hash !== routeAtStart) return;\n  showScreen(screen);\n}\n\nfunction renderPatientList",
+  'route-discard-outdated-response');
+
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   modules[outputPath] = {
