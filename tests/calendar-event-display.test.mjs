@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calendarEventTitle, calendarEventTitlesForOwner, escapeIcsText, handleCalendarDisplayPreferences } from '../worker/calendar-event-display.js';
 import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 
-const item = (id, mother_id, appointment_type = 'Consulta inicial') => ({id,mother_id,appointment_type,starts_at:'2026-11-11T13:00:00Z',duration_min:60,status:'Agendado'});
+const item = (id, mother_id, appointment_type = 'Consulta inicial') => ({id,mother_id,appointment_type,owner_id:userId,starts_at:'2026-11-11T13:00:00Z',duration_min:60,status:'Agendado'});
 
 test('Event titles stay anonymous unless a professional explicitly enables names', () => {
   assert.equal(calendarEventTitle(item('a','m1'), 'Mariana Costa', false),'Atendimento - Gestão Amamentação');
