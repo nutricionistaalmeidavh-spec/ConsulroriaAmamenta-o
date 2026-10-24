@@ -66,7 +66,7 @@ export function appointmentsToIcs(items, ownerId, titles=new Map()) {
     lines.push('BEGIN:VEVENT', 'UID:' + uid + '@gestao-amamentacao',
       'DTSTAMP:' + now, 'DTSTART:' + toUtc(start),
       'DTEND:' + toUtc(new Date(start.getTime() + durationMs(item))),
-      'SUMMARY:' + escapeIcsText(titles.get(item.id) || GENERIC_EVENT_TITLE), 'CLASS:PRIVATE',
+      'SUMMARY:' + escapeIcsText(titles.get(item.id) || 'Atendimento - Gestao Amamentacao'), 'CLASS:PRIVATE',
       'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
