@@ -48,8 +48,15 @@ function ownershipReferences(record = {}) {
   ].filter(([field]) => record[field]);
 }
 
+function isForeignOwned(entry, userId) {
+  const record = entry.record || {};
+  return [entry.ownerId,record.owner_id,record.user_id,record.uploaded_by]
+    .some((id) => id != null && id !== '' && String(id) !== userId);
+}
+
 function isDirectlyOwned(entry, userId) {
   const record = entry.record || {};
+  if (isForeignOwned(entry,userId)) return false;
   return String(entry.ownerId || '') === userId
     || String(record.owner_id || '') === userId
     || String(record.user_id || '') === userId
@@ -69,7 +76,7 @@ function selectOwnedRows(entries, userId) {
   while (changed) {
     changed = false;
     for (const entry of entries) {
-      if (accepted.has(entry)) continue;
+      if (accepted.has(entry) || isForeignOwned(entry,userId)) continue;
       for (const [field, table] of ownershipReferences(entry.record)) {
         const parent = byIdentity.get(`${table}:${entry.record[field]}`);
         if (parent && accepted.has(parent)) {
@@ -132,8 +139,17 @@ async function readBackupFiles(env, userId, rows, includeBytes = true) {
   for (const row of allFiles) {
     const metadata = parseJson(row.metadata_json, {});
     const path = String(row.source_path || '');
+    // Ownership cannot be inherited from a referenced path when explicit
+    // metadata says that it belongs to another professional.
+    if (metadata.owner_id && String(metadata.owner_id) !== userId) {
+      if (referenced.has(path)) throw new Error('backup_foreign_owned_file_reference');
+      continue;
+    }
     const owned = String(metadata.owner_id || '') === userId || path.startsWith(`${userId}/`) || referenced.has(path);
     if (!owned) continue;
+    // The restore contract only accepts account-prefixed paths. Export must
+    // fail, not silently emit an archive that cannot later be restored.
+    if (!path.startsWith(`${userId}/`)) throw new Error('backup_unrestorable_storage_path');
     // Spreadsheet previews never download R2 bytes or leak internal storage keys.
     if (!includeBytes) {
       files.push({
