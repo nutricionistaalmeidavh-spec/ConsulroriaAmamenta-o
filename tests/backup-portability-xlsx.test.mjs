@@ -33,7 +33,7 @@ test('exporting readable XLSX includes 23 clinical tables, summary and file refe
   assert.ok(zip.has('[Content_Types].xml'));
   assert.ok(zip.has('xl/workbook.xml'));
   assert.equal((zip.get('xl/workbook.xml').match(/<sheet name=/g)||[]).length,backupTables.length+2);
-  assert.match(zip.get('xl/worksheets/sheet1.xml'),/Resumo/);
+  assert.match(zip.get('xl/worksheets/sheet1.xml'),/Gestão Amamentação/);
   assert.match([...zip.values()].join('\n'),/mother-1/);
   assert.match([...zip.values()].join('\n'),/owner-1\/photo.jpg/);
   assert.doesNotMatch([...zip.values()].join('\n'),/bytesBase64/);
