@@ -8,7 +8,7 @@ export async function verifiedMotherAiAccess(db,user) {
       const record=JSON.parse(row.record_json);
       const ownerId=String(row.owner_id||record.owner_id||''), motherId=String(record.mother_id||'');
       if(!ownerId||!motherId||ownerId!==String(record.owner_id||ownerId)||
-        [false,0,'0','false','disabled','inactive','cancelled'].includes(record.active)||
+        ['0','false','disabled','inactive','cancelled'].includes(String(record.active??true).toLowerCase())||
         !Number.isFinite(Date.parse(record.member_verified_at||''))||
         String(record.member_user_id)!==String(user.id))return [];
       return [{ownerId,motherId,memberUserId:String(user.id)}];
