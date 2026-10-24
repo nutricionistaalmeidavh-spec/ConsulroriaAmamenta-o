@@ -111,10 +111,10 @@ if (container && !container.querySelector('[data-outlook-calendar-integration]')
     const state = find('[data-outlook-state]');
     state.dataset.state = failed ? 'error' : active === true ? 'active' : active === false ? 'inactive' : 'loading';
     state.textContent = failed ? 'Não foi possível verificar' : active === true ? 'Link ativo' :
-      active === false ? 'Não conectado' : 'Verificando…';
+      active === false ? 'Link não criado' : 'Verificando…';
     find('[data-outlook-description]').textContent = active === true && !failed
-      ? 'Seus agendamentos são atualizados periodicamente no Calendário.'
-      : 'Consulte seus compromissos no iPhone ou Mac.';
+      ? 'Link gerado. Assine da Web no Outlook para acompanhar alterações.'
+      : 'Acompanhe seus atendimentos no Outlook Calendário.';
     find('[data-outlook-create]').hidden = active !== false || failed;
     find('[data-outlook-manage]').hidden = active !== true || failed;
     find('[data-outlook-retry]').hidden = !failed;
