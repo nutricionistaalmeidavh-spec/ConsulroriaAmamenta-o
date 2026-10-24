@@ -63,6 +63,8 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await page.locator('[data-wizard-close]:visible').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
   await page.locator('[data-action="new-appointment"]:visible').first().click();
+  await expect(page.locator('[data-wizard-step="1"]')).toBeVisible();
+  await expect(addressField).toBeVisible();
   await expect(addressField).toHaveValue(defaultAddress);
   await page.locator('[data-encounter-choice][data-field="format"][data-value="Online"]').click();
   await expect(addressField).toHaveValue('');
@@ -80,6 +82,8 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await page.locator('[data-wizard-close]:visible').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName);
   await page.locator('[data-action="new-appointment"]:visible').first().click();
+  await expect(page.locator('[data-wizard-step="1"]')).toBeVisible();
+  await expect(addressField).toBeVisible();
   await expect(addressField).toHaveValue(defaultAddress);
   await page.locator('[data-encounter-choice][data-field="format"][data-value="Presencial"]').click();
   await expect(addressField).toHaveValue('');
