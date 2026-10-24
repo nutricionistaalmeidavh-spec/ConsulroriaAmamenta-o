@@ -12,6 +12,7 @@ import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runt
 import { handleFinancialEntryCancelRuntime } from './financial-entry-cancel-runtime.js';
 import { handleBlock6RpcRuntime, isAuthenticatedMother } from './block6-rpc-runtime.js';
 import { handleMotherAiChat } from './mother-ai-chat-runtime.js';
+import { handleMotherAiHistory } from './mother-ai-history-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
@@ -234,6 +235,9 @@ export default {
         }
       }
     }
+
+    const motherAiHistoryResponse = await handleMotherAiHistory(request, env, url);
+    if (motherAiHistoryResponse) return withNoIndex(motherAiHistoryResponse);
 
     const motherAiResponse = await handleMotherAiChat(request, env, url);
     if (motherAiResponse) return withNoIndex(motherAiResponse);
