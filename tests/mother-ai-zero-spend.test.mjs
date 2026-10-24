@@ -17,12 +17,15 @@ async function setup(record={}) {
     id:'access-1',owner_id:'consultant-a',mother_id:'mother-a',member_user_id:user.id,
     member_verified_at:now,email:user.email,active:true,...record
   });
+  await db.prepare('INSERT INTO mother_ai_pilot_allowlist(owner_id,mother_id,member_user_id,approved_at,expires_at) VALUES(?,?,?,?,?)')
+    .bind('consultant-a','mother-a',user.id,now,new Date(Date.now()+7*86400000).toISOString()).run();
   const AI={async run(){calls++; return {response:'A amamentação pode ser apoiada pela equipe de saúde.'}}};
   return {db,AI,get calls(){return calls}};
 }
 function envOf(f,options={}) {
   return {CLINICAL_DB:f.db, AI:f.AI, MOTHER_PORTAL_ENABLED:'true',
     MOTHER_AI_ENABLED:'true', MOTHER_AI_ALLOW_INFERENCE:'true',
+    MOTHER_AI_PILOT_ENABLED:'true',MOTHER_AI_CLINICAL_REVIEW_APPROVED:'true',MOTHER_AI_INFERENCE_BILLING_APPROVED:'true',
     MOTHER_AI_GLOBAL_DAILY_LIMIT:'2', MOTHER_AI_OWNER_DAILY_LIMIT:'2',
     MOTHER_AI_MOTHER_DAILY_LIMIT:'1',...options};
 }
