@@ -6,7 +6,7 @@ Branch: `feat/mother-ai-zero-spend-foundation`, baseada na branch da PR #106 (`f
 ## Infraestrutura existente
 - Worker atual: endpoint `POST /api/member/ai/chat`.
 - Autenticação Bearer com o mecanismo D1 já canônico; busca do vínculo no D1 a partir de `member_user_id`. `owner_id`, `mother_id` e `member_verified_at` são lidos apenas no servidor.
-- Migração SQL aditiva `cloudflare/migrations/0013-mother-ai-budget.sql`, executada pelo mesmo fluxo de migrações existente (nenhum Wrangler JSON, secret, rota existente ou banco novo alterado).
+- Migração SQL aditiva `cloudflare/migrations/0014-mother-ai-budget.sql`, executada pelo mesmo fluxo de migrações existente (nenhum Wrangler JSON, secret, rota existente ou banco novo alterado).
 - Não há frontend de chat nesta fase: a fase 5 cobrirá a interface e o consentimento visual da mãe.
 - Não há histórico persistente, mensagens nem dados clínicos sensíveis salvos no D1.
 

@@ -4,7 +4,7 @@ on:
     paths:
       - 'worker/mother-ai-*.js'
       - 'tests/mother-ai-zero-spend.test.mjs'
-      - 'cloudflare/migrations/0013-mother-ai-budget.sql'
+      - 'cloudflare/migrations/0014-mother-ai-budget.sql'
       - 'worker/domain-entry.js'
       - 'package.json'
       - '.github/workflows/validate-mother-ai.yml'
