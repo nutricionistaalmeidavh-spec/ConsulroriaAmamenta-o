@@ -33,7 +33,7 @@ test('record real QA demo of Gestão Amamentação and Google integration settin
   await slow(2200);
 
   // Schedule an appointment in the authentic local Cloudflare/D1 QA runtime.
-  const starts = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString();
+  const starts = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const headers = { ...(await authHeaders(page)), 'content-type': 'application/json' };
   const appointment = await page.request.post('/api/clinical/rpc/schedule_clinical_appointment', {
     headers,
