@@ -11,6 +11,7 @@ import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
 import { handleFinancialEntryCancelRuntime } from './financial-entry-cancel-runtime.js';
 import { handleBlock6RpcRuntime, isAuthenticatedMother } from './block6-rpc-runtime.js';
+import { handleMotherAiChat } from './mother-ai-chat-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
@@ -243,6 +244,9 @@ export default {
         }
       }
     }
+
+    const motherAiResponse = await handleMotherAiChat(request, env, url);
+    if (motherAiResponse) return withNoIndex(motherAiResponse);
 
     const clinicalBackupResponse = await handleClinicalBackupRuntime(request, env, url);
     if (clinicalBackupResponse) return withNoIndex(clinicalBackupResponse);
