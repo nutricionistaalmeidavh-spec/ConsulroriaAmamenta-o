@@ -40,7 +40,7 @@ function durationMs(item) {
 function isCancelled(item) { return /^(cancelad[oa]|exclu[ií]d[oa])$/i.test(String(item?.status || '')); }
 function validAppointment(item) { return Boolean(item?.id && validDate(item?.starts_at) && !isCancelled(item)); }
 
-export function appointmentToEvent(item, title=GENERIC_EVENT_TITLE) {
+export function appointmentToEvent(item, _calendarId, title=GENERIC_EVENT_TITLE) {
   if (!validAppointment(item)) return null;
   const start = new Date(item.starts_at);
   return {
@@ -239,12 +239,12 @@ export async function syncCalendarAppointment(env, ownerId, appointmentId) {
   const title=(await calendarEventTitlesForOwner(env,ownerId,[item])).get(item.id) || GENERIC_EVENT_TITLE;
   const eventId = await googleEventId(ownerId, appointmentId);
   const path = '/calendars/' + encodeURIComponent(conn.calendar_id) + '/events';
-  const event = { ...appointmentToEvent(item, title), id: eventId };
-  const edited = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, title) });
+  const event = { ...appointmentToEvent(item, null, title), id: eventId };
+  const edited = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, null, title) });
   if (edited.status === 404) {
     const created = await googleApi(env, ownerId, conn, path, { method: 'POST', body: event });
     if (created.status === 409) {
-      const retry = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, title) });
+      const retry = await googleApi(env, ownerId, conn, path + '/' + eventId, { method: 'PATCH', body: appointmentToEvent(item, null, title) });
       if (retry.status !== 200) throw new Error('google_calendar_upsert_failed');
     } else if (created.status !== 200 && created.status !== 201) {
       throw new Error('google_calendar_create_failed');
