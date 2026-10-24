@@ -52,6 +52,15 @@ function dedupeLines(values=[]){
 
 export function buildMotherSafeEncounterShare(encounter={}){
   const plan=asObject(encounter.care_plan);
+  if (plan.orientation_mode==='weekly' || (plan.orientation_mode!=='single' && Array.isArray(plan.weekly_plan?.weeks) && plan.weekly_plan.weeks.length)) {
+    const weekly=asObject(plan.weekly_plan);
+    const sections=[
+      clean(plan.objectives)?'Objetivos\n'+clean(plan.objectives):'',
+      (Array.isArray(weekly.weeks)?weekly.weeks:[]).map((entry,index)=>clean(entry?.instructions)?'Semana '+(index+1)+'\n'+clean(entry.instructions):'').filter(Boolean).join('\n\n'),
+      clean(plan.followup)?'Próximo acompanhamento\n'+clean(plan.followup):''
+    ].filter(Boolean);
+    return {kind:'care_plan',title:'Meu plano de cuidado',body:sections.join('\n\n')};
+  }
   const structured=buildCarePlanInstructions(plan);
   const sections=[];
   if(clean(plan.objectives))sections.push(`Objetivos\n${clean(plan.objectives)}`);
@@ -171,7 +180,7 @@ if(!browser){}else{
   }
   async function prepareSafeSummary(encounterId){
     const token=professionalToken();if(!token)return toast('Sessão profissional não encontrada.','error');
-    try{const rows=await rest(`clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=id,occurred_at,care_plan&limit=1`,token),enc=rows?.[0];if(!enc)throw new Error('Atendimento não encontrado.');const share=buildMotherSafeEncounterShare(enc);const kind=document.querySelector('#mf-kind'),title=document.querySelector('#mf-title'),body=document.querySelector('#mf-body');if(kind)kind.value=share.kind;if(title)title.value=share.title;if(body)body.value=share.body;toast('Resumo seguro preparado. Revise antes de publicar.','success')}catch(error){toast(error.message||'Não foi possível preparar o resumo.','error')}
+    try{const rows=await rest(`clinical_encounters?id=eq.${encodeURIComponent(encounterId)}&select=id,occurred_at,care_plan&limit=1`,token),enc=rows?.[0];if(!enc)throw new Error('Atendimento não encontrado.');const share=buildMotherSafeEncounterShare(enc);const kind=document.querySelector('#mf-kind'),title=document.querySelector('#mf-title'),body=document.querySelector('#mf-body');if(kind)kind.value=share.kind;if(title)title.value=share.title;if(body)body.value=share.body;const publish=document.querySelector('#mf-publish');if(publish){publish.dataset.sourceTable='clinical_encounters';publish.dataset.sourceId=encounterId}toast('Resumo seguro preparado. Revise antes de publicar.','success')}catch(error){toast(error.message||'Não foi possível preparar o resumo.','error')}
   }
   function validatePublish(){const item={kind:document.querySelector('#mf-kind')?.value||'',title:document.querySelector('#mf-title')?.value||'',published:true};if(isMotherShareAllowed(item))return true;toast('Este tipo de conteúdo deve permanecer somente na área profissional.','error');return false}
   async function filterMotherPortal(){

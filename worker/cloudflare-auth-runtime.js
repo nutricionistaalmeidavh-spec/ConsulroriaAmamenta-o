@@ -412,7 +412,7 @@ async function handleSignup(request, env) {
   const user = await runtimeUserById(env, userId);
   if (!user) return json(409, {error:'signup_credentials_changed',message:'A senha foi alterada. Tente novamente com sua nova senha.'});
   await sendBestEffortTransactionalEmail(env, {
-    kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com' },
+    kind: 'welcome', to: user.email, data: { appUrl: env.AUTH_RECOVERY_ORIGIN || 'https://app.deboralactacao.com', audience: input?.data?.signup_context === 'mother_portal' ? 'mother' : 'professional' },
   });
   return json(200, await issueSession(env, user));
 }

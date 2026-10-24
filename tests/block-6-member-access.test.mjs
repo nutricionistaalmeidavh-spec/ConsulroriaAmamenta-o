@@ -38,7 +38,7 @@ function req() { return new Request('https://app.test/api/clinical/records/porta
 function seedBase(db, tier) {
   db.seed('member_portal_access', 'access-1', 'professional-1', {
     id: 'access-1', owner_id: 'professional-1', mother_id: 'mother-1', email: member.email,
-    member_user_id: member.id, tier, active: true,
+    member_user_id: member.id, member_verified_at:'2026-10-23T00:00:00Z', tier, active: true,
   });
   db.seed('portal_content', 'free', 'professional-1', { id: 'free', owner_id: 'professional-1', min_tier: 'free', active: true, position: 1 });
   db.seed('portal_content', 'essential', 'professional-1', { id: 'essential', owner_id: 'professional-1', min_tier: 'essential', active: true, position: 2 });
@@ -53,7 +53,7 @@ for (const [tier, expected] of [
   test(`portal_content enforces ${tier} tier`, async () => {
     const db = new FakeD1();
     seedBase(db, tier);
-    const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db }, new URL(req().url), { authenticate });
+    const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req().url), { authenticate });
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).map((row) => row.id), expected);
   });
@@ -68,7 +68,7 @@ test('an explicit bonus unlock grants one higher-tier content item only to the c
   db.seed('member_content_unlocks', 'unlock-other', 'professional-1', {
     id: 'unlock-other', owner_id: 'professional-1', mother_id: 'mother-2', content_id: 'essential', active: true,
   });
-  const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db }, new URL(req().url), { authenticate });
+  const response = await handleBlock6RpcRuntime(req(), { CLINICAL_DB: db, MOTHER_PORTAL_ENABLED: 'true' }, new URL(req().url), { authenticate });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).map((row) => row.id), ['free', 'premium']);
 });

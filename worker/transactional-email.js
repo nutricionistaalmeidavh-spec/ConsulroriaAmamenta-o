@@ -24,6 +24,24 @@ export function transactionalTemplate(kind, data = {}) {
       html: layout('Redefina sua senha', `<p>Recebemos uma solicitação para criar uma nova senha.</p><p>Este link expira em ${minutes} minutos e só pode ser usado uma vez.</p>`, { label: 'Criar nova senha', url: data.recoveryUrl }),
     };
   }
+  if (kind === 'mother_portal_code') {
+    const code = text(data.code);
+    if (!/^\d{6}$/.test(code)) throw new TypeError('invalid_mother_portal_code');
+    return {
+      subject: 'Código de acesso à Área das Mães — Gestão Amamentação',
+      text: 'Seu código de acesso é ' + code + '. Válido por 15 minutos. Não compartilhe este código.',
+      html: layout('Confirme seu acesso', '<p>Digite este código na Área das Mães para confirmar que o e-mail é seu.</p><p style="font-size:28px;font-weight:700;letter-spacing:5px">' + escapeHtml(code) + '</p><p>Válido por 15 minutos. Não compartilhe este código.</p>'),
+    };
+  }
+  if (kind === 'welcome' && data.audience === 'mother') {
+    const url=text(data.appUrl);
+    const motherUrl=url ? url.split('#')[0] + '#mae' : '';
+    return {
+      subject: 'Área das Mães — Gestão Amamentação',
+      text: 'Sua conta foi criada. Entre na Área das Mães e confirme o e-mail convidado para visualizar os conteúdos liberados pela sua consultora.',
+      html: layout('Sua Área das Mães', '<p>Seu acesso foi criado. Para proteger suas orientações, confirme o e-mail convidado ao entrar no portal.</p>', motherUrl ? { label: 'Acessar minha área', url: motherUrl } : null),
+    };
+  }
   if (kind === 'welcome') return {
     subject: 'Boas-vindas à Gestão Amamentação',
     text: 'Sua conta foi criada com sucesso. Você já pode acessar a plataforma.',

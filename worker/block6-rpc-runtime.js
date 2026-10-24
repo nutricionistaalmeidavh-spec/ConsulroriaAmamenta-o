@@ -1,4 +1,6 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { canPublishToMother, isPublishedForMother } from '../public/mother-portal-contract.js';
+import { requestMemberVerification, verifyMemberVerification } from './member-portal-verification-runtime.js';
 
 const RETIRED_RPCS = new Map([
   ['bootstrap_demo_data', { reason: 'demo_seed_managed_outside_runtime', replacement: 'demo:seed' }],
@@ -104,31 +106,23 @@ function tierRank(value, fallback = -1) {
   return Object.hasOwn(TIER_RANK, key) ? TIER_RANK[key] : fallback;
 }
 
+export async function isAuthenticatedMother(env,user){return Boolean(env.CLINICAL_DB && user?.id && await claimedAccess(env,user));}
+
 async function claimedAccess(env, user) {
   if (!user?.id) return null;
   const rows = await accessRowsByMember(env, user.id);
-  return rows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id)) || null;
+  return rows.find((entry) => isActive(entry.record?.active) && Boolean(Date.parse(entry.record?.member_verified_at || '')) && String(entry.record?.member_user_id || '') === String(user.id)) || null;
 }
 
 async function claimMemberPortal(env, user) {
   const email = normalizedEmail(user?.email);
   if (!user?.id || !email) return json(401, { error: 'member_identity_required', message: 'Entre com o e-mail convidado para acessar a Área da Mãe.' });
   const alreadyRows = await accessRowsByMember(env, user.id);
-  const already = alreadyRows.find((entry) => isActive(entry.record?.active) && String(entry.record?.member_user_id || '') === String(user.id));
+  const already = alreadyRows.find((entry) => isActive(entry.record?.active) && Boolean(Date.parse(entry.record?.member_verified_at || '')) && String(entry.record?.member_user_id || '') === String(user.id));
   if (already) return json(200, already.record);
 
-  const matchingInvites = (await accessRowsByEmail(env, email))
-    .filter((entry) => isActive(entry.record?.active) && normalizedEmail(entry.record?.email) === email);
-  const available = matchingInvites.filter((entry) => !String(entry.record?.member_user_id || '').trim());
-  if (!matchingInvites.length) return json(404, { error: 'member_access_not_found', message: 'Convite ativo não encontrado para este e-mail.' });
-  if (!available.length) return json(403, { error: 'member_access_already_claimed', message: 'Este convite já está vinculado a outra conta.' });
-  if (available.length > 1) return json(409, { error: 'member_access_ambiguous', message: 'Há mais de um convite ativo para este e-mail. A profissional precisa manter apenas o acesso correto.' });
-
-  const invited = available[0];
-  const now = new Date().toISOString();
-  const next = { ...invited.record, member_user_id: user.id, claimed_at: invited.record?.claimed_at || now, updated_at: now };
-  await saveEntry(env, 'member_portal_access', invited, next);
-  return json(200, next);
+  // E-mail não comprova titularidade: o primeiro vínculo exige código entregue à caixa postal.
+  return json(409, { error:'member_verification_required', message:'Confirme o e-mail do convite antes de acessar sua área.' });
 }
 
 function requestedOwner(url) {
@@ -161,7 +155,7 @@ function portalRowsForAccess(table, entries, access, url, unlockEntries = []) {
     .map((entry) => entry.record);
 
   if (table === 'member_shared_items') {
-    rows = rows.filter((row) => String(row.mother_id || '') === motherId && isActive(row.published ?? true));
+    rows = rows.filter((row) => String(row.mother_id || '') === motherId && isPublishedForMother(row));
   } else if (table === 'member_engagement_events') {
     rows = rows.filter((row) => String(row.mother_id || '') === motherId && String(row.member_access_id || '') === String(access.id || ''));
   } else if (table === 'member_perks') {
@@ -202,18 +196,119 @@ async function writeMemberEngagement(env, user, request) {
   const access = accessEntry.record;
   const now = new Date().toISOString();
   const event = {
-    ...input,
-    id: String(input?.id || crypto.randomUUID()),
+    event_type: ['portal_visit','shared_view','content_view','content_complete'].includes(String(input?.event_type || '')) ? String(input.event_type) : 'portal_visit',
+    item_kind: String(input?.item_kind || '').slice(0,40),
+    item_id: input?.item_id || null,
+    event_key: String(input?.event_key || '').slice(0,100),
+    id: crypto.randomUUID(),
     owner_id: access.owner_id,
     mother_id: access.mother_id,
     member_access_id: access.id,
     member_user_id: user.id,
-    created_at: input?.created_at || now,
+    created_at: now,
     updated_at: now,
   };
   const entry = { key: event.id, ownerId: access.owner_id, record: event };
   await saveEntry(env, 'member_engagement_events', entry, event);
   return json(201, event);
+}
+
+// O módulo é desligado por padrão até homologação e ativação explícita.
+const portalEnabled = env => String(env.MOTHER_PORTAL_ENABLED || 'false').toLowerCase() === 'true';
+
+export async function authorizeMemberAttachment(env, user, bucket, path) {
+  if (!portalEnabled(env) || bucket !== 'clinical-media' || !path) return false;
+  const entry = await claimedAccess(env, user);
+  if (!entry) return false;
+  const access=entry.record, ownerId=String(access.owner_id || '');
+  if (!ownerId || !path.startsWith(ownerId + '/')) return false;
+  const url=new URL('https://member-portal.internal/');
+  const [shared,content,unlocks]=await Promise.all([
+    tableRows(env,'member_shared_items',ownerId),tableRows(env,'portal_content',ownerId),
+    tableRows(env,'member_content_unlocks',ownerId),
+  ]);
+  const ownedShared=portalRowsForAccess('member_shared_items',shared,access,url);
+  const ownedContent=portalRowsForAccess('portal_content',content,access,url,unlocks);
+  return [...ownedShared,...ownedContent].some(row=>String(row.attachment_path || '') === path);
+}
+
+async function validateProfessionalShare(request,env,url,user) {
+  const input=await request.clone().json().catch(()=>null);
+  if (!input || typeof input!=='object' || Array.isArray(input)) return json(400,{error:'invalid_member_share'});
+  const owned=await tableRows(env,'member_shared_items',user.id);
+  const candidates=request.method==='PATCH'
+    ? owned.filter(e=>url.searchParams.get('id')==='eq.'+e.record.id).map(e=>({...e.record,...input}))
+    : [input];
+  if (request.method==='PATCH' && !candidates.length) return json(404,{error:'member_share_not_found'});
+  const mothers=await tableRows(env,'mothers',user.id);
+  for(const row of candidates) {
+    if(!mothers.some(e=>String(e.record.id||e.key)===String(row.mother_id||'')))
+      return json(403,{error:'mother_not_owned'});
+    if (row.published !== false && (row.source_table || row.source_id)) {
+      const sourceTable=String(row.source_table||''),sourceId=String(row.source_id||'');
+      if(!['clinical_encounters','appointments','library_items'].includes(sourceTable)||!sourceId)
+        return json(422,{error:'member_share_invalid_source'});
+      const source=(await tableRows(env,sourceTable,user.id))
+        .find(entry=>String(entry.record.id||entry.key)===sourceId);
+      if(!source || (sourceTable!=='library_items' && String(source.record.mother_id||'')!==String(row.mother_id||'')))
+        return json(403,{error:'member_share_source_outside_mother'});
+    }
+    if(row.published !== false && !canPublishToMother(row)) return json(422,{
+      error:'unsafe_member_publication',
+      message:'Publique apenas plano de cuidado, orientações, retornos e arquivos autorizados. Anamnese e avaliações internas permanecem privadas.'
+    });
+  }
+  return null;
+}
+
+async function writeProfessionalPortalRecord(request,env,url,user,table) {
+  if (!['POST','PATCH'].includes(request.method)) return null;
+  const input=await request.clone().json().catch(()=>null);
+  if (!input || Array.isArray(input) || typeof input!=='object') return json(400,{error:'invalid_portal_payload'});
+  const rows=await tableRows(env,table,user.id);
+  const old=request.method==='PATCH'
+    ? rows.find(entry=>url.searchParams.get('id')==='eq.'+String(entry.record.id||entry.key))
+    : null;
+  if (request.method==='PATCH' && !old) return json(404,{error:'portal_record_not_found'});
+  const motherId=old?.record.mother_id || input.mother_id;
+  if (table==='member_portal_access' || (table==='member_perks' && motherId)) {
+    const mothers=await tableRows(env,'mothers',user.id);
+    if(!mothers.some(x=>String(x.record.id||x.key)===String(motherId))) return json(403,{error:'mother_not_owned'});
+  }
+  if(table==='member_portal_access' && request.method==='POST'
+    && rows.some(x=>String(x.record.mother_id)===String(motherId))) return json(409,{error:'portal_access_exists'});
+  const now=new Date().toISOString();
+  const row={...(old?.record||{}),id:old?.record.id||crypto.randomUUID(),owner_id:user.id,
+    created_at:old?.record.created_at||now,updated_at:now};
+  if(table==='member_portal_access') {
+    const email=normalizedEmail(input.email??old?.record.email);
+    const tier=String(input.tier??old?.record.tier??'free');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !Object.hasOwn(TIER_RANK,tier))
+      return json(400,{error:'invalid_portal_access'});
+    Object.assign(row,{mother_id:motherId,email,tier,
+      active:input.active===undefined ? old?.record.active!==false : input.active===true,
+      show_progress:input.show_progress===undefined ? Boolean(old?.record.show_progress) : input.show_progress===true});
+    if(!old || email!==normalizedEmail(old.record.email)){
+      row.member_user_id=null;row.claimed_at=null;row.member_verified_at=null;
+    }
+  } else if(table==='portal_content') {
+    const title=String(input.title??old?.record.title??'').trim();
+    const body=String(input.body??old?.record.body??'').trim();
+    const path=String(input.attachment_path??old?.record.attachment_path??'').trim();
+    const tier=String(input.min_tier??old?.record.min_tier??'free');
+    if(!title || (!body && !path) || !Object.hasOwn(TIER_RANK,tier)) return json(400,{error:'invalid_portal_content'});
+    Object.assign(row,{title,body,attachment_path:path||null,min_tier:tier,
+      category:String(input.category??old?.record.category??'Geral').slice(0,100),
+      summary:String(input.summary??old?.record.summary??'').slice(0,400),
+      active:input.active===undefined ? old?.record.active!==false : input.active===true});
+  } else if(table==='member_perks') {
+    const title=String(input.title??old?.record.title??'').trim();
+    if(!title) return json(400,{error:'invalid_member_perk'});
+    Object.assign(row,{mother_id:motherId||null,title,note:String(input.note??old?.record.note??'').slice(0,500),
+      active:input.active===undefined ? old?.record.active!==false : input.active===true});
+  } else return null;
+  await saveEntry(env,table,{key:old?.key||row.id,ownerId:user.id},row);
+  return json(request.method==='POST'?201:200,[row]);
 }
 
 export async function handleBlock6RpcRuntime(request, env, url = new URL(request.url), deps = {}) {
@@ -226,21 +321,38 @@ export async function handleBlock6RpcRuntime(request, env, url = new URL(request
       const retired = RETIRED_RPCS.get(name);
       return json(410, { error: 'rpc_retired', rpc: name, reason: retired.reason, replacement: retired.replacement });
     }
-    if (name === 'claim_member_portal') {
+    if (['claim_member_portal','request_member_verification','verify_member_verification'].includes(name)) {
+      if (!portalEnabled(env)) return json(403,{error:'mother_portal_disabled'});
       const user = await authenticate(request, env);
-      if (!user?.id) return json(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada. Entre novamente.' });
-      return claimMemberPortal(env, user);
+      if (!user?.id) return json(401, { error:'cloudflare_auth_required', message:'Sessão expirada. Entre novamente.' });
+      if (name === 'claim_member_portal') return claimMemberPortal(env, user);
+      if (name === 'request_member_verification') return requestMemberVerification(env, user);
+      return verifyMemberVerification(env, user, request);
     }
+    const user=await authenticate(request,env);
+    if(user?.id && await claimedAccess(env,user)) return json(403,{error:'mother_clinical_rpc_denied'});
     return null;
   }
 
   if (!url.pathname.startsWith('/api/clinical/records/')) return null;
   const table = decodeURIComponent(url.pathname.slice('/api/clinical/records/'.length).split('/')[0] || '');
-  if (!MEMBER_PORTAL_TABLES.has(table)) return null;
   const user = await authenticate(request, env);
   if (!user?.id) return json(401, { error: 'cloudflare_auth_required', message: 'Sessão expirada. Entre novamente.' });
   const access = await claimedAccess(env, user);
-  if (!access) return null;
+  if (access && !MEMBER_PORTAL_TABLES.has(table)) return json(403,{error:'mother_private_portal_table_denied'});
+  if (!MEMBER_PORTAL_TABLES.has(table) && !['member_portal_access','member_content_unlocks'].includes(table)) {
+    return access ? json(403,{error:'mother_clinical_records_denied'}) : null;
+  }
+  if (!access) {
+    if (table === 'member_shared_items' && (request.method === 'POST' || request.method === 'PATCH')) {
+      return validateProfessionalShare(request,env,url,user);
+    }
+    if (['member_portal_access','portal_content','member_perks'].includes(table)) {
+      return writeProfessionalPortalRecord(request,env,url,user,table);
+    }
+    return null;
+  }
+  if (!portalEnabled(env)) return json(403,{error:'mother_portal_disabled'});
 
   if (request.method === 'GET') return readMemberPortalTable(env, user, table, url);
   if (table === 'member_engagement_events' && request.method === 'POST') return writeMemberEngagement(env, user, request);

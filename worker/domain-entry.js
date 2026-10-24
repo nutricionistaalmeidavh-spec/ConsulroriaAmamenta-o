@@ -10,7 +10,7 @@ import { handleCloudflareUpsertRuntime } from './cloudflare-upsert-runtime.js';
 import { handleGenericCrudPolicy } from './generic-crud-policy-runtime.js';
 import { handleAtomicPackageSessionRuntime } from './package-session-atomic-runtime.js';
 import { handleFinancialEntryCancelRuntime } from './financial-entry-cancel-runtime.js';
-import { handleBlock6RpcRuntime } from './block6-rpc-runtime.js';
+import { handleBlock6RpcRuntime, isAuthenticatedMother } from './block6-rpc-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
@@ -183,6 +183,11 @@ export default {
       return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
     }
 
+    if (url.pathname === '/api/member/availability' && request.method === 'GET') {
+      return withNoIndex(new Response(JSON.stringify({
+        enabled:String(env.MOTHER_PORTAL_ENABLED || 'false').toLowerCase() === 'true',
+      }), {headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}));
+    }
     if (url.pathname === '/api/seo/login' && request.method === 'POST') {
       return withNoIndex(await handleSeoPasswordLogin(request, env));
     }
@@ -218,6 +223,25 @@ export default {
       if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
       const user = await authenticateClinicalRequest(request, env);
       if (!user?.id) return cloudflareIdentityRequired(401, 'cloudflare_auth_required');
+    }
+
+    // Falha fechada antes de TODAS as mutações clínicas: mãe não é profissional.
+    if (env.CLINICAL_DB && (url.pathname.startsWith('/api/clinical/') || url.pathname.startsWith('/api/license/'))) {
+      const memberAllowed = [
+        '/api/clinical/rpc/claim_member_portal',
+        '/api/clinical/rpc/request_member_verification',
+        '/api/clinical/rpc/verify_member_verification',
+        '/api/clinical/records/member_shared_items',
+        '/api/clinical/records/portal_content',
+        '/api/clinical/records/member_perks',
+        '/api/clinical/records/member_engagement_events',
+      ].some(prefix => url.pathname === prefix);
+      if (!memberAllowed) {
+        const actor = await authenticateClinicalRequest(request, env);
+        if (actor?.id && await isAuthenticatedMother(env, actor)) {
+          return cloudflareIdentityRequired(403,'mother_professional_api_denied');
+        }
+      }
     }
 
     const clinicalBackupResponse = await handleClinicalBackupRuntime(request, env, url);
@@ -289,6 +313,11 @@ export default {
   },
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(reconcileBilling(env).catch((error) => console.error('billing reconciliation failed', error)));
+    if (String(env.MOTHER_PORTAL_ENABLED || 'false').toLowerCase()==='true' && env.CLINICAL_DB) {
+      ctx.waitUntil(env.CLINICAL_DB.prepare('DELETE FROM member_portal_challenges WHERE expires_at < ?')
+        .bind(new Date().toISOString()).run()
+        .catch(error=>console.error('mother_portal_challenge_cleanup_failed',error?.message||'unknown')));
+    }
     if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     ctx.waitUntil(
