@@ -302,7 +302,7 @@ async function handleCallback(request, env, url) {
   ).bind(issued.owner_id, cipher, new Date().toISOString()).run();
   return oauthRedirect(request);
 }
-export async function handleCalendarIntegration(request, env, url = new URL(request.url)) {
+export async function handleGoogleCalendarIntegration(request, env, url = new URL(request.url)) {
   if (!url.pathname.startsWith('/api/calendar/google/') && url.pathname !== '/api/calendar/appointments.ics') return null;
   if (!env.CLINICAL_DB) return fail('cloudflare_d1_required', 503);
   try {
