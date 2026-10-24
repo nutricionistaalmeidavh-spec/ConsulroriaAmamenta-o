@@ -43,8 +43,8 @@ async function enabled(db, ownerId) {
   }
 }
 async function ownersMothers(db, ownerId) {
-  const rows=await db.prepare('SELECT record_json FROM supabase_records WHERE table_name=? AND owner_id=? LIMIT 2000')
-    .bind('mothers',ownerId).all();
+  const rows=await db.prepare('SELECT record_json FROM supabase_records WHERE table_name=? AND (owner_id=? OR (owner_id IS NULL AND json_extract(record_json,\'$.owner_id\')=?)) LIMIT 2000')
+    .bind('mothers',ownerId,ownerId).all();
   const names=new Map();
   for(const row of rows.results || []) {
     try {
