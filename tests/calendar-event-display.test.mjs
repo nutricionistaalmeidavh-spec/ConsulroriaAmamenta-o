@@ -47,3 +47,23 @@ test('Preference API requires login and opts in to external name sharing explici
     assert.equal((await off.json()).show_patient_name,false);
   } finally { await close(); }
 });
+
+test('UI uses one shared inline checkbox per calendar card and no separate settings section', async () => {
+  const { readFileSync } = await import('node:fs');
+  const ui = readFileSync(new URL('../public/calendar-event-display-feature.js', import.meta.url), 'utf8');
+  const bootstrap = readFileSync(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
+  assert.match(ui, /data-apple-calendar-integration/);
+  assert.match(ui, /data-outlook-calendar-integration/);
+  assert.match(ui, /data-google-calendar-integrations/);
+  assert.match(ui, /type=['"]checkbox['"]/);
+  assert.match(ui, /Mostrar nome da mãe no evento/);
+  assert.match(ui, /data-calendar-display-inline/);
+  assert.match(ui, /addEventListener\(['"]change['"]/);
+  assert.match(ui, /show_patient_name/);
+  assert.match(ui, /acknowledged_external_visibility/);
+  assert.match(ui, /\/api\/calendar\/display-preferences/);
+  assert.match(ui, /MutationObserver/);
+  assert.match(ui, /\/api\/calendar\/google\/sync/);
+  assert.doesNotMatch(ui, /Título dos compromissos|data-calendar-display-card|data-calendar-display-save|type=['"]radio['"]/);
+  assert.match(bootstrap, /calendar-event-display-feature\.js/);
+});
