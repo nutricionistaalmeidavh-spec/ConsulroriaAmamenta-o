@@ -1,0 +1,55 @@
+name: Validate external calendar event titles
+on:
+  pull_request:
+    paths:
+      - 'worker/calendar-event-display.js'
+      - 'worker/apple-calendar-ics.js'
+      - 'worker/apple-calendar-integration.js'
+      - 'worker/outlook-calendar-integration.js'
+      - 'worker/google-calendar-integration.js'
+      - 'worker/domain-entry.js'
+      - 'public/calendar-event-display-feature.js'
+      - 'src/bootstrap.js'
+      - 'tests/calendar-event-display.test.mjs'
+      - 'cloudflare/runtime-schema.sql'
+      - 'cloudflare/migrations/0018-calendar-event-display.sql'
+      - '.github/workflows/validate-calendar-display.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'worker/calendar-event-display.js'
+      - 'worker/apple-calendar-ics.js'
+      - 'worker/apple-calendar-integration.js'
+      - 'worker/outlook-calendar-integration.js'
+      - 'worker/google-calendar-integration.js'
+      - 'tests/calendar-event-display.test.mjs'
+permissions:
+  contents: read
+jobs:
+  calendar-titles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          node --check worker/calendar-event-display.js
+          node --check worker/google-calendar-integration.js
+          node --check worker/apple-calendar-ics.js
+          node --check worker/apple-calendar-integration.js
+          node --check worker/outlook-calendar-integration.js
+          node --check worker/domain-entry.js
+          node --check public/calendar-event-display-feature.js
+      - name: Install
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Test title privacy and provider regressions
+        run: |
+          node --test tests/calendar-event-display.test.mjs tests/apple-calendar-integration.test.mjs tests/outlook-calendar-integration.test.mjs tests/google-calendar-debora-pilot.test.mjs
+      - name: Build
+        run: npm run build
+      - name: Confirm new UI in artifacts
+        run: test -f dist/calendar-event-display-feature.js
