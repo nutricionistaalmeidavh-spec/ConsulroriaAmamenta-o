@@ -250,7 +250,11 @@ function flattenAndValidateBackup(backup, userId) {
       }
       assertOwnerField(item.record, 'owner_id', userId);
       assertOwnerField(item.record, 'user_id', userId);
-      assertOwnerField(item.record, 'uploaded_by', userId);
+      // uploaded_by may be the authorised collaborator who created media.
+      // Keep this audit field only when a canonical owner pins the record to
+      // the restoring account; unowned foreign uploads must fail closed.
+      const hasCanonicalOwner = item.record.owner_id != null || item.record.user_id != null;
+      if (!hasCanonicalOwner) assertOwnerField(item.record, 'uploaded_by', userId);
       const entry = { table, recordKey: String(item.recordKey), record: item.record, sourceCreatedAt: item.sourceCreatedAt || null, sourceUpdatedAt: item.sourceUpdatedAt || null };
       entries.push(entry);
       const id = rowIdentity(entry);
