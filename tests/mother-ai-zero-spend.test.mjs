@@ -28,7 +28,7 @@ function envOf(f,options={}) {
 }
 function req(message,extra={}) {
   return new Request('https://app.test/api/member/ai/chat',{
-    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,...extra})
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,consent_to_ai_processing:true,...extra})
   });
 }
 function handler(request,env,actor=user) {
@@ -86,4 +86,16 @@ test('medication and emergency are escalated without diagnosis',()=>{
   assert.equal(matchSafetyRule('Meu bebê está roxo e não respira').kind,'urgent');
   assert.equal(matchSafetyRule('Posso tomar antibiótico e qual a dose?').kind,'clinical');
   assert.equal(matchSafetyRule('O que é a pega?'),null);
+});
+test('model inference requires explicit per-request consent; educational references remain accessible',async()=>{
+  const f=await setup();try {
+    const noConsent=await handler(req('Como é a pega adequada?',{consent_to_ai_processing:false}),envOf(f));
+    assert.equal(noConsent.status,412);
+    assert.equal((await noConsent.json()).error,'consent_required');
+    assert.equal(f.calls,0);
+    const reference=await handler(req('Como é a pega adequada?',{consent_to_ai_processing:false}),envOf(f,{MOTHER_AI_ALLOW_INFERENCE:'false'}));
+    assert.equal(reference.status,200);
+    assert.equal((await reference.json()).model_used,false);
+    assert.equal(f.calls,0);
+  }finally{f.db.close()}
 });
