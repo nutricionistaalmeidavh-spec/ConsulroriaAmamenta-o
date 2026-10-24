@@ -125,5 +125,8 @@ test('Outlook is a separate card, preserving existing Apple and limited Google i
   assert.match(outlook,/data-outlook-calendar-integration/);
   assert.match(outlook,/Assinar da Web/);
   assert.match(outlook,/Copiar link/);
+  assert.match(outlook,/Link não criado/);
+  assert.match(outlook,/Assine da Web no Outlook/);
+  assert.doesNotMatch(outlook,/iPhone ou Mac/);
   assert.doesNotMatch(outlook,/GOOGLE_CALENDAR_CLIENT_SECRET|calendar\/apple\/create/);
 });
