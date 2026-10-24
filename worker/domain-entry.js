@@ -17,6 +17,8 @@ import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.j
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
+import { handleAppleCalendarIntegration } from './apple-calendar-integration.js';
+import { handleGoogleCalendarIntegration, isCalendarMutation, observeCalendarMutation } from './google-calendar-integration.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
 
@@ -163,7 +165,7 @@ export function withNoIndex(response) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const incomingUrl = new URL(request.url);
     const publicApiRequest = incomingUrl.pathname.startsWith('/api/');
     const ownedFilesRequest = incomingUrl.pathname.startsWith('/api/files/');
@@ -175,6 +177,8 @@ export default {
     const normalized = normalizeOwnedApiRequest(request, incomingUrl);
     request = normalized.request;
     const url = normalized.url;
+    const calendarMutationCopy = isCalendarMutation(request, url) ? request.clone() : null;
+    const observeCalendar = result => observeCalendarMutation(result, calendarMutationCopy, env, ctx);
 
     if (ownedFilesRequest && !env.CLINICAL_DB) {
       return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
@@ -209,6 +213,12 @@ export default {
 
     const cloudflareAuthResponse = await handleCloudflareAuthRuntime(request, env, url);
     if (cloudflareAuthResponse) return withNoIndex(cloudflareAuthResponse);
+
+    const appleCalendarResponse = await handleAppleCalendarIntegration(request, env, url);
+    if (appleCalendarResponse) return withNoIndex(appleCalendarResponse);
+
+    const googleCalendarResponse = await handleGoogleCalendarIntegration(request, env, url);
+    if (googleCalendarResponse) return withNoIndex(googleCalendarResponse);
 
     if (requiresCloudflareIdentity(request, url)) {
       if (!env.CLINICAL_DB) return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
@@ -251,10 +261,10 @@ export default {
     }
 
     const relationalIntegrityResponse = await handleRelationalIntegrityGuard(request, env, url);
-    if (relationalIntegrityResponse) return withNoIndex(relationalIntegrityResponse);
+    if (relationalIntegrityResponse) return withNoIndex(await observeCalendar(relationalIntegrityResponse));
 
     const patientWriteResponse = await handleCloudflarePatientWrite(request, env, url);
-    if (patientWriteResponse) return withNoIndex(patientWriteResponse);
+    if (patientWriteResponse) return withNoIndex(await observeCalendar(patientWriteResponse));
 
     const financialCancelResponse = await handleFinancialEntryCancelRuntime(request, env, url);
     if (financialCancelResponse) return withNoIndex(financialCancelResponse);
@@ -263,7 +273,7 @@ export default {
     if (atomicPackageSessionResponse) return withNoIndex(atomicPackageSessionResponse);
 
     const block6Response = await handleBlock6RpcRuntime(request, env, url);
-    if (block6Response) return withNoIndex(block6Response);
+    if (block6Response) return withNoIndex(await observeCalendar(block6Response));
 
     const growthResponse = await handleCloudflareGrowthRuntime(request, env, url);
     if (growthResponse) return withNoIndex(growthResponse);
@@ -274,10 +284,10 @@ export default {
     }
 
     const upsertResponse = await handleCloudflareUpsertRuntime(request, env, url);
-    if (upsertResponse) return withNoIndex(upsertResponse);
+    if (upsertResponse) return withNoIndex(await observeCalendar(upsertResponse));
 
     const cloudflareRuntimeResponse = await handleCloudflareClinicalRuntime(request, env);
-    if (cloudflareRuntimeResponse) return withNoIndex(cloudflareRuntimeResponse);
+    if (cloudflareRuntimeResponse) return withNoIndex(await observeCalendar(cloudflareRuntimeResponse));
 
     if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();
 
