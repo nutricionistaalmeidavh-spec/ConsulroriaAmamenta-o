@@ -9,7 +9,9 @@ const durationMs = item => {
   return Number.isFinite(minutes) && minutes > 0 && minutes <= 1440 ? minutes * 60000 : 3600000;
 };
 
-export function appointmentsToIcs(items) {
+import { escapeIcsText } from './calendar-event-display.js';
+
+export function appointmentsToIcs(items, eventTitles = new Map()) {
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gestao Amamentacao//Apple Calendar//PT-BR',
     'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Gestao Amamentacao - Agenda',
@@ -23,7 +25,7 @@ export function appointmentsToIcs(items) {
     lines.push('BEGIN:VEVENT', 'UID:' + uid + '@gestao-amamentacao',
       'DTSTAMP:' + now, 'DTSTART:' + toUtc(start),
       'DTEND:' + toUtc(new Date(start.getTime() + durationMs(item))),
-      'SUMMARY:Atendimento - Gestao Amamentacao', 'CLASS:PRIVATE',
+      'SUMMARY:' + escapeIcsText(eventTitles.get(item.id) || 'Atendimento - Gestao Amamentacao'), 'CLASS:PRIVATE',
       'END:VEVENT');
   }
   lines.push('END:VCALENDAR');

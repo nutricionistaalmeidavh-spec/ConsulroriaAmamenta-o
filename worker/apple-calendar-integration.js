@@ -1,3 +1,4 @@
+import { calendarEventTitlesForOwner } from './calendar-event-display.js';
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { appleAppointmentRows, appointmentsToIcs } from './apple-calendar-ics.js';
 
@@ -60,7 +61,8 @@ async function feedResponse(request, env, token) {
   // Resolve ownership on D1, not from any user-supplied ID. No patient details
   // or other tenant's appointments are ever included in this anonymous feed.
   const rows = await appleAppointmentRows(env, row.owner_id, 2000);
-  const body = appointmentsToIcs(rows, row.owner_id)
+  const titles = await calendarEventTitlesForOwner(env,row.owner_id,rows);
+  const body = appointmentsToIcs(rows, titles)
     .replace('CALSCALE:GREGORIAN\r\n', 'CALSCALE:GREGORIAN\r\nX-WR-CALNAME:Gestao Amamentacao - Agenda\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n');
   return calendarResponse(body);
 }
