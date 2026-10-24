@@ -1,0 +1,54 @@
+name: Record Google Calendar QA demonstration
+on:
+  pull_request:
+    branches:
+      - feat/google-calendar-ics-phase1
+    paths:
+      - 'tests/e2e/google-oauth-video.spec.mjs'
+      - 'playwright.qa-video.config.mjs'
+      - '.github/workflows/record-google-oauth-demo.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  record-qa:
+    name: Record real application UI in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Build canonical UI
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Record real QA navigation and synthetic appointment
+        run: npx playwright test --config playwright.qa-video.config.mjs
+      - name: Convert real QA recording to MP4
+        run: |
+          ffmpeg -y -i artifacts/google-calendar-qa-video/clinical-demo-real-ui.webm \
+            -c:v libx264 -crf 21 -pix_fmt yuv420p -movflags +faststart \
+            artifacts/google-calendar-qa-video/gestao-amamentacao-qa-demonstracao.mp4
+          cat > artifacts/google-calendar-qa-video/LEIA-ANTES-DE-PUBLICAR.txt <<'TXT'
+          Gravacao automatizada de uso REAL do app em runtime QA local com dados FICTICIOS.
+          NAO inclui consentimento Google real; nao e suficiente sozinha para
+          verificacao de scopes calendar.events / calendar.calendarlist.readonly.
+          Para envio ao Google anexe gravacao REAL da autorizacao OAuth
+          e da criacao/atualizacao de eventos no Google Agenda, usando conta de teste.
+          Nao exponha Client Secret, tokens, dados de pacientes ou emails reais.
+          TXT
+      - name: Upload QA MP4 and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gestao-amamentacao-demo-qa
+          path: |
+            artifacts/google-calendar-qa-video/
+            artifacts/google-calendar-qa-test-results/
+          retention-days: 14
+          if-no-files-found: warn
