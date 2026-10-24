@@ -33,5 +33,5 @@ test('Consequence, pending states and safe recovery are present', () => {
   assert.match(script, /Substituir link/);
   assert.match(script, /window\.confirm/);
   assert.match(script, /button\.disabled\s*=/);
-  assert.match(script, /async function refresh/);
+  assert.match(script, /async function checkStatus/);
 });
