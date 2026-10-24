@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 export function createSqliteD1() {
   const sqlite = new DatabaseSync(':memory:');
   for (const path of ['cloudflare/full-migration-schema.sql', 'cloudflare/runtime-schema.sql',
-    'cloudflare/migrations/0009-billing-recovery.sql', 'cloudflare/migrations/0010-billing-reconciliation.sql', 'cloudflare/migrations/0011-mother-portal-challenges.sql']) {
+    'cloudflare/migrations/0009-billing-recovery.sql', 'cloudflare/migrations/0010-billing-reconciliation.sql', 'cloudflare/migrations/0011-mother-portal-challenges.sql', 'cloudflare/migrations/0013-mother-ai-budget.sql']) {
     const url = new URL(`../../${path}`, import.meta.url);
     if (existsSync(url)) sqlite.exec(readFileSync(url, 'utf8'));
   }
