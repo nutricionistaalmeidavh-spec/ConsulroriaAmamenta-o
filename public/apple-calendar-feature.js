@@ -160,17 +160,6 @@ if (container && !container.querySelector('[data-apple-calendar-integration]')) 
     }
   }
 
-  async function refresh() {
-    await run(async () => {
-      const status = await api('/api/calendar/apple/status');
-      if (typeof status.active !== 'boolean') throw new Error('Resposta inválida do calendário. Tente novamente.');
-      active = status.active;
-      failed = false;
-      if (!active) { expanded = false; clearFreshLink(); }
-      notice('');
-    });
-  }
-
   // A failed initial load does not grant a choice to create/rotate an unknown active link.
   async function checkStatus() {
     if (busy) return;
