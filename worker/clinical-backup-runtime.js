@@ -50,8 +50,11 @@ function ownershipReferences(record = {}) {
 
 function isForeignOwned(entry, userId) {
   const record = entry.record || {};
-  return [entry.ownerId,record.owner_id,record.user_id,record.uploaded_by]
-    .some((id) => id != null && id !== '' && String(id) !== userId);
+  const canonicalOwners = [entry.ownerId, record.owner_id, record.user_id]
+    .filter((id) => id != null && id !== '');
+  if (canonicalOwners.length) return canonicalOwners.some((id) => String(id) !== userId);
+  // uploaded_by is a collaborator reference when there is a canonical owner.
+  return record.uploaded_by != null && record.uploaded_by !== '' && String(record.uploaded_by) !== userId;
 }
 
 function isDirectlyOwned(entry, userId) {
