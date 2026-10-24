@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { canPublishToMother, buildSafeMotherShare, isPublishedForMother } from '../public/mother-portal-contract.js';
 
 test('only reviewed and explicitly permitted mother-facing kinds can be published', () => {
@@ -33,4 +35,11 @@ test('a published safe item can be read only while active', () => {
   assert.equal(isPublishedForMother(good),true);
   assert.equal(isPublishedForMother({...good,published:false}),false);
   assert.equal(isPublishedForMother({...good,kind:'evaluation'}),false);
+});
+
+// Regression: a plain function with await breaks module parse on every app reload.
+test('mother portal ESM module must parse in Node and Chromium', () => {
+  const file = fileURLToPath(new URL('../public/member-feature.js', import.meta.url));
+  const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
