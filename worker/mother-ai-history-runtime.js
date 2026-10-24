@@ -31,8 +31,8 @@ export async function saveMotherAiTurn(env,access,user,message,response) {
 async function getProfessionalInbox(db,user,motherId) {
  if(!/^[a-zA-Z0-9_-]{1,128}$/.test(motherId))return json(400,{error:'invalid_mother'});
  const mother=await db.prepare(
-  "SELECT record_key FROM supabase_records WHERE table_name='mothers' AND owner_id=? AND record_key=? LIMIT 1"
- ).bind(user.id,motherId).first();
+  "SELECT record_key FROM supabase_records WHERE table_name='mothers' AND owner_id=? AND (record_key=? OR json_extract(record_json,'$.id')=?) LIMIT 1"
+ ).bind(user.id,motherId,motherId).first();
  if(!mother) return json(403,{error:'patient_not_owned'});
  const records=await db.prepare(
   'SELECT id,question,answer,classification,sources_json,created_at,shared_at FROM mother_ai_history WHERE owner_id=? AND mother_id=? AND shared_at IS NOT NULL AND expires_at>? ORDER BY shared_at DESC LIMIT 30'
