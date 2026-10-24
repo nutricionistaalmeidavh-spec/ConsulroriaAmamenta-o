@@ -34,7 +34,8 @@
     "test:p1": "node --test tests/package-lifecycle-cloudflare.test.mjs tests/service-worker-update.test.mjs tests/cloudflare-password-recovery.test.mjs tests/cloudflare-recovery-d1.test.mjs tests/block-6-rpc-closure.test.mjs",
     "test:patient-quick-actions": "node --test tests/patient-quick-actions.test.mjs",
     "test:patient-address": "node --test tests/patient-address.test.mjs",
-    "test:mother-ai": "node --test tests/mother-ai-zero-spend.test.mjs tests/mother-ai-guidance-history.test.mjs"
+    "test:mother-ai": "node --test tests/mother-ai-zero-spend.test.mjs tests/mother-ai-guidance-history.test.mjs tests/mother-ai-clinical-pilot.test.mjs",
+    "test:mother-ai-pilot": "node --test tests/mother-ai-clinical-pilot.test.mjs"
   },
   "dependencies": {
     "lucide": "^0.469.0",

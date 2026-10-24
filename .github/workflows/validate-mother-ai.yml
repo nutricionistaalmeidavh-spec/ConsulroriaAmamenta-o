@@ -7,6 +7,8 @@ on:
       - 'public/member-feature.js'
       - 'public/member-feature.css'
       - 'tests/mother-ai-guidance-history.test.mjs'
+      - 'tests/mother-ai-clinical-pilot.test.mjs'
+      - 'cloudflare/migrations/0016-mother-ai-pilot-telemetry.sql'
       - 'cloudflare/migrations/0015-mother-ai-history.sql'
       - 'tests/mother-ai-zero-spend.test.mjs'
       - 'cloudflare/migrations/0014-mother-ai-budget.sql'
@@ -33,6 +35,8 @@ jobs:
           node --check worker/mother-ai-knowledge.js
           node --check worker/mother-ai-history-runtime.js
           node --check worker/mother-ai-context.js
+          node --check worker/mother-ai-pilot.js
+          node --check worker/mother-ai-identity.js
           node --check public/mother-ai-feature.js
           node --check worker/domain-entry.js
       - name: Run unit and real SQLite D1 security tests
