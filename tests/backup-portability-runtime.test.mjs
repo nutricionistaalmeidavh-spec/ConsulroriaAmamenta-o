@@ -71,3 +71,28 @@ test('canonical clinical build injects spreadsheet and preview options',async()=
   assert.match(m,/previewRestore/);
   assert.match(m,/\.amamentacao/);
 });
+
+
+test('backup preflight retains collaborator uploader attribution only for canonically owned records',async()=>{
+  const runtime=await createLocalRuntime();
+  try {
+    const session=await runtime.login();
+    const headers={authorization:'Bearer '+session.access_token,'content-type':'application/json'};
+    const backup={format:CLINICAL_BACKUP_FORMAT,version:CLINICAL_BACKUP_VERSION,ownerId:userId,
+      tables:backupTableEntries(),files:[]};
+    backup.tables.mothers.push({recordKey:'m-1',record:{id:'m-1',owner_id:userId,name:'Mãe'}});
+    backup.tables.clinical_media.push({recordKey:'media-1',
+      record:{id:'media-1',owner_id:userId,mother_id:'m-1',uploaded_by:'collaborator-123'}});
+    const valid=await runtime.mf.dispatchFetch('http://localhost/api/clinical/backup/preview',{
+      method:'POST',headers,body:JSON.stringify(backup)
+    });
+    assert.equal(valid.status,200);
+    assert.equal((await valid.json()).records,2);
+    delete backup.tables.clinical_media[0].record.owner_id;
+    const invalid=await runtime.mf.dispatchFetch('http://localhost/api/clinical/backup/preview',{
+      method:'POST',headers,body:JSON.stringify(backup)
+    });
+    assert.equal(invalid.status,400);
+    assert.match((await invalid.json()).message,/uploaded_by/);
+  } finally {await runtime.close();}
+});
