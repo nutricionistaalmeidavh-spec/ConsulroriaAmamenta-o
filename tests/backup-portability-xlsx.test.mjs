@@ -43,7 +43,7 @@ test('XLSX treats spreadsheet formulas as literal patient data and preserves uni
   const workbook=unzipStored(new Uint8Array(await (await createBackupWorkbook(sampleBackup())).arrayBuffer()));
   const xml=[...workbook.values()].join('\n');
   assert.match(xml,/Ana/);
-  assert.match(xml,/'=HYPERLINK/);
+  assert.match(xml,/&apos;=HYPERLINK/);
   assert.match(xml,/&quot;risk&quot;: &quot;baixo&quot;|&quot;risk&quot;:&quot;baixo&quot;/);
   assert.doesNotMatch(xml,/<f>/);
 });
