@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - 'worker/mother-ai-*.js'
+      - 'public/mother-ai-feature.js'
+      - 'public/member-feature.js'
+      - 'public/member-feature.css'
+      - 'tests/mother-ai-guidance-history.test.mjs'
+      - 'cloudflare/migrations/0014-mother-ai-history.sql'
       - 'tests/mother-ai-zero-spend.test.mjs'
       - 'cloudflare/migrations/0013-mother-ai-budget.sql'
       - 'worker/domain-entry.js'
@@ -26,6 +31,9 @@ jobs:
           node --check worker/mother-ai-chat-runtime.js
           node --check worker/mother-ai-safety.js
           node --check worker/mother-ai-knowledge.js
+          node --check worker/mother-ai-history-runtime.js
+          node --check worker/mother-ai-context.js
+          node --check public/mother-ai-feature.js
           node --check worker/domain-entry.js
       - name: Run unit and real SQLite D1 security tests
         run: npm run test:mother-ai
