@@ -200,8 +200,7 @@ if (container && !container.querySelector('[data-outlook-calendar-integration]')
     const result = await api('/api/calendar/outlook/create', 'POST');
     const url = new URL(result.subscription_url);
     if (!result.active || url.protocol !== 'https:' || url.hostname !== 'deboralactacao.com'
-        || !/^\/api\/calendar\/outlook\/feed\/[a-f0-9]{64}\.ics$/.test(url.pathname)
- ) {
+        || !/^\/api\/calendar\/outlook\/feed\/[a-f0-9]{64}\.ics$/.test(url.pathname)) {
       throw new Error('Link de assinatura inválido.');
     }
     freshUrl = url.href;
