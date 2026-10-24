@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 120_000,
   use: {
     ...base.use,
-    video: 'on',
+    video: { mode: 'on', size: { width: 1280, height: 720 } },
     viewport: { width: 1440, height: 900 },
     actionTimeout: 20_000,
     navigationTimeout: 20_000,
