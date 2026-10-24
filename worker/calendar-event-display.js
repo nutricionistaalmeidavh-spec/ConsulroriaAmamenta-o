@@ -61,7 +61,7 @@ export async function calendarEventTitlesForOwner(env, ownerId, appointments) {
   if (!allow) return result;
   const names=await ownersMothers(env.CLINICAL_DB,ownerId);
   for(const appointment of appointments) {
-    if(appointment?.id && appointment?.owner_id===ownerId && names.has(appointment.mother_id)) {
+    if(appointment?.id && appointment?.owner_id===ownerId) {
       result.set(appointment.id,calendarEventTitle(appointment,names.get(appointment.mother_id),true));
     }
   }
