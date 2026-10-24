@@ -19,6 +19,7 @@ import { handleUsageObservabilityRuntime } from './usage-observability-runtime.j
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
 import { normalizeOwnedApiRequest } from './owned-api-paths.js';
 import { handleAppleCalendarIntegration } from './apple-calendar-integration.js';
+import { handleOutlookCalendarIntegration } from './outlook-calendar-integration.js';
 import { handleGoogleCalendarIntegration, isCalendarMutation, observeCalendarMutation } from './google-calendar-integration.js';
 import { isCommercialLandingPath, withCommercialSeo } from './commercial-seo.js';
 import { resolvePublicHostRoute } from '../src/public-host-routing.js';
@@ -217,6 +218,9 @@ export default {
 
     const appleCalendarResponse = await handleAppleCalendarIntegration(request, env, url);
     if (appleCalendarResponse) return withNoIndex(appleCalendarResponse);
+
+    const outlookCalendarResponse = await handleOutlookCalendarIntegration(request, env, url);
+    if (outlookCalendarResponse) return withNoIndex(outlookCalendarResponse);
 
     const googleCalendarResponse = await handleGoogleCalendarIntegration(request, env, url);
     if (googleCalendarResponse) return withNoIndex(googleCalendarResponse);

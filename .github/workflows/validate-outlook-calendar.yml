@@ -1,0 +1,52 @@
+name: Validate Outlook ICS calendar subscription
+on:
+  pull_request:
+    paths:
+      - 'worker/outlook-calendar-integration.js'
+      - 'worker/domain-entry.js'
+      - 'public/outlook-calendar-feature.js'
+      - 'src/bootstrap.js'
+      - 'cloudflare/runtime-schema.sql'
+      - 'cloudflare/migrations/0017-calendar-outlook.sql'
+      - 'tests/outlook-calendar-integration.test.mjs'
+      - '.github/workflows/validate-outlook-calendar.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'worker/outlook-calendar-integration.js'
+      - 'worker/domain-entry.js'
+      - 'public/outlook-calendar-feature.js'
+      - 'src/bootstrap.js'
+      - 'cloudflare/runtime-schema.sql'
+      - 'cloudflare/migrations/0017-calendar-outlook.sql'
+      - 'tests/outlook-calendar-integration.test.mjs'
+permissions:
+  contents: read
+jobs:
+  outlook-ics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax
+        run: |
+          node --check worker/outlook-calendar-integration.js
+          node --check worker/domain-entry.js
+          node --check public/outlook-calendar-feature.js
+          node --check src/bootstrap.js
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Prove Outlook subscription isolation, privacy and Apple regression
+        run: |
+          node --test tests/outlook-calendar-integration.test.mjs tests/apple-calendar-integration.test.mjs
+      - name: Build canonical production UI
+        run: npm run build
+      - name: Ensure Outlook feature is materialized
+        run: |
+          test -f dist/outlook-calendar-feature.js
+          test -f dist/apple-calendar-feature.js
+          test -f dist/google-calendar-debora-feature.js
