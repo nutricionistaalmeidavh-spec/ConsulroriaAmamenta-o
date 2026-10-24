@@ -4,11 +4,15 @@ import { login, session } from './helpers.mjs';
 test.use({ serviceWorkers: 'allow' });
 
 test('service worker evicts obsolete app caches, never caches private APIs and preserves session on reload', async ({ page, context }) => {
-  await page.goto('/manifest.webmanifest');
-  await page.evaluate(async () => {
+  // Prepare stale cache in a throwaway document. A manifest document is not an
+  // app tab; navigating it into a controlled SPA can race SW activation.
+  const seedPage = await context.newPage();
+  await seedPage.goto('/manifest.webmanifest');
+  await seedPage.evaluate(async () => {
     const stale = await caches.open('debora-lactacao-v0-p1-obsolete');
     await stale.put('/obsolete-p1.js', new Response('obsolete'));
   });
+  await seedPage.close();
 
   await login(page);
   const before = await session(page);

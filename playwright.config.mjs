@@ -11,6 +11,12 @@ export default defineConfig({
   },
   reporter: [['list'], ['html', { outputFolder: 'artifacts/playwright-report', open: 'never' }]],
   outputDir: 'artifacts/e2e-results',
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Keep the SW install/activation lifecycle in its own Chromium worker/browser.
+  // The functional suite blocks service workers for deterministic fault injection.
+  projects: [
+    { name: 'chromium', testIgnore: '**/pwa-cache-p1.spec.mjs', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-service-worker', testMatch: '**/pwa-cache-p1.spec.mjs',
+      use: { ...devices['Desktop Chrome'], serviceWorkers: 'allow' } },
+  ],
   webServer: { command: 'node tests/e2e/server.mjs', url: 'http://127.0.0.1:4174', reuseExistingServer: false, timeout: 60000 },
 });

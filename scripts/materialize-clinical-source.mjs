@@ -357,6 +357,120 @@ applyWeightCorrection(resolved, sourceByPath);
 applyPackageBillingSafety(resolved, sourceByPath);
 applyFinancialEntryCancellation(resolved, sourceByPath);
 
+
+// Backup UX is injected AFTER the clinical source is materialized, so the
+// canonical shell (not a standalone fork) receives the upgrade on every build.
+replaceText('core/app-shell.js',
+  "import { createBackupService, encryptBackup, decryptBackup } from './lib/backup-service.js';",
+  "import { createBackupService, encryptBackup, decryptBackup, createBackupWorkbook } from './lib/backup-service.js';",
+  'backup-xlsx-export-import');
+
+const backupShell = Buffer.from(resolved.get('core/app-shell.js')).toString('utf8');
+const backupBegin = backupShell.indexOf('async function exportBackupAction() {');
+const backupEnd = backupShell.indexOf('async function startApp() {',backupBegin);
+if (backupBegin < 0 || backupEnd <= backupBegin) throw new Error('backup-action-injection: fluxo canônico não encontrado');
+replaceText('core/app-shell.js',backupShell.slice(backupBegin,backupEnd),
+  [
+    "const BACKUP_STATUS_KEY = 'gestao-amamentacao:backup-last-export';",
+    "function backupStatus(kind, records, files) {",
+    "  const entry = {kind,records,files,at:new Date().toISOString()};",
+    "  try { localStorage.setItem(BACKUP_STATUS_KEY,JSON.stringify(entry)); } catch {}",
+    "  updateBackupStatus();",
+    "}",
+    "function updateBackupStatus() {",
+    "  const target = document.querySelector('[data-backup-status]');",
+    "  if (!target) return;",
+    "  let value = null;",
+    "  try { value=JSON.parse(localStorage.getItem(BACKUP_STATUS_KEY)||'null'); } catch {}",
+    "  if (!value?.at) return;",
+    "  const at = new Date(value.at).toLocaleString('pt-BR');",
+    "  target.textContent = 'Última exportação neste aparelho: ' + at + ' · ' + (value.kind==='xlsx'?'Excel':'Backup seguro') + ' · ' + value.records + ' registros';",
+    "}",
+    "function downloadBackupFile(blob, filename) {",
+    "  const link = document.createElement('a');",
+    "  const url = URL.createObjectURL(blob);",
+    "  link.href = url; link.download = filename; link.rel = 'noopener';",
+    "  document.body.appendChild(link); link.click(); link.remove();",
+    "  setTimeout(() => URL.revokeObjectURL(url), 30000);",
+    "}",
+    "function backupRowCount(data) {",
+    "  return Object.values(data.tables||{}).reduce((sum,entries)=>sum+(Array.isArray(entries)?entries.length:0),0);",
+    "}",
+    "async function exportSpreadsheetAction() {",
+    "  if (!confirm('A planilha Excel contém dados sensíveis de saúde e NÃO tem senha. Deseja exportar mesmo assim?')) return;",
+    "  const data = await backupService.exportAll({metadataOnly:true});",
+    "  const workbook = await createBackupWorkbook(data);",
+    "  const date = new Date().toISOString().slice(0,10);",
+    "  downloadBackupFile(workbook,'gestao-amamentacao-dados-'+date+'.xlsx');",
+    "  backupStatus('xlsx',backupRowCount(data),(data.files||[]).length);",
+    "  toast('Planilha Excel gerada. Guarde em local seguro.', 'success');",
+    "}",
+    "async function exportBackupAction() {",
+    "  const passphrase = prompt('Crie uma senha forte para o backup (mínimo 6 caracteres). Sem essa senha não será possível restaurar.');",
+    "  if (!passphrase) return;",
+    "  const confirmation = prompt('Confirme a senha do backup:');",
+    "  if (confirmation === null) return;",
+    "  if (passphrase !== confirmation) throw new Error('As senhas do backup não coincidem.');",
+    "  const data = await backupService.exportAll();",
+    "  const envelope = await encryptBackup(data,passphrase);",
+    "  const blob = new Blob([JSON.stringify(envelope)],{type:'application/octet-stream'});",
+    "  const date = new Date().toISOString().slice(0,10);",
+    "  downloadBackupFile(blob,'gestao-amamentacao-backup-'+date+'.amamentacao');",
+    "  backupStatus('backup',backupRowCount(data),(data.files||[]).length);",
+    "  toast('Backup protegido exportado. Guarde a senha separadamente.', 'success');",
+    "}",
+    "async function restoreBackupAction() {",
+    "  const input = document.createElement('input');",
+    "  input.type='file'; input.accept='.amamentacao,.json,application/json,application/octet-stream';",
+    "  input.addEventListener('change',async()=>{",
+    "    const file = input.files?.[0]; if (!file) return;",
+    "    try {",
+    "      const envelope = JSON.parse(await file.text());",
+    "      const passphrase = prompt('Senha do backup'); if (!passphrase) return;",
+    "      const backup = await decryptBackup(envelope,passphrase);",
+    "      const preview = await backupService.previewRestore(backup);",
+    "      const message = 'Backup de ' + (preview.exportedAt || 'data não informada') +",
+    "        '\\n' + preview.records + ' registros · ' + preview.files + ' arquivos.' +",
+    "        '\\n\\nEsta restauração ATUALIZA registros com os mesmos IDs e NÃO exclui os demais.' +",
+    "        '\\n\\nDeseja continuar?';",
+    "      if (!confirm(message)) return;",
+    "      const result = await backupService.restoreAll(backup);",
+    "      if (!result?.verified) throw new Error('Restauração não foi confirmada pelo servidor.');",
+    "      await refreshData();",
+    "      toast('Backup restaurado e verificado: '+result.records+' registros.', 'success');",
+    "    } catch (error) { reportError(error); }",
+    "  });",
+    "  input.click();",
+    "}",
+    "updateBackupStatus();",
+    ""
+  ].join('\n'),
+  'backup-ux-safe-export-and-preflight');
+replaceText('core/app-shell.js',
+  "else if (action === 'backup-export') await exportBackupAction();",
+  "else if (action === 'backup-spreadsheet') await exportSpreadsheetAction();\n    else if (action === 'backup-export') await exportBackupAction();",
+  'backup-spreadsheet-action');
+
+replaceText('index.html',
+  '<button data-action="backup-export"><span>⇩</span><div><strong>Exportar backup criptografado</strong><small>Baixa uma cópia protegida por senha.</small></div><b>›</b></button>',
+  '<button data-action="backup-spreadsheet"><span>▤</span><div><strong>Exportar planilha Excel</strong><small>Abas com todos os dados, para consulta. Arquivo sem criptografia.</small></div><b>›</b></button>\n          <button data-action="backup-export"><span>⇩</span><div><strong>Backup completo e protegido</strong><small>Inclui registros e anexos. Necessita senha para restaurar.</small></div><b>›</b></button>',
+  'backup-export-options');
+replaceText('index.html',
+  '<button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Importa uma cópia criptografada deste sistema.</small></div><b>›</b></button>',
+  '<button data-action="backup-restore"><span>⇧</span><div><strong>Restaurar backup</strong><small>Verifica o arquivo antes de atualizar registros. Aceita backups antigos .json.</small></div><b>›</b></button>\n          <p class="form-message" data-backup-status role="status">Nenhuma exportação registrada neste aparelho.</p>',
+  'backup-restore-guidance');
+
+// Preserve the existing clinical revision guard, and prevent the outer route
+// renderer from reactivating an outdated patient screen after navigation.
+replaceText('core/app-shell.js',
+  "  const screen = hashToScreen();\n  if (screen === 'patient') {",
+  "  const screen = hashToScreen();\n  const routeAtStart = location.hash;\n  if (screen === 'patient') {",
+  'route-capture-latest-location');
+replaceText('core/app-shell.js',
+  "  showScreen(screen);\n}\n\nfunction renderPatientList",
+  "  if (location.hash !== routeAtStart) return;\n  showScreen(screen);\n}\n\nfunction renderPatientList",
+  'route-discard-outdated-response');
+
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   modules[outputPath] = {

@@ -12,6 +12,7 @@ export const CLINICAL_BACKUP_TABLES = [
 
 const EXPORT_PATH = '/api/clinical/backup/export';
 const RESTORE_PATH = '/api/clinical/backup/restore';
+const PREVIEW_PATH = '/api/clinical/backup/preview';
 const enc = new TextEncoder();
 
 function bytesToBase64(input) {
@@ -47,8 +48,18 @@ function ownershipReferences(record = {}) {
   ].filter(([field]) => record[field]);
 }
 
+function isForeignOwned(entry, userId) {
+  const record = entry.record || {};
+  const canonicalOwners = [entry.ownerId, record.owner_id, record.user_id]
+    .filter((id) => id != null && id !== '');
+  if (canonicalOwners.length) return canonicalOwners.some((id) => String(id) !== userId);
+  // uploaded_by is a collaborator reference when there is a canonical owner.
+  return record.uploaded_by != null && record.uploaded_by !== '' && String(record.uploaded_by) !== userId;
+}
+
 function isDirectlyOwned(entry, userId) {
   const record = entry.record || {};
+  if (isForeignOwned(entry,userId)) return false;
   return String(entry.ownerId || '') === userId
     || String(record.owner_id || '') === userId
     || String(record.user_id || '') === userId
@@ -68,7 +79,7 @@ function selectOwnedRows(entries, userId) {
   while (changed) {
     changed = false;
     for (const entry of entries) {
-      if (accepted.has(entry)) continue;
+      if (accepted.has(entry) || isForeignOwned(entry,userId)) continue;
       for (const [field, table] of ownershipReferences(entry.record)) {
         const parent = byIdentity.get(`${table}:${entry.record[field]}`);
         if (parent && accepted.has(parent)) {
@@ -84,10 +95,18 @@ function selectOwnedRows(entries, userId) {
 
 async function readBackupRows(db, userId) {
   const placeholders = CLINICAL_BACKUP_TABLES.map(() => '?').join(',');
-  const result = await db.prepare(`SELECT table_name,record_key,owner_id,record_json,source_created_at,source_updated_at
-    FROM supabase_records WHERE table_name IN (${placeholders}) ORDER BY table_name,record_key`)
-    .bind(...CLINICAL_BACKUP_TABLES).all();
-  const parsed = (result.results || []).map((row) => ({
+  const found = [];
+  // D1 result pages have bounded sizes. A single .all() can silently miss
+  // patients in large accounts, so consume every page before ownership closure.
+  for (let offset = 0;;offset+=500) {
+    const page = await db.prepare(`SELECT table_name,record_key,owner_id,record_json,source_created_at,source_updated_at
+      FROM supabase_records WHERE table_name IN (${placeholders}) ORDER BY table_name,record_key LIMIT 500 OFFSET ?`)
+      .bind(...CLINICAL_BACKUP_TABLES,offset).all();
+    const batch = page.results || [];
+    found.push(...batch);
+    if (batch.length < 500) break;
+  }
+  const parsed = found.map((row) => ({
     table: String(row.table_name),
     recordKey: String(row.record_key),
     ownerId: row.owner_id || null,
@@ -108,17 +127,41 @@ function referencedStoragePaths(rows) {
   return paths;
 }
 
-async function readBackupFiles(env, userId, rows) {
-  const result = await env.CLINICAL_DB.prepare(`SELECT source_bucket,source_path,r2_key,size_bytes,mime_type,
-      source_created_at,source_updated_at,metadata_json
-    FROM storage_objects ORDER BY source_bucket,source_path`).all();
+async function readBackupFiles(env, userId, rows, includeBytes = true) {
+  const allFiles = [];
+  for (let offset=0;;offset+=500) {
+    const page = await env.CLINICAL_DB.prepare(`SELECT source_bucket,source_path,r2_key,size_bytes,mime_type,
+        source_created_at,source_updated_at,metadata_json
+      FROM storage_objects ORDER BY source_bucket,source_path LIMIT 500 OFFSET ?`).bind(offset).all();
+    const batch = page.results || [];
+    allFiles.push(...batch);
+    if (batch.length < 500) break;
+  }
   const referenced = referencedStoragePaths(rows);
   const files = [];
-  for (const row of result.results || []) {
+  for (const row of allFiles) {
     const metadata = parseJson(row.metadata_json, {});
     const path = String(row.source_path || '');
+    // Ownership cannot be inherited from a referenced path when explicit
+    // metadata says that it belongs to another professional.
+    if (metadata.owner_id && String(metadata.owner_id) !== userId) {
+      if (referenced.has(path)) throw new Error('backup_foreign_owned_file_reference');
+      continue;
+    }
     const owned = String(metadata.owner_id || '') === userId || path.startsWith(`${userId}/`) || referenced.has(path);
     if (!owned) continue;
+    // The restore contract only accepts account-prefixed paths. Export must
+    // fail, not silently emit an archive that cannot later be restored.
+    if (!path.startsWith(`${userId}/`)) throw new Error('backup_unrestorable_storage_path');
+    // Spreadsheet previews never download R2 bytes or leak internal storage keys.
+    if (!includeBytes) {
+      files.push({
+        bucket:String(row.source_bucket || ''),path,
+        size:Number(row.size_bytes || 0),mimeType:String(row.mime_type || 'application/octet-stream'),
+        sourceCreatedAt:row.source_created_at || null,sourceUpdatedAt:row.source_updated_at || null,
+      });
+      continue;
+    }
     const object = await env.CLINICAL_FILES.get(String(row.r2_key || ''));
     if (!object) throw new Error(`backup_r2_object_missing:${row.source_bucket}:${path}`);
     const bytes = new Uint8Array(await object.arrayBuffer());
@@ -148,11 +191,11 @@ function tablesFromRows(rows) {
   return tables;
 }
 
-async function exportBackup(env, user) {
+async function exportBackup(env, user, { metadataOnly = false } = {}) {
   if (!env.CLINICAL_FILES) return runtimeJson(503, { error: 'cloudflare_r2_required' });
   try {
     const rows = await readBackupRows(env.CLINICAL_DB, user.id);
-    const files = await readBackupFiles(env, user.id, rows);
+    const files = await readBackupFiles(env, user.id, rows, !metadataOnly);
     return runtimeJson(200, {
       format: CLINICAL_BACKUP_FORMAT,
       version: CLINICAL_BACKUP_VERSION,
@@ -161,7 +204,7 @@ async function exportBackup(env, user) {
       scope: {
         kind: 'clinical-account',
         tables: [...CLINICAL_BACKUP_TABLES],
-        files: true,
+        files: !metadataOnly,
         excluded: [
           'auth credentials and refresh sessions',
           'idempotency/runtime migration state',
@@ -207,10 +250,15 @@ function flattenAndValidateBackup(backup, userId) {
       }
       assertOwnerField(item.record, 'owner_id', userId);
       assertOwnerField(item.record, 'user_id', userId);
-      assertOwnerField(item.record, 'uploaded_by', userId);
+      // uploaded_by may be the authorised collaborator who created media.
+      // Keep this audit field only when a canonical owner pins the record to
+      // the restoring account; unowned foreign uploads must fail closed.
+      const hasCanonicalOwner = item.record.owner_id != null || item.record.user_id != null;
+      if (!hasCanonicalOwner) assertOwnerField(item.record, 'uploaded_by', userId);
       const entry = { table, recordKey: String(item.recordKey), record: item.record, sourceCreatedAt: item.sourceCreatedAt || null, sourceUpdatedAt: item.sourceUpdatedAt || null };
       entries.push(entry);
       const id = rowIdentity(entry);
+      if (id && ids.get(table).has(id)) throw backupError('duplicate record in ' + table);
       if (id) ids.get(table).add(id);
     }
   }
@@ -310,10 +358,6 @@ async function restoreBackup(request, env, user) {
     return runtimeJson(500, { error: 'clinical_backup_restore_failed' });
   }
 
-  for (const key of previousKeys) {
-    if (!staged.some((entry) => entry.key === key)) env.CLINICAL_FILES.delete(key).catch(() => undefined);
-  }
-
   try {
     for (const entry of parsed.entries) {
       const row = await env.CLINICAL_DB.prepare(`SELECT owner_id,record_json FROM supabase_records WHERE table_name=? AND record_key=? LIMIT 1`)
@@ -332,6 +376,10 @@ async function restoreBackup(request, env, user) {
     return runtimeJson(500, { error: 'clinical_backup_verification_failed' });
   }
 
+  // Delete replaced objects only AFTER checking D1 and newly written R2.
+  for (const key of previousKeys) {
+    if (!staged.some((entry) => entry.key === key)) env.CLINICAL_FILES.delete(key).catch(() => undefined);
+  }
   const tableCounts = Object.fromEntries(CLINICAL_BACKUP_TABLES.map((table) => [table, parsed.entries.filter((entry) => entry.table === table).length]));
   return runtimeJson(200, { verified:true, version:CLINICAL_BACKUP_VERSION, records:parsed.entries.length, files:staged.length, tables:tableCounts });
 }
@@ -339,9 +387,25 @@ async function restoreBackup(request, env, user) {
 export async function handleClinicalBackupRuntime(request, env, url = new URL(request.url)) {
   const isExport = request.method === 'GET' && url.pathname === EXPORT_PATH;
   const isRestore = request.method === 'POST' && url.pathname === RESTORE_PATH;
-  if (!isExport && !isRestore) return null;
+  const isPreview = request.method === 'POST' && url.pathname === PREVIEW_PATH;
+  if (!isExport && !isRestore && !isPreview) return null;
   if (!env.CLINICAL_DB) return runtimeJson(503, { error: 'cloudflare_d1_required' });
   const user = await authenticateClinicalRequest(request, env);
   if (!user?.id) return runtimeJson(401, { error: 'cloudflare_auth_required' });
-  return isExport ? exportBackup(env, user) : restoreBackup(request, env, user);
+  if (isExport) return exportBackup(env, user, {metadataOnly:url.searchParams.get('metadataOnly') === '1'});
+  if (isPreview) {
+    const payload = await request.json().catch(() => null);
+    try {
+      const parsed = flattenAndValidateBackup(payload, user.id);
+      const tables = Object.fromEntries(CLINICAL_BACKUP_TABLES.map(table => [table, parsed.entries.filter(row => row.table === table).length]));
+      return runtimeJson(200, {
+        valid:true,mode:'merge',ownerId:user.id,exportedAt:payload.exportedAt || null,
+        records:parsed.entries.length,files:parsed.files.length,tables,
+        warning:'Os IDs existentes serão atualizados; registros fora do backup não serão removidos.',
+      });
+    } catch (error) {
+      return runtimeJson(400,{error:error.code || 'invalid_clinical_backup',message:error.message});
+    }
+  }
+  return restoreBackup(request, env, user);
 }
