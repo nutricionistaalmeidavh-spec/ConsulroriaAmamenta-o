@@ -101,6 +101,10 @@ export async function handleMotherAiChat(request,env,url=new URL(request.url),de
       classification:'reference_only',model_used:false,sources
     });
   }
+  if(content.consent_to_ai_processing!==true) {
+    return json(412,{error:'consent_required',
+      message:'Confirme o uso da sua pergunta pela IA antes de solicitar a resposta.'});
+  }
   let reserved=false;
   try{reserved=await reserveBudget(env,access.ownerId,access.motherId)}
   catch{return json(503,{error:'ai_budget_unavailable',message:'Assistente indisponível. Nenhuma chamada ao modelo foi feita.'})}
