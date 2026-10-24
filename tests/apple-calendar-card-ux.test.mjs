@@ -32,6 +32,6 @@ test('Consequence, pending states and safe recovery are present', () => {
   assert.match(script, /Desativar compartilhamento/);
   assert.match(script, /Substituir link/);
   assert.match(script, /window\.confirm/);
-  assert.match(script, /button\.disabled\s*=/);
+  assert.match(script, /\.disabled\s*=\s*busy/);
   assert.match(script, /async function checkStatus/);
 });
