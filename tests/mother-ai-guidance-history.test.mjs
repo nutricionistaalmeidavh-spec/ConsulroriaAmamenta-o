@@ -16,6 +16,8 @@ async function fixture(){
    id:'access-a',owner_id:'consultant-1',mother_id:'mother-a',member_user_id:actor.id,
    member_verified_at:instant,email:actor.email,active:true
  });
+ await db.prepare('INSERT INTO mother_ai_pilot_allowlist(owner_id,mother_id,member_user_id,approved_at,expires_at) VALUES(?,?,?,?,?)')
+  .bind('consultant-1','mother-a',actor.id,instant,new Date(Date.now()+7*86400000).toISOString()).run();
  await seed(db,'mothers','mother-a','consultant-1',{id:'mother-a',owner_id:'consultant-1',name:'Maria Silva'});
  await seed(db,'mothers','mother-b','consultant-1',{id:'mother-b',owner_id:'consultant-1',name:'Maria Silva'});
  await seed(db,'member_shared_items','good','consultant-1',{
@@ -32,7 +34,8 @@ async function fixture(){
  });
  const AI={async run(_m,args){modelCalls++;lastPrompt=args.prompt;assert.doesNotMatch(args.prompt,/SEGREDO/);return {response:'Observe a pega conforme as orientações disponibilizadas.'}}};
  const env={CLINICAL_DB:db,AI,MOTHER_PORTAL_ENABLED:'true',MOTHER_AI_ENABLED:'true',
-   MOTHER_AI_ALLOW_INFERENCE:'false'};
+   MOTHER_AI_ALLOW_INFERENCE:'false',MOTHER_AI_PILOT_ENABLED:'true',
+ MOTHER_AI_CLINICAL_REVIEW_APPROVED:'true',MOTHER_AI_INFERENCE_BILLING_APPROVED:'true'};
  return {db,env,get modelCalls(){return modelCalls},get lastPrompt(){return lastPrompt}};
 }
 function make(path,method='GET',body=null){
