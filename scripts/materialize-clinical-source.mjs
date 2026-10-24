@@ -463,8 +463,8 @@ replaceText('index.html',
 // A patient-detail load may finish after navigation has already returned to
 // the appointment wizard. Never allow an outdated async route to hide it.
 replaceText('core/app-shell.js',
-  "  if (navigateRoute) navigate('patient', patient.mother.id); else showScreen('patient');",
-  "  if (navigateRoute) navigate('patient', patient.mother.id); else if (hashToScreen() === 'patient' && patientIdFromHash() === patient.mother.id) showScreen('patient');",
+  "  showScreen('patient');\n}\nfunction renderBabySelector",
+  "  if (hashToScreen() === 'patient' && patientIdFromHash() === patient.mother.id) showScreen('patient');\n}\nfunction renderBabySelector",
   'patient-navigation-prevent-stale-show');
 replaceText('core/app-shell.js',
   "  const screen = hashToScreen();\n  if (screen === 'patient') {",
