@@ -316,6 +316,11 @@ export default {
         .bind(new Date().toISOString()).run()
         .catch(error=>console.error('mother_portal_challenge_cleanup_failed',error?.message||'unknown')));
     }
+    if ((!_controller.cron || _controller.cron === '17 4 * * *') && env.CLINICAL_DB) {
+      ctx.waitUntil(env.CLINICAL_DB.prepare('DELETE FROM mother_ai_history WHERE expires_at < ?')
+        .bind(new Date().toISOString()).run()
+        .catch(error=>console.error('mother_ai_history_cleanup_failed',error?.message||'unknown')));
+    }
     if (_controller.cron && _controller.cron !== '17 4 * * *') return;
     const before = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     ctx.waitUntil(
