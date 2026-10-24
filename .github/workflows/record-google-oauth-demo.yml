@@ -29,6 +29,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Record real QA navigation and synthetic appointment
         run: npx playwright test --config playwright.qa-video.config.mjs
+      - name: Install FFmpeg for MP4 encoding
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
       - name: Convert real QA recording to MP4
         run: |
           ffmpeg -y -i artifacts/google-calendar-qa-video/clinical-demo-real-ui.webm \
