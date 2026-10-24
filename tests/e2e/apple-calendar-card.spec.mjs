@@ -19,6 +19,15 @@ function json(route, body, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
+async function answerConfirmation(page, click, accept) {
+  // Wait for the asynchronous status lookup before resolving its confirmation.
+  // Do not let a second listener consume the previous operation's dialog.
+  await Promise.all([
+    page.waitForEvent('dialog').then(dialog => accept ? dialog.accept() : dialog.dismiss()),
+    click(),
+  ]);
+}
+
 test('active Apple link is a compact state with advanced actions collapsed', async ({ page }) => {
   await mountAppleCard(page, route => json(route, { active: true }));
   const card = page.locator('[data-apple-calendar-integration]');
@@ -57,20 +66,18 @@ test('rotating a link needs confirmation and revoking clears the generated link'
   const card = page.locator('[data-apple-calendar-integration]');
   await expect(card.locator('[data-apple-state]')).toHaveText('Link ativo');
   await card.locator('[data-apple-manage]').click();
-  page.once('dialog', dialog => dialog.dismiss());
-  await card.locator('[data-apple-rotate]').click();
+  await answerConfirmation(page, () => card.locator('[data-apple-rotate]').click(), false);
+  await expect(card.locator('[data-apple-rotate]')).toBeEnabled();
   await expect(card.locator('[data-apple-subscription]')).toBeHidden();
   expect(methods.some(method => method.startsWith('POST '))).toBe(false);
 
-  page.once('dialog', dialog => dialog.accept());
-  await card.locator('[data-apple-rotate]').click();
+  await answerConfirmation(page, () => card.locator('[data-apple-rotate]').click(), true);
   await expect(card.locator('[data-apple-subscription]')).toBeVisible();
   await expect(card.locator('[data-apple-open]')).toHaveAttribute('href', subscriptionUrl.replace('https:', 'webcal:'));
   await expect(card.locator('[data-apple-state]')).toHaveText('Link ativo');
 
   await card.locator('[data-apple-manage]').click();
-  page.once('dialog', dialog => dialog.accept());
-  await card.locator('[data-apple-revoke]').click();
+  await answerConfirmation(page, () => card.locator('[data-apple-revoke]').click(), true);
   await expect(card.locator('[data-apple-state]')).toHaveText('Não conectado');
   await expect(card.locator('[data-apple-subscription]')).toBeHidden();
   await expect(card.locator('[data-apple-create]')).toBeVisible();
