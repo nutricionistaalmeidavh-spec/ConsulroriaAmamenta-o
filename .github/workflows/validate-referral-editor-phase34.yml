@@ -6,7 +6,6 @@ on:
     paths:
       - 'public/referrals-feature.js'
       - 'public/referrals-feature.css'
-      - 'public/referral-section-controls.js'
       - 'public/document-pdf-service.js'
       - 'tests/referral-editor-phase34.test.mjs'
       - 'tests/e2e/referral-editor-phase34.spec.mjs'
@@ -33,7 +32,6 @@ jobs:
         run: npm install --no-audit --no-fund --no-package-lock
       - name: Syntax gate
         run: |
-          node --check public/referral-section-controls.js
           node --check public/referrals-feature.js
           node --check public/document-pdf-service.js
           node --check scripts/qa-generate-referral-sample.mjs
