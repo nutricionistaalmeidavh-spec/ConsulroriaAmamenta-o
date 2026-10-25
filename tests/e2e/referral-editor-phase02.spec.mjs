@@ -32,6 +32,17 @@ test('encaminhamento: seção, dado opt-in e encerramento sobrevivem ao salvamen
   await editor.locator('p').last().click();
   await page.locator('[data-rf-format]').selectOption('section');
   await expect(editor.locator('h2')).toHaveCount(1);
+  await page.locator('[data-rf-new-section-title]').fill('Evolução individualizada');
+  await page.locator('[data-rf-add-section]').click();
+  await expect(editor.locator('h2')).toHaveCount(2);
+  await page.locator('[data-rf-select-section]').selectOption('1');
+  await page.locator('[data-rf-move-up]').click();
+  await expect(editor.locator('h2').first()).toHaveText('Evolução individualizada');
+  await page.locator('[data-rf-move-down]').click();
+  await expect(editor.locator('h2').last()).toHaveText('Evolução individualizada');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('[data-rf-delete-section]').click();
+  await expect(editor.locator('h2')).toHaveCount(1);
   await page.locator('[data-rf-insert-data]').selectOption('mother.name');
   await page.locator('[data-rf-insert-button]').click();
   await expect(editor).toContainText('Nome completo: '+mother);
