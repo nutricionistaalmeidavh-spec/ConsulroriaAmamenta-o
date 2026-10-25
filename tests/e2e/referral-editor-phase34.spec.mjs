@@ -20,12 +20,13 @@ test('fases 3–4: criar, reorganizar, excluir, salvar e reabrir seções do enc
   await page.locator('[data-rf-new] button[type="submit"]').click();
   const editor=page.locator('[data-rf-editor]');
   await expect(editor).toBeVisible();
+  await page.locator('[data-rf-new-section-title]').fill('Motivo da avaliação');
   await page.locator('[data-rf-add-section]').click();
   await expect(editor.locator('h2')).toHaveCount(1);
   await editor.locator('h2').first().fill('Motivo da avaliação');
   await editor.locator('h2').first().press('End');
+  await page.locator('[data-rf-new-section-title]').fill('Condutas personalizadas');
   await page.locator('[data-rf-add-section]').click();
-  await editor.locator('h2').nth(1).fill('Condutas personalizadas');
   await expect(page.locator('[data-rf-select-section] option')).toHaveCount(2);
   await page.locator('[data-rf-select-section]').selectOption('1');
   await page.locator('[data-rf-move-up]').click();
@@ -33,8 +34,8 @@ test('fases 3–4: criar, reorganizar, excluir, salvar e reabrir seções do enc
   await page.locator('[data-rf-select-section]').selectOption('0');
   await page.locator('[data-rf-move-down]').click();
   await expect(editor.locator('h2').first()).toContainText('Motivo da avaliação');
+  await page.locator('[data-rf-new-section-title]').fill('Remover este card');
   await page.locator('[data-rf-add-section]').click();
-  await editor.locator('h2').last().fill('Remover este card');
   await page.locator('[data-rf-select-section]').selectOption('2');
   page.once('dialog',dialog=>dialog.accept());
   await page.locator('[data-rf-delete-section]').click();
