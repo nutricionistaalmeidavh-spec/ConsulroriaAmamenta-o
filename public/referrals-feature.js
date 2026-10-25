@@ -1,5 +1,6 @@
 import {REFERRAL_SPECIALTIES,buildReferralDraft,getReferralSpecialty} from './referral-templates.js';
 import {REFERRAL_EDITOR_BLOCKS,getInsertableReferralFields} from './referral-editor-structure.js';
+import {wireReferralSectionOrganizer} from './referral-section-controls.js';
 
 const DOC=window.DeboraDocuments;
 let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
@@ -96,6 +97,13 @@ function editorToolbar(fields=[]){
       '</select></label>'+
       '<button type="button" data-rf-insert-button '+(fields.length?'':'disabled')+'>+ Inserir dado</button>'+
     '</div>'+
+    '<div class="rf-section-controls" aria-label="Organização das seções">'+
+      '<button type="button" data-rf-add-section>+ Nova seção</button>'+
+      '<label class="rf-field-control"><span>Seção para organizar</span><select data-rf-select-section aria-label="Selecionar seção"></select></label>'+
+      '<button type="button" data-rf-move-up aria-label="Mover seção para cima" title="Mover para cima">↑</button>'+
+      '<button type="button" data-rf-move-down aria-label="Mover seção para baixo" title="Mover para baixo">↓</button>'+
+      '<button type="button" data-rf-delete-section aria-label="Excluir seção e conteúdo">Excluir</button>'+
+    '</div>'+
   '</div>';
 }
 function wireEditorControls(panel,editor,fields){
@@ -180,7 +188,7 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
   </div>`,true);
   panel.querySelectorAll('[data-rf-close]').forEach(x=>x.addEventListener('click',close));
   const editor=panel.querySelector('[data-rf-editor]'),destinationInput=panel.querySelector('[data-rf-destination]');
-  if(!isFinalized)wireEditorControls(panel,editor,insertableFields);
+  if(!isFinalized){wireEditorControls(panel,editor,insertableFields);wireReferralSectionOrganizer(panel,editor);}
   const buildPayload=()=>{
     const html=sanitizeEditorHtml(editor.innerHTML),professionalDestination=destinationInput.value.trim();
     return {content:{
