@@ -20,9 +20,12 @@ test('encaminhamento: seção, dado opt-in e encerramento sobrevivem ao salvamen
 
   await page.evaluate(id=>window.DeboraReferrals.openNew(id),patient.mother.id);
   await expect(page.locator('[data-rf-new]')).toBeVisible();
+  await expect(page.locator('[data-rf-use-template]')).not.toBeChecked();
   await page.locator('[data-rf-new] button[type="submit"]').click();
   const editor=page.locator('[data-rf-editor]');
   await expect(editor).toBeVisible();
+  await expect(editor).not.toContainText(mother);
+  await expect(editor).not.toContainText(baby);
   await expect(page.locator('[data-rf-insert-data] option[value="mother.name"]')).toHaveCount(1);
   await expect(page.locator('[data-rf-insert-data] option[value="baby.name"]')).toHaveCount(1);
 
