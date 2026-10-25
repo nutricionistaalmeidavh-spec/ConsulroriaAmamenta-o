@@ -418,6 +418,8 @@ async function createOwnedRecord(env, table, source, user) {
 async function updateOwnedById(env, table, id, patch, user) {
   const entry = await recordById(env, table, id, user.id);
   if (!entry || !await recordOwnedByUser(env, table, entry, user.id)) return null;
+  const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+  if(!guard.allowed)throw new Error(guard.error);
   const row = { ...entry.record, ...patch, owner_id: user.id, updated_at: new Date().toISOString() };
   await saveEntry(env, table, entry.key, row, user.id);
   return row;
