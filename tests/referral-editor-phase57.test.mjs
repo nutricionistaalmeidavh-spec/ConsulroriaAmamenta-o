@@ -48,6 +48,6 @@ test('phase 6: D1 and legacy runtime mutations enforce finalized immutable refer
  for(const file of ['worker/cloudflare-data-runtime.js','worker/cloudflare-clinical-legacy-runtime.js']){
   const src=readFileSync(file,'utf8');
   assert.match(src,/validateReferralMutation/);
-  assert.match(src,/referral_document_finalized_immutable/);
+  assert.match(src,/if\(!guard\.allowed\)/);
  }
 });
