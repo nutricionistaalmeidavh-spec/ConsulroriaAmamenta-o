@@ -13,9 +13,11 @@ test('fases 5–7: prévia fiel, alerta, salvamento, finalização congelada e A
  await page.locator('[name="consentData"]').check();
  const creation=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
  await page.locator('[data-patient-form] button[type="submit"]:visible').first().click();
- expect((await creation).status()).toBe(201);
- const patient=await page.evaluate(()=>window.DeboraDocuments.patientContext());
+ const response=await creation;
+ expect(response.status()).toBe(201);
+ const patient=await response.json();
  expect(patient?.mother?.id).toBeTruthy();
+ await expect(page.locator('[data-patient-title]')).toContainText(name);
  await expect.poll(()=>page.evaluate(()=>Boolean(window.DeboraReferrals?.openNew))).toBe(true);
  await page.evaluate(id=>window.DeboraReferrals.openNew(id),patient.mother.id);
  await page.locator('[data-rf-new] button[type="submit"]').click();
