@@ -532,6 +532,9 @@ async function handleRest(request, env, url) {
           Object.assign(row, existing.record, row, { updated_at: now });
         }
       }
+      const collision=await recordByKey(requireDb(env),table,key);
+      if(collision){const guard=validateReferralMutation({record:collision.record,method:'POST'});
+        if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});}
       await saveEntry(env, table, key, row);
       saved.push(row);
     }
@@ -581,6 +584,8 @@ async function createOwnedRecord(env, table, source, user) {
 async function updateOwnedById(env, table, id, patch, user) {
   const entry = await recordById(env, table, id);
   if (!entry || !await recordOwnedByUser(env, table, entry, user.id)) return null;
+  const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+  if(!guard.allowed)throw new Error(guard.error);
   const row = { ...entry.record, ...patch, updated_at: new Date().toISOString() };
   await saveEntry(env, table, entry.key, row);
   return row;
