@@ -1,6 +1,5 @@
 import {REFERRAL_SPECIALTIES,buildReferralDraft,getReferralSpecialty} from './referral-templates.js';
 import {REFERRAL_EDITOR_BLOCKS,getInsertableReferralFields} from './referral-editor-structure.js';
-import {wireReferralSectionOrganizer} from './referral-section-controls.js';
 
 const DOC=window.DeboraDocuments;
 let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
