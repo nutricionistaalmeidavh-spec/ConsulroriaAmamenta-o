@@ -1,6 +1,6 @@
 // Injected into the canonical clinical-note runtime by the recovery enhancer.
 // A version mismatch is NOT permission to force-write: compare the D1 note first.
-export const CLINICAL_CONFLICT_RUNTIME = String.raw\`
+export const CLINICAL_CONFLICT_RUNTIME = String.raw`
 let cnConflictBusy=false, cnConflictPending=null, cnRebaseAttempts=0;
 function cnIsVersionConflict(error){
   return Number(error?.status)===409 ||
@@ -89,4 +89,4 @@ async function cnResolveVersionConflict(){
     cnStatus('Conflito identificado. Revise as duas versões antes de continuar.','error');
   }finally{cnConflictBusy=false}
 }
-\`;
+`;
