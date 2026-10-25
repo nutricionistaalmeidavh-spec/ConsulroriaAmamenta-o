@@ -1,3 +1,4 @@
+import { validateReferralMutation } from './referral-document-guard.js';
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { resolveProductAccess } from './product-access-runtime.js';
 import {
@@ -176,6 +177,8 @@ export async function handleCloudflareUpsertRuntime(request, env, url = new URL(
         saved.push(existing.record);
         continue;
       }
+      const guard=validateReferralMutation({record:existing.record,method:'UPSERT'});
+      if(!guard.allowed)return json(guard.status,{error:guard.error,message:guard.message});
       const row = mergeUpsertRecord(existing.record, incoming, existing.key, now);
       if (!await ensureWriteOwnership(db, table, row, user)) return json(403, { error: 'record_outside_account' });
       statements.push(recordStatement(db, table, existing.key, row, now));

@@ -1,0 +1,47 @@
+name: Validate referral editor phase 0-2
+on:
+  push:
+    branches:
+      - feat/referral-editor-phase-0-2
+    paths:
+      - 'public/referral-editor-structure.js'
+      - 'public/referrals-feature.js'
+      - 'public/referrals-feature.css'
+      - 'tests/referral-editor-phase02.test.mjs'
+      - 'tests/e2e/referral-editor-phase02.spec.mjs'
+      - 'docs/REFERRAL_EDITOR_PHASE_0_2.md'
+      - '.github/workflows/validate-referral-editor-phase02.yml'
+  pull_request:
+    paths:
+      - 'public/referral-editor-structure.js'
+      - 'public/referrals-feature.js'
+      - 'public/referrals-feature.css'
+      - 'tests/referral-editor-phase02.test.mjs'
+      - '.github/workflows/validate-referral-editor-phase02.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: referral-editor-p02-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Focused phase 0-2 tests plus existing clinical document contracts
+        run: node --test tests/referral-editor-phase02.test.mjs tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+      - name: Syntax and application build
+        run: |
+          node --check public/referral-editor-structure.js
+          node --check public/referrals-feature.js
+          npm install --no-audit --no-fund --no-package-lock
+          npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E – real app and isolated D1
+        run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs --config=playwright.config.mjs

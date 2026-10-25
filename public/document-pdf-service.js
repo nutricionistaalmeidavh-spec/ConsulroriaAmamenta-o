@@ -1,3 +1,4 @@
+import {createPremiumReferralPdf} from './referral-premium-pdf.js';
 const CP1252 = new Map([
   ['€',0x80],['‚',0x82],['ƒ',0x83],['„',0x84],['…',0x85],['†',0x86],['‡',0x87],['ˆ',0x88],['‰',0x89],['Š',0x8A],['‹',0x8B],['Œ',0x8C],['Ž',0x8E],['‘',0x91],['’',0x92],['“',0x93],['”',0x94],['•',0x95],['–',0x96],['—',0x97],['˜',0x98],['™',0x99],['š',0x9A],['›',0x9B],['œ',0x9C],['ž',0x9E],['Ÿ',0x9F]
 ]);
@@ -213,16 +214,8 @@ export function createConsentPdf({motherName='Paciente', consentLabel='Termo', s
 }
 
 export function createReferralPdf({motherName='Paciente',babyName='',specialtyLabel='Encaminhamento',destination='',html='',finalizedAt=''}={}) {
-  const date=finalizedAt?new Date(finalizedAt):null;
-  const formatted=date&&!Number.isNaN(date.getTime())?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(date):'';
-  const patient=[`Paciente: ${motherName}`,babyName?`Bebê relacionado: ${babyName}`:'',destination?`Destino: ${destination}`:'',formatted?`Finalizado em: ${formatted}`:''].filter(Boolean);
-  const clinical=plainHtml(html);
-  return buildPagedPdf({
-    title:`Encaminhamento - ${specialtyLabel} - ${motherName}`,
-    heading:`Encaminhamento · ${specialtyLabel}`,
-    subheading:babyName?`${motherName} · ${babyName}`:motherName,
-    sections:[{title:'Identificação',body:patient},{title:'Conteúdo do encaminhamento',body:clinical||'Sem conteúdo registrado.'}]
-  });
+  // Canonical API retained; the user-authored referral body is the only source of clinical content.
+  return createPremiumReferralPdf({specialtyLabel,destination,html,finalizedAt});
 }
 
 export function createRecordPdf({motherName='Paciente',modeLabel='Prontuário completo',subheading='',sections=[],images=[]}={}) {

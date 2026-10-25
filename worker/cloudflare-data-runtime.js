@@ -1,3 +1,4 @@
+import { validateReferralMutation } from './referral-document-guard.js';
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { authorizeMemberAttachment } from './block6-rpc-runtime.js';
 import { resolveProductAccess } from './product-access-runtime.js';
@@ -345,6 +346,8 @@ async function handleRecords(request, env, url) {
         ));
         if (existing) {
           if (!await recordOwnedByUser(env, table, existing, user.id)) return runtimeJson(403, { error: 'record_outside_account' });
+          const guard=validateReferralMutation({record:existing.record,method:'UPSERT'});
+          if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
           key = existing.key;
           row = { ...existing.record, ...row, id: row.id || existing.record?.id || existing.key, updated_at: now };
         }
@@ -353,6 +356,8 @@ async function handleRecords(request, env, url) {
       if (collision && String(collision.ownerId || collision.record?.owner_id || '') !== String(user.id)) {
         return runtimeJson(409, { error: 'record_key_conflict' });
       }
+      if(collision){const guard=validateReferralMutation({record:collision.record,method:'POST'});
+        if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});}
       statements.push(guardedRecordStatement(requireDb(env), table, key, row, user.id, now));
       saved.push(row);
     }
@@ -368,6 +373,8 @@ async function handleRecords(request, env, url) {
     const now = new Date().toISOString();
     for (const entry of await scopedRows(env, table, user.id)) {
       if (!queryMatches(entry.record, url)) continue;
+      const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+      if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
       const row = { ...entry.record, ...patch, updated_at: now };
       if (!await ensureWriteOwnership(env, table, row, user)) return runtimeJson(403, { error: 'record_outside_account' });
       statements.push(guardedRecordStatement(requireDb(env), table, entry.key, row, user.id, now));
@@ -381,6 +388,8 @@ async function handleRecords(request, env, url) {
     const statements = [];
     for (const entry of await scopedRows(env, table, user.id)) {
       if (!queryMatches(entry.record, url)) continue;
+      const guard=validateReferralMutation({record:entry.record,method:'DELETE'});
+      if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
       statements.push(requireDb(env).prepare(
         'DELETE FROM supabase_records WHERE table_name = ? AND record_key = ? AND owner_id = ?',
       ).bind(table, entry.key, user.id));
@@ -409,6 +418,8 @@ async function createOwnedRecord(env, table, source, user) {
 async function updateOwnedById(env, table, id, patch, user) {
   const entry = await recordById(env, table, id, user.id);
   if (!entry || !await recordOwnedByUser(env, table, entry, user.id)) return null;
+  const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+  if(!guard.allowed)throw new Error(guard.error);
   const row = { ...entry.record, ...patch, owner_id: user.id, updated_at: new Date().toISOString() };
   await saveEntry(env, table, entry.key, row, user.id);
   return row;

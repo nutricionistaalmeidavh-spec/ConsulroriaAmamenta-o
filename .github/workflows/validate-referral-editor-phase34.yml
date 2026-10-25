@@ -1,0 +1,78 @@
+name: Validate referral editor phase 3-4
+on:
+  push:
+    branches:
+      - feat/referral-editor-premium-pdf-phase-3-4
+    paths:
+      - 'public/referrals-feature.js'
+      - 'public/referrals-feature.css'
+      - 'public/document-pdf-service.js'
+      - 'public/referral-premium-pdf.js'
+      - 'tests/referral-editor-phase34.test.mjs'
+      - 'tests/e2e/referral-editor-phase34.spec.mjs'
+      - 'scripts/qa-generate-referral-sample.mjs'
+      - '.github/workflows/validate-referral-editor-phase34.yml'
+      - 'docs/REFERRAL_EDITOR_PHASE_3_4.md'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: referral-phase34-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  clinical-editor-and-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies (no production secrets)
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: Syntax gate
+        run: |
+          node --check public/referrals-feature.js
+          node --check public/document-pdf-service.js
+          node --check public/referral-premium-pdf.js
+          node --check scripts/qa-generate-referral-sample.mjs
+      - name: Test original contracts, editor and premium PDF
+        run: node --test tests/referral-editor-phase02.test.mjs tests/referral-editor-phase34.test.mjs tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+      - name: Build application
+        run: npm run build
+      - name: Generate PDF from fake clinical sample
+        run: node scripts/qa-generate-referral-sample.mjs
+      - name: Render and inspect the actual PDF
+        run: |
+          python -m pip install --disable-pip-version-check 'pymupdf>=1.24,<2'
+          python - <<'PY'
+          import fitz
+          from pathlib import Path
+          root=Path('artifacts/referral-phase34')
+          pdf=root/'Encaminhamento_Exemplo_Premium.pdf'
+          with fitz.open(pdf) as doc:
+            assert doc.page_count>=1
+            full='\n'.join(p.get_text() for p in doc)
+            for marker in ['Queixa e contexto','Motivo do encaminhamento','Marina Oliveira Fernandes','Elisa Oliveira Fernandes']:
+              assert marker in full, f'Conteúdo omitido: {marker}'
+            for index,page in enumerate(doc):
+              pix=page.get_pixmap(matrix=fitz.Matrix(1.5,1.5),alpha=False)
+              pix.save(str(root/f'pagina-{index+1:02d}.png'))
+            print('PDF renderizado, páginas:',doc.page_count)
+          PY
+      - name: Install Chromium (Playwright)
+        run: npx playwright install --with-deps chromium
+      - name: E2E local and isolated D1
+        run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs tests/e2e/referral-editor-phase34.spec.mjs --config=playwright.config.mjs
+      - name: Publish visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Encaminhamentos-Premium-FASES-3-4-${{ github.run_id }}
+          path: |
+            artifacts/referral-phase34/
+            artifacts/e2e-results/
+            artifacts/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,3 +1,4 @@
+import { validateReferralMutation } from './referral-document-guard.js';
 const LEGACY_SUPABASE_URL = 'https://zxowxdfhtksevhnjmeyu.supabase.co';
 const LEGACY_SUPABASE_KEY = 'sb_publishable_yXYUcXiks3Usr1GxHMw2Mg_cPMLD3zt';
 const ACCESS_TTL_SECONDS = 60 * 60;
@@ -525,10 +526,15 @@ async function handleRest(request, env, url) {
       if (conflictFields.length) {
         const existing = (await tableRows(env, table)).find((entry) => conflictFields.every((field) => String(entry.record?.[field] ?? '') === String(row[field] ?? '')));
         if (existing && await recordOwnedByUser(env, table, existing, user.id)) {
+          const guard=validateReferralMutation({record:existing.record,method:'UPSERT'});
+          if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
           key = existing.key;
           Object.assign(row, existing.record, row, { updated_at: now });
         }
       }
+      const collision=await recordByKey(requireDb(env),table,key);
+      if(collision){const guard=validateReferralMutation({record:collision.record,method:'POST'});
+        if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});}
       await saveEntry(env, table, key, row);
       saved.push(row);
     }
@@ -541,6 +547,8 @@ async function handleRest(request, env, url) {
     const changed = [];
     for (const entry of await tableRows(env, table)) {
       if (!await recordOwnedByUser(env, table, entry, user.id) || !queryMatches(entry.record, url)) continue;
+      const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+      if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
       const row = { ...entry.record, ...patch, updated_at: new Date().toISOString() };
       if (!await ensureWriteOwnership(env, table, row, user)) return runtimeJson(403, { message: 'Registro fora do escopo da conta.' });
       await saveEntry(env, table, entry.key, row);
@@ -552,6 +560,8 @@ async function handleRest(request, env, url) {
   if (request.method === 'DELETE') {
     for (const entry of await tableRows(env, table)) {
       if (!await recordOwnedByUser(env, table, entry, user.id) || !queryMatches(entry.record, url)) continue;
+      const guard=validateReferralMutation({record:entry.record,method:'DELETE'});
+      if(!guard.allowed)return runtimeJson(guard.status,{error:guard.error,message:guard.message});
       await requireDb(env).prepare('DELETE FROM supabase_records WHERE table_name = ? AND record_key = ?').bind(table, entry.key).run();
     }
     return new Response(null, { status: 204 });
@@ -574,6 +584,8 @@ async function createOwnedRecord(env, table, source, user) {
 async function updateOwnedById(env, table, id, patch, user) {
   const entry = await recordById(env, table, id);
   if (!entry || !await recordOwnedByUser(env, table, entry, user.id)) return null;
+  const guard=validateReferralMutation({record:entry.record,method:'PATCH',patch});
+  if(!guard.allowed)throw new Error(guard.error);
   const row = { ...entry.record, ...patch, updated_at: new Date().toISOString() };
   await saveEntry(env, table, entry.key, row);
   return row;
