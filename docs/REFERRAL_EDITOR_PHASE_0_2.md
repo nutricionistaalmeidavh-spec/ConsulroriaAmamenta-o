@@ -7,7 +7,7 @@
 - Persistência: `window.DeboraDocuments.saveDocument/updateDocument/listDocuments`, sem endpoints, migration, changes in D1, Secrets, autorização ou R2.
 - Finalização: `public/referral-finalization.js` permanece intocada; documentos já finalizados continuam somente leitura e exportáveis.
 - PDF: `public/document-pdf-service.js` permanece intocado nesta entrega. Ele ainda produz o PDF legado sem cards visuais; o layout premium será objeto das fases 3–4.
-- O modelo de pré-preenchimento pré-existente continua editável para preservar contratos de versões anteriores. A inserção **adicional** de dados passa a ser totalmente opcional e explícita.
+- O modelo de pré-preenchimento pré-existente continua editável para preservar contratos de versões anteriores, mas **novos documentos começam sem fatos clínicos preenchidos**. A consultora pode optar pelo modelo predefinido marcando a caixa específica. Assim, qualquer dado incluído manualmente pelo novo seletor exige escolha explícita.
 
 ## Fase 1: estrutura semântica
 
