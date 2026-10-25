@@ -1,3 +1,4 @@
+import { CLINICAL_CONFLICT_RUNTIME } from './clinical-note-conflict.js';
 // Runtime-only enhancement: the materialized clinical source and its D1 contract stay canonical.
 // Encrypted drafts use a nonextractable per-account browser key and 14-day TTL.
 // This mitigates disk exposure but does not protect against XSS or shared-device access.
@@ -55,5 +56,24 @@ export function enhanceClinicalNoteWithRecovery(source) {
     if (output.indexOf(before, index + before.length) !== -1) throw new Error('Clinical recovery anchor ambiguous: '+before.slice(0,90));
     output = output.slice(0,index)+after+output.slice(index+before.length);
   }
+  // Replace the former 409 dead-end with an explicit, non-destructive reconciliation flow.
+  const conflictStart = output.indexOf('function cnScheduleRetry(error){');
+  const conflictEnd = output.indexOf('\nfunction cnWireDraftRecovery(', conflictStart);
+  if (conflictStart < 0 || conflictEnd < 0) throw new Error('Clinical conflict handler anchor missing');
+  output = output.slice(0, conflictStart) + CLINICAL_CONFLICT_RUNTIME + output.slice(conflictEnd);
+  const inputListener = "ta.addEventListener('input',()=>cnScheduleSave(ta.value));";
+  if (!output.includes(inputListener)) throw new Error('Clinical note input listener anchor missing');
+  output = output.replace(inputListener,
+    "ta.addEventListener('input',()=>{if(cnConflictPending){cnDraftWrite(cnState.encounter?.id,ta.value).catch(()=>cnStatus('Cópia local indisponível; não feche esta tela','error'));return}cnScheduleSave(ta.value)});");
+  const flushAnchor = 'async function cnFlush(){clearTimeout(cnState.saveTimer);';
+  if (!output.includes(flushAnchor)) throw new Error('Clinical flush anchor missing');
+  output = output.replace(flushAnchor, "async function cnFlush(){if(cnConflictPending)throw new Error('Revise as versões do prontuário antes de sair.');clearTimeout(cnState.saveTimer);");
+  output = output.replaceAll('cnRetryDelay=1500;clearTimeout(cnRetryTimer);await cnDraftRemove', 'cnRebaseAttempts=0;cnRetryDelay=1500;clearTimeout(cnRetryTimer);await cnDraftRemove');
+  // A recovered local draft must be reviewed against today's D1 text.
+  // Never auto-save a recovered old draft over a different server note.
+  const restoreAnchor = "ta.value=draft.body;banner.remove();cnScheduleSave(ta.value);cnStatus('Rascunho recuperado; aguardando sincronização','muted')";
+  if (!output.includes(restoreAnchor)) throw new Error('Clinical draft restore anchor missing');
+  output = output.replace(restoreAnchor,
+    "ta.value=draft.body;ta.readOnly=true;banner.remove();cnState.editRevision++;cnState.pendingBody={body:ta.value,revision:cnState.editRevision};cnResolveVersionConflict(true).catch(()=>cnStatus('Não foi possível comparar as versões; sua cópia local está preservada.','error'))");
   return output;
 }

@@ -1236,7 +1236,8 @@ window.DeboraEncounter={
   getEncounterId:()=>currentDraftEncounterId,
   getAppointmentId:()=>currentAppointmentId,
   ensureStarted:ensureEncounterStarted,
-  flush:()=>currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null)
+  flush:()=>currentDraftEncounterId?saveDraft({silent:true}):Promise.resolve(null),
+  syncVersion:(id)=>appData.refreshEncounterVersion(id).catch(()=>null)
 };
 
 window.addEventListener('hashchange', () => renderRoute().catch(reportError));

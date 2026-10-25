@@ -240,7 +240,7 @@ export function createSupabaseClient(config, {
       body: body === undefined ? undefined : JSON.stringify(body)
     }));
     const data = await parseResponse(res);
-    if (!res.ok) throw new Error(data?.message || data?.hint || data?.error || `Falha no banco (${res.status}).`);
+    if (!res.ok) { const error = new Error(data?.message || data?.hint || data?.error || `Falha no banco (${res.status}).`); error.status = res.status; error.code = data?.error || null; throw error; }
     return data;
   }
 
