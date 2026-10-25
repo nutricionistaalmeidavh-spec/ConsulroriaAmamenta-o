@@ -82,13 +82,13 @@ function makePdf(title,pages){
  objs[2]='<< /Type /Pages /Kids ['+pages.map((_,i)=>(3+i*2)+' 0 R').join(' ')+'] /Count '+n+' >>';
  pages.forEach((page,i)=>{
   const a=3+2*i,b=a+1;
-  const stream=page.concat([rule(65),txt('Débora Lactação  •  Documento clínico',42,43,8,false,P.gray),txt('Página '+(i+1)+' de '+n,480,43,8,false,P.gray)]).join('\n');
+  const stream=page.concat([rule(65),txt('Gestão de Amamentação  •  Documento clínico',42,43,8,false,P.gray),txt('Página '+(i+1)+' de '+n,480,43,8,false,P.gray)]).join('\n');
   objs[a]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+f1+' 0 R /F2 '+f2+' 0 R >> >> /Contents '+b+' 0 R >>';
   objs[b]='<< /Length '+enc(stream).length+' >>\nstream\n'+stream+'\nendstream';
  });
  objs[f1]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
  objs[f2]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
- objs[info]='<< /Title ('+esc(title)+') /Creator (Débora Lactação) >>';
+ objs[info]='<< /Title ('+esc(title)+') /Creator (Gestão de Amamentação) >>';
  const chunks=[enc('%PDF-1.4\n%âãÏÓ\n')],offset=[0];let total=chunks[0].length;
  for(let i=1;i<=info;i++){offset[i]=total;const c=enc(i+' 0 obj\n'+objs[i]+'\nendobj\n');chunks.push(c);total+=c.length}
  const xs=['xref\n0 '+(info+1)+'\n','0000000000 65535 f \n'];
@@ -104,8 +104,8 @@ export function createPremiumReferralPdf({specialtyLabel='Encaminhamento',destin
   ops=[];pages.push(ops);
   ops.push(rect(0,834,595,8,P.lavender));ops.push(rect(382,834,213,8,P.pink));
   ops.push(logo(42,755,42));
-  ops.push(txt('DÉBORA LACTAÇÃO',95,783,15,true,P.plum));
-  ops.push(txt('GESTÃO DE AMAMENTAÇÃO / DOCUMENTO CLÍNICO',95,769,8,false,P.gray));
+  ops.push(txt('GESTÃO DE AMAMENTAÇÃO',95,783,15,true,P.plum));
+  ops.push(txt('DOCUMENTO CLÍNICO / ENCAMINHAMENTO PROFISSIONAL',95,769,8,false,P.gray));
   ops.push(rule(744));
   ops.push(txt('Encaminhamento profissional',42,715,19,true));
   ops.push(txt(kind.slice(0,56),42,693,11,true,P.purple));
