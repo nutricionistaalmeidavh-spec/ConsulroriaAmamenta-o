@@ -16,3 +16,5 @@
 .rf-editor h3{margin:14px 0 6px;color:#664478;font:700 14px/1.45 system-ui}
 .rf-editor hr{height:0;margin:17px 0 21px;border:0;border-top:2px dashed #c4a3d4}
 @media(max-width:620px){.rf-format-controls,.rf-insert-controls{display:grid;grid-template-columns:minmax(0,1fr) auto}.rf-field-control{min-width:0}.rf-format-controls button,.rf-insert-controls button{font-size:11px;padding:9px}.rf-editor h2{font-size:15px}}
+
+.rf-new label.rf-optional-template{display:flex;flex-direction:row;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #e3d7e7;border-radius:12px;background:#faf6fc}.rf-new .rf-optional-template input{width:18px;height:18px;margin:0;flex:none;accent-color:#9c78b8}.rf-new .rf-optional-template span{font:550 12px/1.45 system-ui;color:#5b4967}
