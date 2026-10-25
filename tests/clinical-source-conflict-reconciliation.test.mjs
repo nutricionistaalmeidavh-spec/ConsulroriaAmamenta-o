@@ -17,6 +17,7 @@ test('409 reconciliation must refetch the current D1 version and preserve a loca
   assert.match(runtime, /cnConflictPending/);
   assert.match(runtime, /data-cn-save-merged/);
   assert.match(runtime, /data-cn-use-server/);
+  assert.match(runtime, /cnResolveVersionConflict\(true\)/);
   assert.match(runtime, /if\(cnConflictPending\)throw new Error/);
   assert.doesNotThrow(() => new vm.Script(runtime));
 });
@@ -100,4 +101,13 @@ test('only a recognized version conflict invokes the clinical reconciling handle
   const f = conflictFixture('texto original');
   assert.equal(f.api.cnIsVersionConflict(new Error('O prontuário foi alterado em outra sessão. Recarregue antes de salvar.')), true);
   assert.equal(f.api.cnIsVersionConflict(Object.assign(new Error('Serviço indisponível'), { status: 503 })), false);
+});
+
+test('recovered draft forces human comparison even if stored note matches the base', async () => {
+  const f = conflictFixture('texto original');
+  await f.api.cnResolveVersionConflict(true);
+  assert.equal(f.note.readOnly, true);
+  assert.equal(f.state.pendingBody.body, 'texto da consultora');
+  assert.equal(f.timers.length, 0);
+  assert.equal(f.saves.length, 0);
 });
