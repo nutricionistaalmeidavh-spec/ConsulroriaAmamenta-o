@@ -230,6 +230,15 @@ export function createAppData(repos) {
       return encounter;
     },
     updateEncounter,
+    // An independent note editor can advance record_version outside the wizard's queue.
+    // Only update the cache after a fresh owner-scoped D1 read.
+    refreshEncounterVersion: async (id) => {
+      const encounter = await repos.encounters.get(id);
+      if (!encounter?.id) throw new Error('Prontuário não encontrado para sincronizar.');
+      const raw = Number(encounter.record_version ?? 0);
+      encounterVersions.set(id, Number.isInteger(raw) && raw >= 0 ? raw : 0);
+      return encounter;
+    },
     addWeight,
     listWeights: (babyId) => repos.weights.list({ query: `select=*&baby_id=eq.${encodeURIComponent(babyId)}&order=measured_at.asc` }),
     createFollowup: (payload) => repos.followups.create(payload),
