@@ -3,7 +3,7 @@
 export const CLINICAL_CONFLICT_RUNTIME = String.raw`
 let cnConflictBusy=false, cnConflictPending=null, cnRebaseAttempts=0;
 function cnIsVersionConflict(error){
-  return Number(error?.status)===409 ||
+  return ['stale_record_version','record_version_required'].includes(String(error?.code||'')) ||
     /stale_record_version|record_version_required|prontuário foi alterado|recarregue o prontuário|conflito de versão/i.test(String(error?.message||''));
 }
 function cnScheduleRetry(error){
