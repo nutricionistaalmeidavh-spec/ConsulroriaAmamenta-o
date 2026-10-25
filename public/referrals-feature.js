@@ -151,7 +151,7 @@ function wireEditorControls(panel,editor,fields){
     picker.value='';remember();
   });
 }
-async function openEditor({motherId,babyId,specialty,destination='',draft=null,trigger=null}){
+async function openEditor({motherId,babyId,specialty,destination='',draft=null,trigger=null,useSuggestedTemplate=false}){
   lastTrigger=trigger||document.activeElement;
   const {context,baby,encounter,chiefComplaint,careSummary}=await contextForDraft(motherId,babyId);
   const base=draft?.content?.html?{
@@ -160,10 +160,13 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
     specialtyLabel:getReferralSpecialty(draft.content.specialty||specialty).label,
     professionalDestination:draft.content.professional_destination||destination,
     html:draft.content.html
-  }:buildReferralDraft({
-    specialty,motherName:context.mother.name,babyName:baby?.name||'',babyAge:babyAge(baby),
-    chiefComplaint,careSummary,weightText:weightText(baby),professionalDestination:destination
-  });
+  }:(()=>{
+    const model=buildReferralDraft({
+      specialty,motherName:context.mother.name,babyName:baby?.name||'',babyAge:babyAge(baby),
+      chiefComplaint,careSummary,weightText:weightText(baby),professionalDestination:destination
+    });
+    return {...model,html:useSuggestedTemplate?model.html:'<p>Prezado(a) colega,</p><p><br></p><p>Atenciosamente,</p>'};
+  })();
   const isFinalized=draft?.status === 'finalized';
   const insertableFields=getInsertableReferralFields({context,baby,encounter});
   const panel=sheet(base.title,`<div class="rf-editor-form ${isFinalized?'is-finalized':''}">
@@ -183,7 +186,7 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
     return {content:{
       schema_version:1,specialty:base.specialty,professional_destination:professionalDestination,html,
       source:{mother_id:motherId,baby_id:babyId||null,encounter_id:encounter?.id||null,appointment_id:encounter?.appointment_id||null},
-      prefill:{chief_complaint:Boolean(chiefComplaint),care_summary:Boolean(careSummary),baby_weight:Boolean(weightText(baby))},
+      prefill:draft?.content?.prefill||{chief_complaint:Boolean(useSuggestedTemplate&&chiefComplaint),care_summary:Boolean(useSuggestedTemplate&&careSummary),baby_weight:Boolean(useSuggestedTemplate&&weightText(baby))},
       updated_at:new Date().toISOString()
     }};
   };
@@ -215,13 +218,15 @@ async function openNew(motherId,trigger){
     <label><span>Especialidade</span><select data-rf-specialty>${REFERRAL_SPECIALTIES.map(item=>`<option value="${item.id}">${DOC.escapeHTML(item.label)}</option>`).join('')}</select></label>
     <label><span>Paciente/bebê relacionado</span><select data-rf-baby><option value="">Somente a mãe</option>${context.babies.map(b=>`<option value="${b.id}" ${b.id===active?'selected':''}>${DOC.escapeHTML(b.name)}</option>`).join('')}</select></label>
     <label><span>Profissional/serviço de destino (opcional)</span><input data-rf-destination placeholder="ex.: Dra. Maria — Pediatria"></label>
+    <label class="rf-optional-template"><input type="checkbox" data-rf-use-template><span>Usar texto sugerido com pré-preenchimento dos dados já registrados (opcional)</span></label>
     <div class="rf-actions"><button type="button" class="rf-secondary" data-rf-close>Cancelar</button><button type="submit" class="rf-primary">Gerar rascunho</button></div>
   </form>`);
   form.querySelectorAll('[data-rf-close]').forEach(x=>x.addEventListener('click',close));
   form.addEventListener('submit',event=>{
     event.preventDefault();
     const specialty=form.querySelector('[data-rf-specialty]').value,babyId=form.querySelector('[data-rf-baby]').value||'',destination=form.querySelector('[data-rf-destination]').value.trim();
-    close();openEditor({motherId,babyId,specialty,destination,trigger:lastTrigger}).catch(error=>DOC.toast(error.message||'Não foi possível montar o encaminhamento.','error'));
+    const useSuggestedTemplate=form.querySelector('[data-rf-use-template]').checked;
+    close();openEditor({motherId,babyId,specialty,destination,useSuggestedTemplate,trigger:lastTrigger}).catch(error=>DOC.toast(error.message||'Não foi possível montar o encaminhamento.','error'));
   });
 }
 async function openExisting(motherId,id,trigger){
