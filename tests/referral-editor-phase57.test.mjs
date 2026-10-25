@@ -37,11 +37,12 @@ test('phase 6: finalized referral cannot revert status even via client PATCH',()
 });
 test('phase 5: preview is based on buildPayload, not unsaved old draft; finalization review is shared',()=>{
  const fin=readFileSync('public/referral-finalization.js','utf8');
- assert.match(fin,/data-rf-preview/);
+ assert.match(fin,/dataset\.rfPreview/);
  assert.match(fin,/buildPayload\(\)/);
  assert.match(fin,/reviewReferralContent/);
- assert.match(fin,/createObjectURL/);
- assert.match(fin,/revokeObjectURL/);
+ const preview=readFileSync('public/referral-preview.js','utf8');
+ assert.match(preview,/createObjectURL/);
+ assert.match(preview,/revokeObjectURL/);
  assert.match(fin,/draft\?\.status==='finalized'/);
 });
 test('phase 6: D1 and legacy runtime mutations enforce finalized immutable referral',()=>{
