@@ -13,7 +13,7 @@ test('phase 4 creates branded dynamic cards only from authored H2 headings and n
   });
   assert.match(pdf,/%PDF-1\.[4-9]/);
   for(const text of ['Histórico materno','Relato clínico individualizado','Observação','Item A','Item B','Texto fora do card','Pedido de avaliação','Solicito parecer'])assert.ok(pdf.includes(text),text);
-  assert.match(pdf,/G[ESTÃO]*[A-Z ]*AMAMENTAÇ|D.bora Lactaç/i);
+  assert.match(pdf,/GESTÃO DE AMAMENTAÇÃO/);
   assert.doesNotMatch(pdf,/Assinatura do profissional|____________________|Assinatura:/i);
   assert.doesNotMatch(pdf,/\[Descreva a queixa principal\]/);
   assert.match(pdf,/\/Count 1\b/);
