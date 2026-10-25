@@ -22,7 +22,7 @@ test('phase 4 creates branded dynamic cards only from authored H2 headings and n
 test('phase 4 supports long documents without dropping later sections',async()=>{
   const payload='<h2>Motivo livre</h2>'+Array.from({length:65},(_,i)=>'<p>Registro '+i+' '+('conteúdo clínico detalhado '.repeat(12))+'</p>').join('')+'<hr><h2>Conclusão personalizada</h2><p>Última linha preservada.</p>';
   const pdf=await encoded({html:payload,specialtyLabel:'Outro'});
-  assert.match(pdf,/\/Count [2-9][0-9]*\b/);
+  assert.match(pdf,/\/Count (?:[2-9]|[1-9][0-9]+)\b/);
   assert.ok(pdf.includes('Última linha preservada.'),'missing last authored paragraph');
   assert.ok(pdf.includes('Conclusão personalizada'),'missing final user heading');
   assert.match(pdf,/Página 1 de /);
