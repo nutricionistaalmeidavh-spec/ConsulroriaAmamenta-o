@@ -8,6 +8,7 @@ on:
       - 'public/referrals-feature.js'
       - 'public/referrals-feature.css'
       - 'tests/referral-editor-phase02.test.mjs'
+      - 'tests/e2e/referral-editor-phase02.spec.mjs'
       - 'docs/REFERRAL_EDITOR_PHASE_0_2.md'
       - '.github/workflows/validate-referral-editor-phase02.yml'
   pull_request:
@@ -40,3 +41,7 @@ jobs:
           node --check public/referrals-feature.js
           npm install --no-audit --no-fund --no-package-lock
           npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E – real app and isolated D1
+        run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs --config=playwright.config.mjs
