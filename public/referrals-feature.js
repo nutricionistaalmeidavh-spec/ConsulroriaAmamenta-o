@@ -98,6 +98,7 @@ function editorToolbar(fields=[]){
       '<button type="button" data-rf-insert-button '+(fields.length?'':'disabled')+'>+ Inserir dado</button>'+
     '</div>'+
     '<div class="rf-section-controls" aria-label="Organização das seções">'+
+      '<input data-rf-new-section-title aria-label="Nome da nova seção" placeholder="Nome da seção (você escolhe)" maxlength="180">'+
       '<button type="button" data-rf-add-section>+ Nova seção</button>'+
       '<label class="rf-field-control"><span>Seção para organizar</span><select data-rf-select-section aria-label="Selecionar seção"></select></label>'+
       '<button type="button" data-rf-move-up aria-label="Mover seção para cima" title="Mover para cima">↑</button>'+
@@ -158,6 +159,75 @@ function wireEditorControls(panel,editor,fields){
     selection.removeAllRanges();selection.addRange(range);
     picker.value='';remember();
   });
+}
+function wireReferralSectionOrganizer(panel,editor){
+  const select=panel.querySelector('[data-rf-select-section]');
+  const input=panel.querySelector('[data-rf-new-section-title]');
+  const all=()=>[...editor.children].filter(node=>node.tagName==='H2');
+  const chosen=()=>all()[Number(select.value)]||null;
+  const sectionNodes=head=>{
+    if(!head)return [];
+    const nodes=[head];
+    for(let node=head.nextElementSibling;node&&node.tagName!=='H2';node=node.nextElementSibling){
+      nodes.push(node);
+      if(node.tagName==='HR')break;
+    }
+    return nodes;
+  };
+  const refresh=preferred=>{
+    const current=preferred&&all().includes(preferred)?preferred:chosen();
+    const sections=all();
+    select.replaceChildren();
+    if(!sections.length){
+      const empty=document.createElement('option');empty.textContent='Nenhuma seção criada';empty.value='';select.appendChild(empty);
+    }else sections.forEach((header,index)=>{
+      const option=document.createElement('option');option.value=String(index);
+      option.textContent=header.textContent.trim()||'Seção sem título';select.appendChild(option);
+    });
+    select.value=sections.length?String(Math.max(0,sections.indexOf(current))):'';
+    const idx=sections.indexOf(chosen());
+    panel.querySelector('[data-rf-move-up]').disabled=idx<=0;
+    panel.querySelector('[data-rf-move-down]').disabled=idx<0||idx===sections.length-1;
+    panel.querySelector('[data-rf-delete-section]').disabled=idx<0;
+  };
+  panel.querySelector('[data-rf-add-section]').addEventListener('click',()=>{
+    const title=input.value.trim();
+    if(!title)return DOC.toast('Informe um título para criar a seção.','warning');
+    const h=document.createElement('h2');h.textContent=title;
+    const p=document.createElement('p');p.appendChild(document.createElement('br'));
+    editor.append(h,p);input.value='';refresh(h);
+    h.scrollIntoView({block:'nearest'});editor.focus();
+    const range=document.createRange();range.selectNodeContents(p);range.collapse(true);
+    const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+  });
+  select.addEventListener('change',()=>{
+    refresh(chosen());
+    chosen()?.scrollIntoView({block:'nearest'});
+  });
+  const move=delta=>{
+    const headings=all(),head=chosen(),index=headings.indexOf(head),other=headings[index+delta];
+    if(!head||!other)return;
+    const nodes=sectionNodes(head);
+    // Preserve every child in the section, including explicit HR boundary.
+    const fragment=document.createDocumentFragment();
+    nodes.forEach(node=>fragment.appendChild(node));
+    if(delta<0)editor.insertBefore(fragment,other);
+    else{
+      const after=sectionNodes(other).at(-1)?.nextSibling||null;
+      editor.insertBefore(fragment,after);
+    }
+    refresh(head);
+  };
+  panel.querySelector('[data-rf-move-up]').addEventListener('click',()=>move(-1));
+  panel.querySelector('[data-rf-move-down]').addEventListener('click',()=>move(1));
+  panel.querySelector('[data-rf-delete-section]').addEventListener('click',()=>{
+    const h=chosen();if(!h)return;
+    if(!window.confirm('Excluir a seção e todo o conteúdo escrito nela?'))return;
+    sectionNodes(h).forEach(node=>node.remove());
+    refresh();
+  });
+  editor.addEventListener('input',()=>refresh(chosen()));
+  refresh();
 }
 async function openEditor({motherId,babyId,specialty,destination='',draft=null,trigger=null,useSuggestedTemplate=false}){
   lastTrigger=trigger||document.activeElement;
