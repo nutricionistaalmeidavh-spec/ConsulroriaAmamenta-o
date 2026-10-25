@@ -7,6 +7,7 @@ on:
       - 'public/referrals-feature.js'
       - 'public/referrals-feature.css'
       - 'public/document-pdf-service.js'
+      - 'public/referral-premium-pdf.js'
       - 'tests/referral-editor-phase34.test.mjs'
       - 'tests/e2e/referral-editor-phase34.spec.mjs'
       - 'scripts/qa-generate-referral-sample.mjs'
@@ -34,6 +35,7 @@ jobs:
         run: |
           node --check public/referrals-feature.js
           node --check public/document-pdf-service.js
+          node --check public/referral-premium-pdf.js
           node --check scripts/qa-generate-referral-sample.mjs
       - name: Test original contracts, editor and premium PDF
         run: node --test tests/referral-editor-phase02.test.mjs tests/referral-editor-phase34.test.mjs tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
