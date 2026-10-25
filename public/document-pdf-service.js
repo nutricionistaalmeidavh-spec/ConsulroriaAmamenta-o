@@ -81,8 +81,8 @@ function layoutTextPages({heading,subheading='',sections=[],premiumReferral=fals
       page.ops.push('0.95 0.75 0.82 rg 384 835 211 7 re f');
       page.ops.push(referralLogoPdf(54,765,38));
       page.ops.push('0.35 0.24 0.43 rg');
-      page.ops.push(textOp('Débora Lactação',104,791,16,'F2'));
-      page.ops.push(textOp('GESTÃO DE AMAMENTAÇÃO | DOCUMENTO CLÍNICO',105,775,8,'F1'));
+      page.ops.push(textOp('Gestão de Amamentação',104,791,16,'F2'));
+      page.ops.push(textOp('DOCUMENTO CLÍNICO | ENCAMINHAMENTO PROFISSIONAL',105,775,8,'F1'));
       page.ops.push('0.76 0.64 0.83 RG\n54 754 m\n541 754 l\nS');
       page.ops.push(textOp(heading,54,733,15,'F2'));
       if(subheading)page.ops.push(textOp(subheading,54,713,9,'F1'));
@@ -268,7 +268,7 @@ function buildPagedPdf({title='Documento clínico',heading=title,subheading='',s
   pageDescriptors.forEach((descriptor,index)=>{
     const pageRef=3+index*2,contentRef=pageRef+1;
     if(descriptor.kind==='text'){
-      const ops=[...descriptor.page.ops,textOp(`Página ${index+1} de ${pageCount}`,488,45,7.5,'F1'),textOp(premiumReferral?'Débora Lactação | Documento clínico':'Documento clínico gerado pelo prontuário Débora Lactação.',54,45,7.5,'F1')];
+      const ops=[...descriptor.page.ops,textOp(`Página ${index+1} de ${pageCount}`,488,45,7.5,'F1'),textOp(premiumReferral?'Gestão de Amamentação | Documento clínico':'Documento clínico gerado pelo prontuário Débora Lactação.',54,45,7.5,'F1')];
       const stream=ops.join('\n'),streamBytes=encodeWinAnsi(stream);
       objects[pageRef]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font1Ref} 0 R /F2 ${font2Ref} 0 R >> >> /Contents ${contentRef} 0 R >>`;
       objects[contentRef]=`<< /Length ${streamBytes.length} >>\nstream\n${stream}\nendstream`;
