@@ -1,0 +1,86 @@
+name: Validate referral editor phase 5-7
+
+on:
+  push:
+    branches:
+      - feat/referral-editor-phase-5-7
+  pull_request:
+    paths:
+      - 'public/referral-review.js'
+      - 'public/referral-preview.js'
+      - 'public/referral-finalization.js'
+      - 'public/referrals-feature.css'
+      - 'worker/referral-document-guard.js'
+      - 'worker/cloudflare-data-runtime.js'
+      - 'worker/cloudflare-clinical-legacy-runtime.js'
+      - 'worker/cloudflare-upsert-runtime.js'
+      - 'tests/referral-editor-phase57.test.mjs'
+      - 'tests/e2e/referral-editor-phase57.spec.mjs'
+      - '.github/workflows/validate-referral-editor-phase57.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: referral-phase57-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  clinical-drafts-finalization-and-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies (never contact production database)
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: Static contract and syntax validation
+        run: |
+          node --check public/referral-review.js
+          node --check public/referral-preview.js
+          node --check public/referral-finalization.js
+          node --check worker/referral-document-guard.js
+          node --check worker/cloudflare-data-runtime.js
+          node --check worker/cloudflare-upsert-runtime.js
+          node --check worker/cloudflare-clinical-legacy-runtime.js
+      - name: Focused and existing clinical regression tests
+        run: |
+          node --test tests/referral-editor-phase02.test.mjs tests/referral-editor-phase34.test.mjs tests/referral-editor-phase57.test.mjs tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+          node --test tests/cloudflare-functional-regressions.test.mjs tests/block-8-owned-api.test.mjs
+      - name: Production application build
+        run: npm run build
+      - name: Render premium PDF with fictitious data
+        run: |
+          node scripts/qa-generate-referral-sample.mjs
+          python -m pip install --disable-pip-version-check 'pymupdf>=1.24,<2'
+          python - <<'PY'
+          import fitz
+          from pathlib import Path
+          root=Path('artifacts/referral-phase34')
+          output=Path('artifacts/referral-phase57')
+          output.mkdir(parents=True,exist_ok=True)
+          pdf=root/'Encaminhamento_Exemplo_Premium.pdf'
+          with fitz.open(pdf) as doc:
+            assert doc.page_count>=1
+            full='\n'.join(page.get_text() for page in doc)
+            for token in ['Gestão de Amamentação','Queixa e contexto','Motivo do encaminhamento','Marina Oliveira Fernandes']:
+              assert token in full, token
+            for i,page in enumerate(doc):
+              page.get_pixmap(matrix=fitz.Matrix(1.6,1.6),alpha=False).save(str(output/f'pdf-pagina-{i+1:02d}.png'))
+          (output/'Encaminhamento_Exemplo_Premium.pdf').write_bytes(pdf.read_bytes())
+          PY
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E using local D1 and fictitious patients
+        run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs tests/e2e/referral-editor-phase34.spec.mjs tests/e2e/referral-editor-phase57.spec.mjs --config=playwright.config.mjs
+      - name: Collect QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Encaminhamentos-Fases-5-7-${{ github.run_id }}
+          path: |
+            artifacts/referral-phase57/
+            artifacts/e2e-results/
+            artifacts/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
