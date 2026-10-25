@@ -69,5 +69,11 @@ export function enhanceClinicalNoteWithRecovery(source) {
   if (!output.includes(flushAnchor)) throw new Error('Clinical flush anchor missing');
   output = output.replace(flushAnchor, "async function cnFlush(){if(cnConflictPending)throw new Error('Revise as versões do prontuário antes de sair.');clearTimeout(cnState.saveTimer);");
   output = output.replaceAll('cnRetryDelay=1500;clearTimeout(cnRetryTimer);await cnDraftRemove', 'cnRebaseAttempts=0;cnRetryDelay=1500;clearTimeout(cnRetryTimer);await cnDraftRemove');
+  // A recovered local draft must be reviewed against today's D1 text.
+  // Never auto-save a recovered old draft over a different server note.
+  const restoreAnchor = "ta.value=draft.body;banner.remove();cnScheduleSave(ta.value);cnStatus('Rascunho recuperado; aguardando sincronização','muted')";
+  if (!output.includes(restoreAnchor)) throw new Error('Clinical draft restore anchor missing');
+  output = output.replace(restoreAnchor,
+    "ta.value=draft.body;ta.readOnly=true;banner.remove();cnState.editRevision++;cnState.pendingBody={body:ta.value,revision:cnState.editRevision};cnResolveVersionConflict(true).catch(()=>cnStatus('Não foi possível comparar as versões; sua cópia local está preservada.','error'))");
   return output;
 }
