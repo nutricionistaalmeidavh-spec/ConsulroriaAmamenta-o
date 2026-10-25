@@ -19,7 +19,7 @@ function cnScheduleRetry(error){
   cnRetryDelay=Math.min(cnRetryDelay*2,30000);
   cnRetryTimer=setTimeout(()=>{if(cnState.pendingBody&&!cnConflictPending)cnDrainSaves().catch(()=>{})},delay);
 }
-async function cnResolveVersionConflict(){
+async function cnResolveVersionConflict(forceReview=false){
   if(cnConflictBusy||cnConflictPending)return;
   const enc=cnState.encounter, ta=document.querySelector('#cn-note');
   if(!enc?.id||!ta)return;
@@ -33,7 +33,7 @@ async function cnResolveVersionConflict(){
     const serverText=String(remote.clinical_note||'');
     const localText=String(cnState.pendingBody?.body??ta.value??'');
     // Only an unrelated D1 field changed. Refresh expected version, never overwrite a note that changed.
-    if(serverText===String(enc.clinical_note||'')&&cnRebaseAttempts<2){
+    if(!forceReview&&serverText===String(enc.clinical_note||'')&&cnRebaseAttempts<2){
       cnState.encounter={...enc,...remote};
       await window.DeboraEncounter?.syncVersion?.(enc.id);
       cnRebaseAttempts++;
@@ -41,7 +41,7 @@ async function cnResolveVersionConflict(){
       cnRetryTimer=setTimeout(()=>{if(cnState.pendingBody)cnDrainSaves().catch(()=>{})},100);
       return;
     }
-    if(serverText===localText){
+    if(!forceReview&&serverText===localText){
       cnState.encounter={...enc,...remote};
       if(String(cnState.pendingBody?.body??'')===serverText)cnState.pendingBody=null;
       cnRebaseAttempts=0;
@@ -64,11 +64,11 @@ async function cnResolveVersionConflict(){
       cnE(serverText)+'</pre></details>'+
       '<p>Você pode copiar informações do banco para seu texto antes de decidir.</p>'+
       '<button type="button" data-cn-merge>Editar e mesclar meu texto</button> '+
-      '<button type="button" data-cn-save-merged>Salvar meu texto revisado</button> '+
+      '<button type="button" data-cn-save-merged disabled>Salvar meu texto revisado</button> '+
       '<button type="button" data-cn-use-server>Descartar meu texto e usar o banco</button>';
     ta.insertAdjacentElement('afterend',banner);
     banner.querySelector('[data-cn-merge]').onclick=()=>{
-      ta.readOnly=false;ta.focus();
+      ta.readOnly=false;ta.focus();banner.querySelector('[data-cn-save-merged]').disabled=false;
       cnStatus('Compare as versões e revise seu texto antes de salvar.','muted');
     };
     banner.querySelector('[data-cn-save-merged]').onclick=()=>{
