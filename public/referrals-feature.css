@@ -19,16 +19,6 @@
 
 .rf-new label.rf-optional-template{display:flex;flex-direction:row;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #e3d7e7;border-radius:12px;background:#faf6fc}.rf-new .rf-optional-template input{width:18px;height:18px;margin:0;flex:none;accent-color:#9c78b8}.rf-new .rf-optional-template span{font:550 12px/1.45 system-ui;color:#5b4967}
 
-/* Section organizer: mouse, keyboard and touch without drag dependencies. */
-.rf-section-controls{display:flex;align-items:end;gap:8px;padding:9px;border:1px solid #e2d7e7;border-radius:12px;background:#f9f4fb;flex-wrap:wrap}
-.rf-section-controls .rf-field-control{flex:1 1 180px;min-width:0}
-.rf-section-controls button{min-height:39px;border:1px solid #cfbddb;border-radius:10px;padding:8px 10px;background:#fff;color:#56386a;font:700 12px/1.2 system-ui;cursor:pointer}
-.rf-section-controls button[data-rf-add-section]{background:#6b4a81;color:#fff;border-color:#6b4a81}
-.rf-section-controls button[data-rf-delete-section]{border-color:#ead9e7;color:#8d375b}
-.rf-section-controls button:disabled{opacity:.38;cursor:not-allowed}
-.rf-section-controls button:focus-visible{outline:3px solid rgba(153,112,180,.28);outline-offset:2px}
-@media(max-width:620px){.rf-section-controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.rf-section-controls .rf-field-control{grid-column:1/-1;min-width:0}.rf-section-controls button[data-rf-add-section]{grid-column:1/-1}.rf-section-controls button{min-height:42px}}
-
 /* Phase 5: non-destructive, responsive document PDF preview. */
 .rf-preview-layer{position:fixed;inset:0;z-index:100500;display:flex;flex-direction:column;padding:clamp(12px,2vw,24px);background:rgba(28,17,40,.81);backdrop-filter:blur(7px);overflow:auto}
 .rf-preview-header{display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fcf9fe;border-radius:15px 15px 0 0;padding:13px 18px;flex-wrap:wrap}
@@ -43,3 +33,6 @@
 .rf-preview-frame{flex:1 0 auto;min-height:min(75vh,800px);width:100%;border:0;background:#fff;border-radius:0 0 12px 12px}
 .rf-preview-fallback{color:#fff;font:500 12px/1.4 system-ui;margin:8px 0}
 @media(max-width:620px){.rf-preview-layer{padding:0}.rf-preview-header{border-radius:0;padding:12px}.rf-preview-actions{width:100%}.rf-preview-actions button{flex:1}.rf-preview-review{padding:10px 12px}.rf-preview-frame{min-height:66vh;border-radius:0}.rf-preview-fallback{padding:0 12px}}
+
+/* Títulos do modelo não são campos editáveis. */
+.rf-editor h2[contenteditable="false"]{cursor:default;user-select:text}
