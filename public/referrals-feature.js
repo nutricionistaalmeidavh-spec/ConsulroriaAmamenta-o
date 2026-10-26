@@ -99,7 +99,6 @@ function keepTemplateHeadingsReadOnly(editor){
     const title=heading.textContent.trim().replace(/:\s*$/,'');
     if(REFERRAL_FIXED_TITLES.includes(title)){
       heading.setAttribute('contenteditable','false');
-      heading.setAttribute('aria-label','Título do modelo: '+title);
     }
   });
 }
