@@ -14,7 +14,11 @@ export default defineConfig({
   // Keep the SW install/activation lifecycle in its own Chromium worker/browser.
   // The functional suite blocks service workers for deterministic fault injection.
   projects: [
-    { name: 'chromium', testIgnore: '**/pwa-cache-p1.spec.mjs', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium',
+      testIgnore: ['**/pwa-cache-p1.spec.mjs', '**/deploy-version-upgrade.spec.mjs'],
+      use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-upgrade', testMatch: '**/deploy-version-upgrade.spec.mjs',
+      use: { ...devices['Desktop Chrome'], serviceWorkers: 'allow' } },
     { name: 'chromium-service-worker', testMatch: '**/pwa-cache-p1.spec.mjs',
       use: { ...devices['Desktop Chrome'], serviceWorkers: 'allow' } },
   ],
