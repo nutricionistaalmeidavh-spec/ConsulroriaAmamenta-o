@@ -1,0 +1,76 @@
+name: Validate fixed referral headings
+on:
+  push:
+    branches:
+      - fix/referral-fixed-headings-existing-templates
+  pull_request:
+    paths:
+      - 'public/referral-templates.js'
+      - 'public/referral-fixed-headings.js'
+      - 'public/referrals-feature.js'
+      - 'public/referral-premium-pdf.js'
+      - 'public/referrals-feature.css'
+      - 'tests/referral-fixed-heading-models.test.mjs'
+      - 'tests/referral-editor-phase02.test.mjs'
+      - 'tests/referral-editor-phase34.test.mjs'
+      - 'tests/e2e/referral-editor-phase02.spec.mjs'
+      - 'tests/e2e/referral-editor-phase34.spec.mjs'
+      - '.github/workflows/validate-referral-fixed-headings.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: referral-fixed-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fixed-referrals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: Syntax checks
+        run: |
+          node --check public/referral-templates.js
+          node --check public/referral-fixed-headings.js
+          node --check public/referrals-feature.js
+          node --check public/referral-premium-pdf.js
+      - name: Focused and previous clinical contracts
+        run: node --test tests/referral-fixed-heading-models.test.mjs tests/referral-editor-phase02.test.mjs tests/referral-editor-phase34.test.mjs tests/referral-editor-phase57.test.mjs tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+      - name: Production build
+        run: npm run build
+      - name: Generate sample PDF with fictitious data
+        run: |
+          node scripts/qa-generate-referral-sample.mjs
+          python -m pip install --disable-pip-version-check 'pymupdf>=1.24,<2'
+          python - <<'PY'
+          import fitz
+          from pathlib import Path
+          folder=Path('artifacts/referral-phase34')
+          pdf=folder/'Encaminhamento_Exemplo_Premium.pdf'
+          with fitz.open(pdf) as doc:
+            content='\n'.join(p.get_text() for p in doc)
+            assert 'Gestão de Amamentação' in content
+            assert 'Motivo do encaminhamento' in content
+            doc[0].get_pixmap(matrix=fitz.Matrix(1.5,1.5),alpha=False).save(str(folder/'fixed-headings-preview.png'))
+          PY
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: E2E existing titles, opt-in data and finalization
+        run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs tests/e2e/referral-editor-phase34.spec.mjs tests/e2e/referral-editor-phase57.spec.mjs --config=playwright.config.mjs
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Encaminhamentos-Titulos-Fixos-${{ github.run_id }}
+          path: |
+            artifacts/referral-phase34/
+            artifacts/referral-phase57/
+            artifacts/e2e-results/
+            artifacts/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
