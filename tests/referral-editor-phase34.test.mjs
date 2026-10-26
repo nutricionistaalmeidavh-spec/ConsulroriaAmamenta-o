@@ -36,9 +36,10 @@ test('phase 4 keeps HTML entities and new lines while leaving personal info opt-
   assert.ok(!pdf.includes('Bebê confidencial'),'baby identity must not appear unless added to editable content');
 });
 
-test('phase 3 UI provides create, edit, delete and reorder section controls',()=>{
+test('editor no longer exposes custom section controls but keeps basic rich-text actions',()=>{
  const editor=readFileSync('public/referrals-feature.js','utf8');
- for(const name of ['data-rf-add-section','data-rf-select-section','data-rf-move-up','data-rf-move-down','data-rf-delete-section'])assert.ok(editor.includes(name),name);
- assert.match(editor,/window\.confirm|confirm\(/);
- assert.match(editor,/data-rf-editor/);
+ for(const name of ['data-rf-add-section','data-rf-select-section','data-rf-move-up','data-rf-move-down','data-rf-delete-section'])
+   assert.ok(!editor.includes(name),name);
+ for(const name of ['data-rf-cmd','data-rf-save','data-rf-editor'])
+   assert.ok(editor.includes(name),name);
 });
