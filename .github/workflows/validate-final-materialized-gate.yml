@@ -89,6 +89,9 @@ jobs:
           test -f dist/clinical-source/features/clinical-note-feature.js
           test -f dist/clinical-source/manifest.json
 
+      - name: Validate independent browser gate contracts
+        run: node --test tests/browser-isolation-final-gate.test.mjs
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
