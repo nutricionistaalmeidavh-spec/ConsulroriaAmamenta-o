@@ -1,11 +1,11 @@
 import {test,expect} from './fixtures.mjs';
 import {login,uniqueLabel} from './helpers.mjs';
 
-test('encaminhamento: seção, dado opt-in e encerramento sobrevivem ao salvamento',async({page})=>{
+test('encaminhamento: títulos fixos e dado opt-in sobrevivem ao salvamento',async({page})=>{
   test.setTimeout(120000);
   await login(page);
-  const mother=uniqueLabel('Mãe QA seção');
-  const baby=uniqueLabel('Bebê QA seção');
+  const mother=uniqueLabel('Mãe QA título fixo');
+  const baby=uniqueLabel('Bebê QA título fixo');
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name="motherName"]').fill(mother);
   await page.locator('[data-baby-field="name"]').first().fill(baby);
@@ -17,7 +17,6 @@ test('encaminhamento: seção, dado opt-in e encerramento sobrevivem ao salvamen
   const patient=await response.json();
   await expect(page.locator('[data-patient-title]')).toContainText(mother);
   await expect.poll(()=>page.evaluate(()=>Boolean(window.DeboraReferrals?.openNew))).toBe(true);
-
   await page.evaluate(id=>window.DeboraReferrals.openNew(id),patient.mother.id);
   await expect(page.locator('[data-rf-new]')).toBeVisible();
   await expect(page.locator('[data-rf-use-template]')).not.toBeChecked();
@@ -26,38 +25,26 @@ test('encaminhamento: seção, dado opt-in e encerramento sobrevivem ao salvamen
   await expect(editor).toBeVisible();
   await expect(editor).not.toContainText(mother);
   await expect(editor).not.toContainText(baby);
+  await expect(editor.locator('h2')).toHaveCount(3);
+  await expect(editor.locator('h2').first()).toHaveText('Queixa(s) em acompanhamento');
+  await expect(editor.locator('h2').first()).toHaveAttribute('contenteditable','false');
+  await expect(page.locator('[data-rf-add-section]')).toHaveCount(0);
+  await expect(page.locator('[data-rf-format]')).toHaveCount(0);
   await expect(page.locator('[data-rf-insert-data] option[value="mother.name"]')).toHaveCount(1);
   await expect(page.locator('[data-rf-insert-data] option[value="baby.name"]')).toHaveCount(1);
-
   await editor.locator('p').last().click();
-  await page.locator('[data-rf-format]').selectOption('section');
-  await expect(editor.locator('h2')).toHaveCount(1);
-  await page.locator('[data-rf-new-section-title]').fill('Evolução individualizada');
-  await page.locator('[data-rf-add-section]').click();
-  await expect(editor.locator('h2')).toHaveCount(2);
-  await page.locator('[data-rf-select-section]').selectOption('1');
-  await page.locator('[data-rf-move-up]').click();
-  await expect(editor.locator('h2').first()).toHaveText('Evolução individualizada');
-  await page.locator('[data-rf-move-down]').click();
-  await expect(editor.locator('h2').last()).toHaveText('Evolução individualizada');
-  page.once('dialog',dialog=>dialog.accept());
-  await page.locator('[data-rf-delete-section]').click();
-  await expect(editor.locator('h2')).toHaveCount(1);
   await page.locator('[data-rf-insert-data]').selectOption('mother.name');
   await page.locator('[data-rf-insert-button]').click();
   await expect(editor).toContainText('Nome completo: '+mother);
-  await page.locator('[data-rf-end-section]').click();
-  await expect(editor.locator('hr')).toHaveCount(1);
-
   await page.locator('[data-rf-save]').click();
   await expect(page.locator('.rf-layer')).toHaveCount(0);
   const rows=await page.evaluate(id=>window.DeboraDocuments.listDocuments(id,'referral'),patient.mother.id);
   const record=rows.find(row=>row.status==='draft'&&row.content?.html?.includes('Nome completo: '+mother));
   expect(record?.id).toBeTruthy();
-  expect(record.content.html).toMatch(/<h2[\s>]/);
-  expect(record.content.html).toMatch(/<hr[\s/>]/);
+  expect(record.content.html).toContain('<h2>Queixa(s) em acompanhamento</h2>');
+  expect(record.content.html).toContain('<h2>Motivo do encaminhamento</h2>');
   expect(record.content.schema_version).toBe(1);
   await page.evaluate(({motherId,recordId})=>window.DeboraReferrals.openExisting(motherId,recordId),{motherId:patient.mother.id,recordId:record.id});
-  await expect(page.locator('[data-rf-editor] h2')).toHaveCount(1);
-  await expect(page.locator('[data-rf-editor] hr')).toHaveCount(1);
+  await expect(page.locator('[data-rf-editor] h2')).toHaveCount(3);
+  await expect(page.locator('[data-rf-editor]')).toContainText('Nome completo: '+mother);
 });

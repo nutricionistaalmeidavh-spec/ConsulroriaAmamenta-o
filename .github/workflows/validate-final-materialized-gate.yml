@@ -89,11 +89,23 @@ jobs:
           test -f dist/clinical-source/features/clinical-note-feature.js
           test -f dist/clinical-source/manifest.json
 
+      - name: Validate independent browser gate contracts
+        run: node --test tests/browser-isolation-final-gate.test.mjs
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run complete desktop E2E on the same final artifact
-        run: npx playwright test
+      # A version-changing service worker can tear down the browser page/context.
+      # Running these tests in separate Playwright invocations keeps the functional
+      # browser session independent without skipping any checks.
+      - name: Run functional desktop E2E on the final artifact
+        run: npx playwright test --project=chromium
+
+      - name: Verify version upgrade with isolated Chromium browser
+        run: npx playwright test --project=chromium-upgrade
+
+      - name: Verify offline cache and session with isolated Chromium browser
+        run: npx playwright test --project=chromium-service-worker
 
       - name: Run mobile E2E on the same final artifact
         run: npx playwright test --config=playwright.mobile.config.mjs
