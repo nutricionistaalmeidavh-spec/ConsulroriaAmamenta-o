@@ -6,14 +6,15 @@ import {getInsertableReferralFields, REFERRAL_EDITOR_BLOCKS} from '../public/ref
 const actual = (args={}) => getInsertableReferralFields(args);
 const value = (fields,id) => fields.find(f=>f.id===id)?.value;
 
-test('phase 1: editor can represent paragraph, titled sections, subtitles and explicit section ending',()=>{
-  assert.deepEqual(REFERRAL_EDITOR_BLOCKS.map(item=>item.id),['paragraph','section','subheading','end-section']);
+test('template headings are semantic and the extra section-creation editor is gone',()=>{
   const editor=readFileSync('public/referrals-feature.js','utf8');
-  for (const tag of ['H2','H3','HR']) assert.ok(editor.includes("'"+tag+"'"),tag+' must survive sanitization');
-  assert.match(editor,/data-rf-format/);
-  assert.match(editor,/data-rf-end-section/);
+  for(const removed of ['data-rf-format','data-rf-end-section','data-rf-add-section','data-rf-select-section','data-rf-new-section-title','data-rf-delete-section'])
+    assert.ok(!editor.includes(removed),removed);
   assert.match(editor,/data-rf-editor/);
   assert.match(editor,/sanitizeEditorHtml/);
+  assert.match(editor,/normalizeReferralHeadings/);
+  assert.match(editor,/keepTemplateHeadingsReadOnly/);
+  assert.match(editor,/data-rf-insert-data/);
 });
 
 test('phase 2: insertion options reflect only actual patient data and not invented fields',()=>{
