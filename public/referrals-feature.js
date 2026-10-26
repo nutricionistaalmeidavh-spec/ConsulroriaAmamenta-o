@@ -1,5 +1,6 @@
-import {REFERRAL_SPECIALTIES,buildReferralDraft,getReferralSpecialty} from './referral-templates.js';
-import {REFERRAL_EDITOR_BLOCKS,getInsertableReferralFields} from './referral-editor-structure.js';
+import {REFERRAL_SPECIALTIES,buildReferralDraft,buildReferralSkeleton,REFERRAL_FIXED_TITLES,getReferralSpecialty} from './referral-templates.js';
+import {getInsertableReferralFields} from './referral-editor-structure.js';
+import {normalizeReferralHeadings} from './referral-fixed-headings.js';
 
 const DOC=window.DeboraDocuments;
 let currentMother='',layer=null,lastTrigger=null,mountRevision=0;
@@ -72,40 +73,37 @@ async function contextForDraft(motherId,babyId){
   return {context,baby,encounter,chiefComplaint,careSummary};
 }
 function editorToolbar(fields=[]){
-  const formats=REFERRAL_EDITOR_BLOCKS.filter(item=>item.id!=='end-section')
-    .map(item=>'<option value="'+item.id+'">'+DOC.escapeHTML(item.label)+'</option>').join('');
   const groups=[...new Set(fields.map(field=>field.group))].map(group=>
     '<optgroup label="'+DOC.escapeHTML(group)+'">'+fields.filter(field=>field.group===group).map(field=>
       '<option value="'+DOC.escapeHTML(field.id)+'">'+DOC.escapeHTML(field.label)+'</option>').join('')+'</optgroup>'
   ).join('');
   return '<div class="rf-editor-controls">'+
-    '<div class="rf-format-controls">'+
-      '<label class="rf-field-control"><span>Tipo de texto</span><select data-rf-format aria-label="Formato do trecho">'+formats+'</select></label>'+
-      '<button type="button" class="rf-section-end" data-rf-end-section title="Fechar a seção e continuar como texto normal">Encerrar seção</button>'+
-    '</div>'+
-    '<div class="rf-toolbar" role="toolbar" aria-label="Formatação do encaminhamento">'+
+    '<div class="rf-toolbar" role="toolbar" aria-label="Formatação do texto clínico">'+
       '<button type="button" data-rf-cmd="bold" aria-label="Negrito"><strong>N</strong></button>'+
       '<button type="button" data-rf-cmd="italic" aria-label="Itálico"><em>I</em></button>'+
       '<button type="button" data-rf-cmd="underline" aria-label="Sublinhado"><u>S</u></button>'+
       '<button type="button" data-rf-cmd="insertUnorderedList" aria-label="Lista com marcadores">• —</button>'+
       '<button type="button" data-rf-cmd="insertOrderedList" aria-label="Lista numerada">1.</button>'+
     '</div>'+
-    '<div class="rf-insert-controls">'+
-      '<label class="rf-field-control"><span>Dados registrados</span><select data-rf-insert-data aria-label="Escolher dado para inserir">'+
-        '<option value="">Escolher dado da mãe, bebê ou atendimento…</option>'+groups+
+    (fields.length?'<div class="rf-insert-controls">'+
+      '<label class="rf-field-control"><span>Inserir informação registrada (opcional)</span><select data-rf-insert-data aria-label="Escolher dado para inserir">'+
+        '<option value="">Escolher informação da mãe, bebê ou atendimento…</option>'+groups+
       '</select></label>'+
-      '<button type="button" data-rf-insert-button '+(fields.length?'':'disabled')+'>+ Inserir dado</button>'+
-    '</div>'+
-    '<div class="rf-section-controls" aria-label="Organização das seções">'+
-      '<input data-rf-new-section-title aria-label="Nome da nova seção" placeholder="Nome da seção (você escolhe)" maxlength="180">'+
-      '<button type="button" data-rf-add-section>+ Nova seção</button>'+
-      '<label class="rf-field-control"><span>Seção para organizar</span><select data-rf-select-section aria-label="Selecionar seção"></select></label>'+
-      '<button type="button" data-rf-move-up aria-label="Mover seção para cima" title="Mover para cima">↑</button>'+
-      '<button type="button" data-rf-move-down aria-label="Mover seção para baixo" title="Mover para baixo">↓</button>'+
-      '<button type="button" data-rf-delete-section aria-label="Excluir seção e conteúdo">Excluir</button>'+
-    '</div>'+
+      '<button type="button" data-rf-insert-button>Inserir dado</button>'+
+    '</div>':'')+
   '</div>';
 }
+
+function keepTemplateHeadingsReadOnly(editor){
+  editor.querySelectorAll('h2').forEach(heading=>{
+    const title=heading.textContent.trim().replace(/:\s*$/,'');
+    if(REFERRAL_FIXED_TITLES.includes(title)){
+      heading.setAttribute('contenteditable','false');
+      heading.setAttribute('aria-label','Título do modelo: '+title);
+    }
+  });
+}
+
 function wireEditorControls(panel,editor,fields){
   let lastRange=null;
   const remember=()=>{
@@ -115,41 +113,29 @@ function wireEditorControls(panel,editor,fields){
     }
   };
   for(const name of ['keyup','mouseup','input','blur'])editor.addEventListener(name,remember);
-  const restore=()=>{
+  editor.addEventListener('input',()=>keepTemplateHeadingsReadOnly(editor));
+  panel.querySelectorAll('[data-rf-cmd]').forEach(button=>button.addEventListener('click',()=>{
+    editor.focus();
+    if(lastRange&&editor.contains(lastRange.startContainer)&&editor.contains(lastRange.endContainer)){
+      const selection=window.getSelection();
+      selection.removeAllRanges();selection.addRange(lastRange);
+    }
+    document.execCommand(button.dataset.rfCmd,false,null);remember();
+  }));
+  const insert=panel.querySelector('[data-rf-insert-button]');
+  insert?.addEventListener('click',()=>{
+    const picker=panel.querySelector('[data-rf-insert-data]');
+    const field=fields.find(item=>item.id===picker?.value);
+    if(!field)return DOC.toast('Selecione uma informação registrada.','warning');
     editor.focus();
     const selection=window.getSelection();
-    if(!selection)return null;
+    if(!selection)return;
     if(lastRange&&editor.contains(lastRange.startContainer)&&editor.contains(lastRange.endContainer)){
       selection.removeAllRanges();selection.addRange(lastRange);
     }else{
-      const range=document.createRange();range.selectNodeContents(editor);range.collapse(false);
-      selection.removeAllRanges();selection.addRange(range);
+      const r=document.createRange();r.selectNodeContents(editor);r.collapse(false);
+      selection.removeAllRanges();selection.addRange(r);
     }
-    return selection;
-  };
-  panel.querySelectorAll('[data-rf-cmd]').forEach(btn=>btn.addEventListener('click',()=>{
-    restore();document.execCommand(btn.dataset.rfCmd,false,null);remember();
-  }));
-  const format=panel.querySelector('[data-rf-format]');
-  format.addEventListener('change',()=>{
-    const item=REFERRAL_EDITOR_BLOCKS.find(option=>option.id===format.value);
-    if(!item||item.id==='end-section')return;
-    restore();
-    document.execCommand('formatBlock',false,item.tag.toLowerCase());
-    remember();
-  });
-  panel.querySelector('[data-rf-end-section]').addEventListener('click',()=>{
-    restore();
-    // A durable HR separates cards; the paragraph after it is outside the card.
-    document.execCommand('insertHTML',false,'<hr><p><br></p>');
-    format.value='paragraph';remember();
-  });
-  panel.querySelector('[data-rf-insert-button]').addEventListener('click',()=>{
-    const picker=panel.querySelector('[data-rf-insert-data]');
-    const field=fields.find(item=>item.id===picker.value);
-    if(!field)return DOC.toast('Selecione uma informação registrada.','warning');
-    const selection=restore();
-    if(!selection||!selection.rangeCount)return;
     const range=selection.getRangeAt(0);
     range.deleteContents();
     const node=document.createTextNode(field.label+': '+field.value);
@@ -158,75 +144,6 @@ function wireEditorControls(panel,editor,fields){
     selection.removeAllRanges();selection.addRange(range);
     picker.value='';remember();
   });
-}
-function wireReferralSectionOrganizer(panel,editor){
-  const select=panel.querySelector('[data-rf-select-section]');
-  const input=panel.querySelector('[data-rf-new-section-title]');
-  const all=()=>[...editor.children].filter(node=>node.tagName==='H2');
-  const chosen=()=>all()[Number(select.value)]||null;
-  const sectionNodes=head=>{
-    if(!head)return [];
-    const nodes=[head];
-    for(let node=head.nextElementSibling;node&&node.tagName!=='H2';node=node.nextElementSibling){
-      nodes.push(node);
-      if(node.tagName==='HR')break;
-    }
-    return nodes;
-  };
-  const refresh=preferred=>{
-    const current=preferred&&all().includes(preferred)?preferred:chosen();
-    const sections=all();
-    select.replaceChildren();
-    if(!sections.length){
-      const empty=document.createElement('option');empty.textContent='Nenhuma seção criada';empty.value='';select.appendChild(empty);
-    }else sections.forEach((header,index)=>{
-      const option=document.createElement('option');option.value=String(index);
-      option.textContent=header.textContent.trim()||'Seção sem título';select.appendChild(option);
-    });
-    select.value=sections.length?String(Math.max(0,sections.indexOf(current))):'';
-    const idx=sections.indexOf(chosen());
-    panel.querySelector('[data-rf-move-up]').disabled=idx<=0;
-    panel.querySelector('[data-rf-move-down]').disabled=idx<0||idx===sections.length-1;
-    panel.querySelector('[data-rf-delete-section]').disabled=idx<0;
-  };
-  panel.querySelector('[data-rf-add-section]').addEventListener('click',()=>{
-    const title=input.value.trim();
-    if(!title)return DOC.toast('Informe um título para criar a seção.','warning');
-    const h=document.createElement('h2');h.textContent=title;
-    const p=document.createElement('p');p.appendChild(document.createElement('br'));
-    editor.append(h,p);input.value='';refresh(h);
-    h.scrollIntoView({block:'nearest'});editor.focus();
-    const range=document.createRange();range.selectNodeContents(p);range.collapse(true);
-    const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
-  });
-  select.addEventListener('change',()=>{
-    refresh(chosen());
-    chosen()?.scrollIntoView({block:'nearest'});
-  });
-  const move=delta=>{
-    const headings=all(),head=chosen(),index=headings.indexOf(head),other=headings[index+delta];
-    if(!head||!other)return;
-    const nodes=sectionNodes(head);
-    // Preserve every child in the section, including explicit HR boundary.
-    const fragment=document.createDocumentFragment();
-    nodes.forEach(node=>fragment.appendChild(node));
-    if(delta<0)editor.insertBefore(fragment,other);
-    else{
-      const after=sectionNodes(other).at(-1)?.nextSibling||null;
-      editor.insertBefore(fragment,after);
-    }
-    refresh(head);
-  };
-  panel.querySelector('[data-rf-move-up]').addEventListener('click',()=>move(-1));
-  panel.querySelector('[data-rf-move-down]').addEventListener('click',()=>move(1));
-  panel.querySelector('[data-rf-delete-section]').addEventListener('click',()=>{
-    const h=chosen();if(!h)return;
-    if(!window.confirm('Excluir a seção e todo o conteúdo escrito nela?'))return;
-    sectionNodes(h).forEach(node=>node.remove());
-    refresh();
-  });
-  editor.addEventListener('input',()=>refresh(chosen()));
-  refresh();
 }
 async function openEditor({motherId,babyId,specialty,destination='',draft=null,trigger=null,useSuggestedTemplate=false}){
   lastTrigger=trigger||document.activeElement;
@@ -242,7 +159,7 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
       specialty,motherName:context.mother.name,babyName:baby?.name||'',babyAge:babyAge(baby),
       chiefComplaint,careSummary,weightText:weightText(baby),professionalDestination:destination
     });
-    return {...model,html:useSuggestedTemplate?model.html:'<p>Prezado(a) colega,</p><p><br></p><p>Atenciosamente,</p>'};
+    return {...model,html:useSuggestedTemplate?model.html:buildReferralSkeleton({specialty,professionalDestination:destination}).html};
   })();
   const isFinalized=draft?.status === 'finalized';
   const insertableFields=getInsertableReferralFields({context,baby,encounter});
@@ -251,13 +168,14 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
       <label><span>Especialidade</span><input value="${DOC.escapeHTML(base.specialtyLabel)}" readonly></label>
       <label><span>Profissional/serviço de destino</span><input data-rf-destination value="${DOC.escapeHTML(base.professionalDestination||'')}" placeholder="ex.: Dra. Maria — Pediatria" ${isFinalized?'readonly':''}></label>
     </div>
-    <label class="rf-editor-label"><span>Conteúdo</span>${isFinalized?'':editorToolbar(insertableFields)}<div class="rf-editor" contenteditable="${isFinalized?'false':'true'}" role="textbox" aria-multiline="true" data-rf-editor>${base.html}</div></label>
-    <div class="rf-editor-note">${isFinalized?'Documento finalizado. O conteúdo fica somente para leitura; gere ou compartilhe a versão oficial em PDF.':'Selecione os dados que deseja incluir, escolha títulos e encerre cada seção quando necessário. O texto sugerido pelo modelo é editável; revise-o antes de salvar.'}</div>
+    <label class="rf-editor-label"><span>Conteúdo</span>${isFinalized?'':editorToolbar(insertableFields)}<div class="rf-editor" contenteditable="${isFinalized?'false':'true'}" role="textbox" aria-multiline="true" data-rf-editor>${normalizeReferralHeadings(base.html)}</div></label>
+    <div class="rf-editor-note">${isFinalized?'Documento finalizado. O conteúdo fica somente para leitura; gere ou compartilhe a versão oficial em PDF.':'Os títulos do modelo já estão definidos. Preencha apenas as informações necessárias; revise antes de salvar.'}</div>
     <div class="rf-actions"><button type="button" class="rf-secondary" data-rf-close>${isFinalized?'Fechar':'Cancelar'}</button>${isFinalized?'':'<button type="button" class="rf-primary" data-rf-save>Salvar rascunho</button>'}</div>
   </div>`,true);
   panel.querySelectorAll('[data-rf-close]').forEach(x=>x.addEventListener('click',close));
   const editor=panel.querySelector('[data-rf-editor]'),destinationInput=panel.querySelector('[data-rf-destination]');
-  if(!isFinalized){wireEditorControls(panel,editor,insertableFields);wireReferralSectionOrganizer(panel,editor);}
+  keepTemplateHeadingsReadOnly(editor);
+  if(!isFinalized)wireEditorControls(panel,editor,insertableFields);
   const buildPayload=()=>{
     const html=sanitizeEditorHtml(editor.innerHTML),professionalDestination=destinationInput.value.trim();
     return {content:{
