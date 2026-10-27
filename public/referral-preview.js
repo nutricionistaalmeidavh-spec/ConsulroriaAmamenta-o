@@ -1,8 +1,12 @@
-import {downloadPdf} from './document-pdf-service.js';
+import {downloadPdf,openPdfInNewTab} from './document-pdf-service.js';
 /**
  * Document preview uses the exact Blob returned by the official PDF renderer.
  * It does not persist, finalize, alter authoring HTML, or send medical data away.
  */
+function isIOSWebKit(){
+  const agent=String(globalThis.navigator?.userAgent||'');
+  return /iPhone|iPad|iPod/i.test(agent)||(globalThis.navigator?.platform==='MacIntel'&&globalThis.navigator?.maxTouchPoints>1);
+}
 export function openReferralPreview({panel,pdf,fileName='encaminhamento-previa'}={}){
   if(!panel||!pdf)return null;
   panel.querySelectorAll('[data-rf-preview-layer]').forEach(node=>node.remove());
@@ -12,7 +16,8 @@ export function openReferralPreview({panel,pdf,fileName='encaminhamento-previa'}
   container.setAttribute('role','dialog');
   container.setAttribute('aria-modal','true');
   container.setAttribute('aria-label','Pré-visualização do encaminhamento');
-  const url=URL.createObjectURL(pdf);
+  const ios=isIOSWebKit();
+  const url=ios?null:URL.createObjectURL(pdf);
   const header=document.createElement('div');
   header.className='rf-preview-header';
   const title=document.createElement('div');
@@ -29,19 +34,25 @@ export function openReferralPreview({panel,pdf,fileName='encaminhamento-previa'}
   header.append(title,controls);
   const frame=document.createElement('iframe');
   frame.dataset.rfPreviewFrame='1';frame.className='rf-preview-frame';frame.title='PDF do encaminhamento';
-  frame.src=url;
+  if(!ios)frame.src=url;
+  else{frame.hidden=true;download.textContent='Abrir prévia em outra aba';}
   const fallback=document.createElement('p');fallback.className='rf-preview-fallback';
-  fallback.textContent='Caso o PDF não apareça no navegador, use “Baixar prévia”.';
+  fallback.textContent=ios
+    ?'No iPhone, o PDF será aberto em uma aba separada para manter o prontuário nesta sessão.'
+    :'Caso o PDF não apareça no navegador, use “Baixar prévia”.';
   container.append(header,frame,fallback);
   panel.appendChild(container);
   let closed=false;
   const close=()=>{
     if(closed)return;
-    closed=true;container.remove();URL.revokeObjectURL(url);
+    closed=true;container.remove();if(url)URL.revokeObjectURL(url);
     panel.querySelector('[data-rf-preview]')?.focus();
   };
   closeButton.addEventListener('click',close);
-  download.addEventListener('click',()=>downloadPdf(pdf,fileName));
+  download.addEventListener('click',()=>{
+    try{ios?openPdfInNewTab(pdf):downloadPdf(pdf,fileName)}
+    catch(error){fallback.textContent=error.message||'Não foi possível abrir o PDF.'}
+  });
   container.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close()}});
   closeButton.focus();
   return {close,container,url};
