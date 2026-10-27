@@ -238,12 +238,34 @@ export function downloadPdf(blob,name='documento-clinico') {
   setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 
-export async function sharePdf(blob,name='documento-clinico',title='Documento clínico') {
+/** Open PDF in a separate tab without replacing the authenticated application on iOS. */
+export function openPdfInNewTab(blob){
+  const url=URL.createObjectURL(blob);
+  let tab=null;
+  try{
+    tab=typeof window?.open==='function'?window.open(url,'_blank'):null;
+  }catch(error){
+    URL.revokeObjectURL(url);
+    throw error;
+  }
+  if(!tab){
+    URL.revokeObjectURL(url);
+    throw new Error('O navegador bloqueou a abertura do PDF. Permita novas abas e tente novamente.');
+  }
+  try{tab.opener=null}catch{/* Some browser viewers restrict window access. */}
+  setTimeout(()=>URL.revokeObjectURL(url),120000);
+  return 'opened';
+}
+
+export async function sharePdf(blob,name='documento-clinico',title='Documento clínico',{preserveAppTab=false}={}){
   const file=pdfFile(blob,name);
-  if(file&&navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+  let canShareFiles=false;
+  try{canShareFiles=Boolean(file&&navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]})))}catch{/* Safari may reject capability detection. */}
+  if(canShareFiles){
     await navigator.share({title,files:[file]});
     return 'shared';
   }
+  if(preserveAppTab)return openPdfInNewTab(blob);
   downloadPdf(blob,name);
   return 'downloaded';
 }
