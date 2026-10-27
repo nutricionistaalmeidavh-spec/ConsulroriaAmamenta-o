@@ -6,6 +6,7 @@ import { buildEncounterPayload, collectEncounterDraft, applyEncounterDraft } fro
 import { createMediaService } from './lib/media-service.js';
 import { createBackupService, encryptBackup, decryptBackup } from './lib/backup-service.js';
 import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';
+import {isIosPdfViewer,showSavedIosReferralPdf} from '../../referral-ios-pdf.js';
 
 const config = globalThis.DEBORA_APP_CONFIG || {};
 const loginScreen = document.querySelector('[data-auth-screen="login"]');
@@ -1120,8 +1121,16 @@ function pdfEncounterData() {
 async function printPlan() {
   const patient = selectedWizardPatient();
   const layout = normalizePdfLayout(document.querySelector('[data-pdf-layout-encounter]')?.value || selectedPdfLayout());
-  const blob = createCarePlanPdf({ title: 'Débora Lactação', layout, patient: patient || {}, encounter: pdfEncounterData() });
+  const blob = createCarePlanPdf({ title: 'Plano de cuidados', layout, patient: patient || {}, encounter: pdfEncounterData() });
   const filename = safePdfFilename(patient ? patientLabel(patient) : 'paciente');
+  if(isIosPdfViewer()){
+    showSavedIosReferralPdf({pdf:blob,fileName:filename.replace(/\.pdf$/i,''),
+      documentTitle:'Plano de cuidados pronto',
+      description:'Plano gerado. Toque para visualizar, salvar ou compartilhar sem sair do atendimento.',
+      shareTitle:'Plano de cuidados'});
+    toast('PDF pronto para visualizar ou compartilhar.', 'success');
+    return;
+  }
   const file = typeof File === 'function' ? new File([blob], filename, { type: 'application/pdf' }) : null;
   if (file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
     try {

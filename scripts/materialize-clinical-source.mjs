@@ -7,6 +7,7 @@ import { applyWeeklyCarePlan } from './lib/weekly-care-plan-materialize.mjs';
 import { applyWeightCorrection } from './lib/weight-correction-materialize.mjs';
 import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs';
 import { applyFinancialEntryCancellation } from './lib/financial-entry-cancel-materialize.mjs';
+import { applyClinicalPdfBranding } from './lib/clinical-pdf-branding-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -356,6 +357,7 @@ applyWeeklyCarePlan(resolved, sourceByPath, ROOT);
 applyWeightCorrection(resolved, sourceByPath);
 applyPackageBillingSafety(resolved, sourceByPath);
 applyFinancialEntryCancellation(resolved, sourceByPath);
+applyClinicalPdfBranding(resolved, sourceByPath);
 
 
 // Backup UX is injected AFTER the clinical source is materialized, so the

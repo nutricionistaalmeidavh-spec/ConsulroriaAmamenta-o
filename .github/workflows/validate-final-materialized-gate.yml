@@ -31,6 +31,9 @@ jobs:
       - name: Build final materialized artifact once
         run: npm run build
 
+      - name: Validate branded clinical PDF exports and safe iOS file flow
+        run: node --test tests/clinical-pdf-branding-regression.test.mjs
+
       - name: Run complete clinical regression matrix on final artifact
         run: node --test tests/clinical-source-*.test.mjs
 

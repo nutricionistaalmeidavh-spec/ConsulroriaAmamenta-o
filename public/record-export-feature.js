@@ -1,4 +1,5 @@
 import {createRecordPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
+import {isIosPdfViewer,showSavedIosReferralPdf} from './referral-ios-pdf.js';
 
 const DOC=window.DeboraDocuments;
 const PERSISTED_SOURCES=['mothers','babies','clinical_encounters','consents','clinical_documents','clinical_media','weights'];
@@ -225,7 +226,14 @@ async function generate({motherId,form,mode='download',button}){
     const pdf=createRecordPdf({motherName:record.context.mother.name,modeLabel,subheading:`${record.context.mother.name} · ${babyLabel} · ${periodLabel}`,sections:built.sections,images});
     await registerExport(motherId,options,built.counts);
     const fileName=`${options.mode==='summary'?'resumo-clinico':'prontuario-completo'}-${record.context.mother.name}`;
-    if(mode==='share'){
+    if(isIosPdfViewer()){
+      // The audit entry must be confirmed before the file is offered. Safari
+      // needs a separate user gesture for file sharing after async persistence.
+      showSavedIosReferralPdf({pdf,fileName,documentTitle:modeLabel+' preparado',
+        description:'Prontuário gerado. Toque abaixo para visualizar, salvar em Arquivos ou compartilhar.',
+        shareTitle:modeLabel});
+      DOC.toast('PDF pronto para visualizar ou compartilhar.');
+    }else if(mode==='share'){
       const result=await sharePdf(pdf,fileName,modeLabel);DOC.toast(result==='shared'?'Prontuário compartilhado.':'PDF do prontuário gerado.');
     }else{downloadPdf(pdf,fileName);DOC.toast('PDF do prontuário gerado.')}
     window.dispatchEvent(new CustomEvent('debora:record-exported',{detail:{motherId,mode:options.mode}}));
