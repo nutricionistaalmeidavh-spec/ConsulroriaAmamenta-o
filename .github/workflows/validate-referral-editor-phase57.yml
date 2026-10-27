@@ -8,6 +8,7 @@ on:
     paths:
       - 'public/referral-review.js'
       - 'public/referral-preview.js'
+      - 'public/document-pdf-service.js'
       - 'public/referral-finalization.js'
       - 'public/referrals-feature.css'
       - 'worker/referral-document-guard.js'
@@ -16,6 +17,8 @@ on:
       - 'worker/cloudflare-upsert-runtime.js'
       - 'tests/referral-editor-phase57.test.mjs'
       - 'tests/e2e/referral-editor-phase57.spec.mjs'
+      - 'tests/e2e/referral-ios-session.spec.mjs'
+      - 'playwright.ios-referral.config.mjs'
       - '.github/workflows/validate-referral-editor-phase57.yml'
   workflow_dispatch:
 permissions:
@@ -38,6 +41,7 @@ jobs:
         run: |
           node --check public/referral-review.js
           node --check public/referral-preview.js
+          node --check public/document-pdf-service.js
           node --check public/referral-finalization.js
           node --check worker/referral-document-guard.js
           node --check worker/cloudflare-data-runtime.js
@@ -73,6 +77,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser E2E using local D1 and fictitious patients
         run: npx playwright test tests/e2e/referral-editor-phase02.spec.mjs tests/e2e/referral-editor-phase34.spec.mjs tests/e2e/referral-editor-phase57.spec.mjs --config=playwright.config.mjs
+      - name: Install WebKit for iPhone regression
+        run: npx playwright install --with-deps webkit
+      - name: WebKit iPhone PDF and session regression on local D1
+        run: npx playwright test --config=playwright.ios-referral.config.mjs
       - name: Collect QA evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -81,6 +89,8 @@ jobs:
           path: |
             artifacts/referral-phase57/
             artifacts/e2e-results/
+            artifacts/referral-ios-webkit-results/
+            artifacts/referral-ios-webkit-report/
             artifacts/playwright-report/
           if-no-files-found: warn
           retention-days: 14
