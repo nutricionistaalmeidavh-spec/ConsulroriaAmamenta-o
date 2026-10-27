@@ -35,12 +35,13 @@ test('WebKit iPhone: finalize referral, share PDF and return without new login',
     editor.dispatchEvent(new Event('input',{bubbles:true}));
   });
   await page.locator('[data-rf-finalize]').click();
-  await expect(page.locator('[data-rf-official-pdf]')).toBeVisible();
+  await expect(page.locator('[data-rf-ios-pdf-ready]')).toBeVisible();
+  await expect(page.locator('[data-rf-ios-pdf-open]')).toBeVisible();
   const saved=await page.evaluate(id=>window.DeboraDocuments.listDocuments(id,'referral'),motherId);
   expect(saved.find(doc=>doc.status==='finalized'&&doc.content?.issued_snapshot?.html?.includes('[Descreva'))).toBeTruthy();
   await expect(page.locator('[data-auth-screen="login"]')).toBeHidden();
 
-  await page.locator('[data-rf-official-pdf]').click();
+  await page.locator('[data-rf-ios-pdf-open]').click();
   await expect.poll(()=>page.evaluate(()=>window.__qaReferralShares.length)).toBe(1);
   const shared=await page.evaluate(()=>window.__qaReferralShares[0]);
   expect(shared.type).toBe('application/pdf');

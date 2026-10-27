@@ -1,14 +1,8 @@
 import {createReferralPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
 import {openReferralPreview} from './referral-preview.js';
+import {isIosPdfViewer,showSavedIosReferralPdf} from './referral-ios-pdf.js';
 
 const DOC=window.DeboraDocuments;
-
-// iOS WebKit can leave the application when a Blob download is triggered after async persistence.
-// Save first, then expose an explicit user-gesture action in the finalized document.
-function isIOSWebKit(){
-  const agent=String(globalThis.navigator?.userAgent||'');
-  return /iPhone|iPad|iPod/i.test(agent)||(globalThis.navigator?.platform==='MacIntel'&&globalThis.navigator?.maxTouchPoints>1);
-}
 
 const fmtDate=value=>{
   if(!value)return '';
@@ -56,13 +50,13 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   // The exported PDF comes from the confirmed persisted record, not a stale local draft.
   const persisted=finalizedDocument.content?.issued_snapshot||finalizedDocument.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:persisted?.professional_destination,html:persisted?.html,finalizedAt:finalizedDocument.finalized_at||finalizedAt});
-  const deferPdfToUserGesture=isIOSWebKit();
-  if(!deferPdfToUserGesture)downloadPdf(pdf,fileBase({context,baby,specialtyLabel}));
-  DOC.toast(deferPdfToUserGesture
-    ?'Encaminhamento finalizado e salvo. Escolha Gerar PDF ou Compartilhar.'
-    :'Encaminhamento finalizado e PDF gerado.');
-  await onFinalized?.(finalizedDocument,{reopenFinalized:deferPdfToUserGesture});
+  const finalPdfName=fileBase({context,baby,specialtyLabel});
+  const nativeFileFlow=isIosPdfViewer();
+  if(!nativeFileFlow)downloadPdf(pdf,finalPdfName);
+  DOC.toast(nativeFileFlow?'Encaminhamento finalizado e salvo. PDF pronto para visualizar ou compartilhar.':'Encaminhamento finalizado e PDF gerado.');
+  await onFinalized?.(finalizedDocument,{reopenFinalized:false});
   window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:finalizedDocument.id,documentType:'referral',babyId:babyId||null,encounterId:finalizedDocument.encounter_id||encounter?.id||draft?.encounter_id||null}}));
+  if(nativeFileFlow)showSavedIosReferralPdf({pdf,fileName:finalPdfName});
   return finalizedDocument;
 }
 
@@ -72,9 +66,9 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
   const frozen=draft.content?.issued_snapshot||draft.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:frozen?.professional_destination||'',html:frozen?.html||'',finalizedAt});
   const base=fileBase({context,baby,specialtyLabel});
-  if(mode==='share'||isIOSWebKit()){
+  if(mode==='share'||isIosPdfViewer()){
     try{
-      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`,{preserveAppTab:isIOSWebKit()});
+      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`,{preserveAppTab:isIosPdfViewer()});
       DOC.toast(result==='shared'?'Encaminhamento compartilhado.':result==='opened'
         ?'PDF aberto em outra aba. Seu prontuário continua aberto.':'PDF do encaminhamento gerado.');
     }catch(error){if(error?.name!=='AbortError')throw error;}
