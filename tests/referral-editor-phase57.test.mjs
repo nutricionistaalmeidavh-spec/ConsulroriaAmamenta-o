@@ -79,7 +79,7 @@ test('iOS finished referral offers the same PDF file from a user-initiated share
  const received=[];
  const share=async(...args)=>{received.push(args);return 'shared'};
  const result=showSavedIosReferralPdf({pdf,fileName:'encaminhamento-paciente',documentRef:doc,share});
- const button=result.container.children.flatMap(el=>el.children||[]).find(el=>el.dataset.rfIosPdfOpen==='1');
+ const button=result.container.children[0].children[1].children.find(el=>el.dataset.rfIosPdfOpen==='1');
  assert.ok(button,'native PDF action must remain accessible after the async D1 save');
  assert.equal(body.children.length,1,'no second page, iframe or new browser window is created');
  assert.equal(result.container.attributes.role,'dialog');
