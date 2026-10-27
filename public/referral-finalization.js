@@ -1,8 +1,14 @@
 import {createReferralPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
-import {reviewReferralContent} from './referral-review.js';
 import {openReferralPreview} from './referral-preview.js';
 
 const DOC=window.DeboraDocuments;
+
+// iOS WebKit can leave the application when a Blob download is triggered after async persistence.
+// Save first, then expose an explicit user-gesture action in the finalized document.
+function isIOSWebKit(){
+  const agent=String(globalThis.navigator?.userAgent||'');
+  return /iPhone|iPad|iPod/i.test(agent)||(globalThis.navigator?.platform==='MacIntel'&&globalThis.navigator?.maxTouchPoints>1);
+}
 
 const fmtDate=value=>{
   if(!value)return '';
@@ -29,8 +35,6 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   if(draft?.status==='finalized')return draft;
   const payload=buildPayload();
   if(!payload?.content?.html)throw new Error('O encaminhamento está vazio.');
-  const review=reviewReferralContent(payload.content.html);
-  if(!review.canFinalize)throw new Error('Revise os campos de modelo incompletos antes de finalizar.');
   const finalizedAt=new Date().toISOString();
   const persistedFields={
     title:`Encaminhamento · ${specialtyLabel}`,
@@ -52,9 +56,12 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   // The exported PDF comes from the confirmed persisted record, not a stale local draft.
   const persisted=finalizedDocument.content?.issued_snapshot||finalizedDocument.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:persisted?.professional_destination,html:persisted?.html,finalizedAt:finalizedDocument.finalized_at||finalizedAt});
-  downloadPdf(pdf,fileBase({context,baby,specialtyLabel}));
-  DOC.toast('Encaminhamento finalizado e PDF gerado.');
-  onFinalized?.(finalizedDocument);
+  const deferPdfToUserGesture=isIOSWebKit();
+  if(!deferPdfToUserGesture)downloadPdf(pdf,fileBase({context,baby,specialtyLabel}));
+  DOC.toast(deferPdfToUserGesture
+    ?'Encaminhamento finalizado e salvo. Escolha Gerar PDF ou Compartilhar.'
+    :'Encaminhamento finalizado e PDF gerado.');
+  await onFinalized?.(finalizedDocument,{reopenFinalized:deferPdfToUserGesture});
   window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:finalizedDocument.id,documentType:'referral',babyId:babyId||null,encounterId:finalizedDocument.encounter_id||encounter?.id||draft?.encounter_id||null}}));
   return finalizedDocument;
 }
@@ -65,9 +72,11 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
   const frozen=draft.content?.issued_snapshot||draft.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:frozen?.professional_destination||'',html:frozen?.html||'',finalizedAt});
   const base=fileBase({context,baby,specialtyLabel});
-  if(mode==='share'){
-    const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`);
-    DOC.toast(result==='shared'?'Encaminhamento compartilhado.':'PDF do encaminhamento gerado.');
+  if(mode==='share'||isIOSWebKit()){
+    try{
+      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`);
+      DOC.toast(result==='shared'?'Encaminhamento compartilhado.':'PDF do encaminhamento gerado.');
+    }catch(error){if(error?.name!=='AbortError')throw error;}
     return;
   }
   downloadPdf(pdf,base);
@@ -86,12 +95,11 @@ function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specia
     try{
       const draftContent=draft?.status==='finalized'?draft.content:buildPayload().content;
       const snapshot=draft?.status==='finalized'?(draftContent?.issued_snapshot||draftContent):draftContent;
-      const review=reviewReferralContent(snapshot?.html||'');
       const pdf=pdfFrom({context,baby,specialtyLabel,
         destination:snapshot?.professional_destination||'',
         html:snapshot?.html||'',
         finalizedAt:draft?.status==='finalized'?(draft.finalized_at||snapshot?.finalized_at||''):''});
-      openReferralPreview({panel,pdf,review,fileName:'encaminhamento-previa'});
+      openReferralPreview({panel,pdf,fileName:'encaminhamento-previa'});
     }catch(error){DOC.toast(error.message||'Não foi possível visualizar o PDF.','error')}
   });
   if(draft?.status==='finalized'){
@@ -109,12 +117,6 @@ function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specia
   const button=document.createElement('button');button.type='button';button.className='rf-finalize';button.dataset.rfFinalize='1';button.textContent='Finalizar e gerar PDF';
   actions.appendChild(button);
   button.addEventListener('click',async()=>{
-    const review=reviewReferralContent(buildPayload()?.content?.html||'');
-    if(!review.canFinalize){
-      DOC.toast('Revise os campos incompletos antes de finalizar.','error');
-      preview.click();return;
-    }
-    if(review.warnings.length&&!window.confirm('Há seções vazias ou sem título. Deseja finalizar o documento assim mesmo?'))return;
     button.disabled=true;button.textContent='Finalizando…';
     try{
       await finalizeDraft({draft,motherId,babyId,encounter,context,baby,specialtyLabel,buildPayload,onFinalized});
