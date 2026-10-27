@@ -201,7 +201,15 @@ async function openEditor({motherId,babyId,specialty,destination='',draft=null,t
   }
   window.DeboraReferralFinalization?.attachEditor({
     panel,draft,motherId,babyId,encounter,context,baby,specialtyLabel:base.specialtyLabel,buildPayload,
-    onFinalized:async finalizedDocument=>{emitSavedDocument(motherId,finalizedDocument);close();currentMother='';await mount(motherId)}
+    onFinalized:async (finalizedDocument,{reopenFinalized=false}={})=>{
+      emitSavedDocument(motherId,finalizedDocument);
+      close();currentMother='';
+      await mount(motherId);
+      if(reopenFinalized){
+        try{await openExisting(motherId,finalizedDocument.id)}
+        catch(error){DOC.toast(error.message||'Documento salvo. Abra-o para baixar ou compartilhar.','error')}
+      }
+    }
   });
 }
 async function openNew(motherId,trigger){
