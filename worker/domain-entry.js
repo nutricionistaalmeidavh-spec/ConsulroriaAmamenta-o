@@ -303,13 +303,7 @@ export default {
 
     if (publicApiRequest || url.pathname.startsWith('/api/')) return apiNotFound();
 
-    // A PDF Blob opened by iOS inherits the origin of the HTML page that
-    // created it. Migrate only browser document navigations off workers.dev;
-    // never redirect API, webhook, background fetches or asset requests.
-    const isHtmlNavigation = request.method === 'GET' && (
-      request.mode === 'navigate' || /\btext\/html\b/i.test(request.headers.get('accept') || '')
-    );
-    const route = resolvePublicHostRoute(url, { navigation: isHtmlNavigation });
+    const route = resolvePublicHostRoute(url);
     if (route.type === 'redirect') {
       return new Response(null, {
         status: route.status,
