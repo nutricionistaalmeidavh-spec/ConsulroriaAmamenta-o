@@ -35,14 +35,15 @@ test('phase 6: finalized referral cannot revert status even via client PATCH',()
   const r=validateReferralMutation({record:finalized,method:'PATCH',patch});assert.equal(r.allowed,false);
  }
 });
-test('phase 5: preview is based on buildPayload, not unsaved old draft; finalization review is shared',()=>{
+test('phase 5: preview uses the authored content, with no mandatory review or pending warnings',()=>{
  const fin=readFileSync('public/referral-finalization.js','utf8');
  assert.match(fin,/dataset\.rfPreview/);
  assert.match(fin,/buildPayload\(\)/);
- assert.match(fin,/reviewReferralContent/);
+ assert.doesNotMatch(fin,/reviewReferralContent|Revise os campos|window\\.confirm|preview\\.click\\(\\)/);
  const preview=readFileSync('public/referral-preview.js','utf8');
  assert.match(preview,/createObjectURL/);
  assert.match(preview,/revokeObjectURL/);
+ assert.doesNotMatch(preview,/rfPreviewReview|review\\?\\.blockers|review\\?\\.warnings/);
  assert.match(fin,/draft\?\.status==='finalized'/);
 });
 test('phase 6: D1 and legacy runtime mutations enforce finalized immutable referral',()=>{
@@ -51,4 +52,11 @@ test('phase 6: D1 and legacy runtime mutations enforce finalized immutable refer
   assert.match(src,/validateReferralMutation/);
   assert.match(src,/if\(!guard\.allowed\)/);
  }
+});
+
+test('mobile: iPhone cannot be navigated automatically to a Blob PDF after saving',()=>{
+ const source=readFileSync('public/referral-finalization.js','utf8');
+ assert.match(source,/isIOSWebKit/);
+ assert.match(source,/reopenFinalized/);
+ assert.match(source,/sharePdf/);
 });
