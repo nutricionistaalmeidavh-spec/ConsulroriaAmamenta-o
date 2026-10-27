@@ -57,7 +57,7 @@ test('phase 6: D1 and legacy runtime mutations enforce finalized immutable refer
 
 test('mobile: iPhone cannot be navigated automatically to a Blob PDF after saving',()=>{
  const source=readFileSync('public/referral-finalization.js','utf8');
- assert.match(source,/isIOSWebKit/);
+ assert.match(source,/isIosPdfViewer/);
  assert.match(source,/reopenFinalized/);
  assert.match(source,/sharePdf/);
 });
