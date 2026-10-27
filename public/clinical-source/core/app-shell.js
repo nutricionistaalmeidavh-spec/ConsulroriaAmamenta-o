@@ -6,7 +6,6 @@ import { buildEncounterPayload, collectEncounterDraft, applyEncounterDraft } fro
 import { createMediaService } from './lib/media-service.js';
 import { createBackupService, encryptBackup, decryptBackup } from './lib/backup-service.js';
 import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';
-import {isIosPdfViewer,showSavedIosReferralPdf} from '../../referral-ios-pdf.js';
 
 const config = globalThis.DEBORA_APP_CONFIG || {};
 const loginScreen = document.querySelector('[data-auth-screen="login"]');
@@ -1123,6 +1122,7 @@ async function printPlan() {
   const layout = normalizePdfLayout(document.querySelector('[data-pdf-layout-encounter]')?.value || selectedPdfLayout());
   const blob = createCarePlanPdf({ title: 'Plano de cuidados', layout, patient: patient || {}, encounter: pdfEncounterData() });
   const filename = safePdfFilename(patient ? patientLabel(patient) : 'paciente');
+  const {isIosPdfViewer,showSavedIosReferralPdf}=await import(new URL('/referral-ios-pdf.js',globalThis.location.origin).href);
   if(isIosPdfViewer()){
     showSavedIosReferralPdf({pdf:blob,fileName:filename.replace(/\.pdf$/i,''),
       documentTitle:'Plano de cuidados pronto',
