@@ -1,6 +1,7 @@
 import {createReferralPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
 import {reviewReferralContent} from './referral-review.js';
 import {openReferralPreview} from './referral-preview.js';
+import {isIosPdfViewer,showSavedIosReferralPdf} from './referral-ios-pdf.js';
 
 const DOC=window.DeboraDocuments;
 
@@ -52,10 +53,15 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   // The exported PDF comes from the confirmed persisted record, not a stale local draft.
   const persisted=finalizedDocument.content?.issued_snapshot||finalizedDocument.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:persisted?.professional_destination,html:persisted?.html,finalizedAt:finalizedDocument.finalized_at||finalizedAt});
-  downloadPdf(pdf,fileBase({context,baby,specialtyLabel}));
-  DOC.toast('Encaminhamento finalizado e PDF gerado.');
+  const finalPdfName=fileBase({context,baby,specialtyLabel});
+  const nativeFileFlow=isIosPdfViewer();
+  // iOS cannot reliably open a Blob download after the asynchronous D1 save.
+  // Show a file action after persistence rather than leaving the app/page.
+  if(!nativeFileFlow)downloadPdf(pdf,finalPdfName);
+  DOC.toast(nativeFileFlow?'Encaminhamento salvo. PDF pronto para abrir ou salvar.':'Encaminhamento finalizado e PDF gerado.');
   onFinalized?.(finalizedDocument);
   window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:finalizedDocument.id,documentType:'referral',babyId:babyId||null,encounterId:finalizedDocument.encounter_id||encounter?.id||draft?.encounter_id||null}}));
+  if(nativeFileFlow)showSavedIosReferralPdf({pdf,fileName:finalPdfName});
   return finalizedDocument;
 }
 
@@ -65,7 +71,7 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
   const frozen=draft.content?.issued_snapshot||draft.content;
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:frozen?.professional_destination||'',html:frozen?.html||'',finalizedAt});
   const base=fileBase({context,baby,specialtyLabel});
-  if(mode==='share'){
+  if(mode==='share'||isIosPdfViewer()){
     const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`);
     DOC.toast(result==='shared'?'Encaminhamento compartilhado.':'PDF do encaminhamento gerado.');
     return;
@@ -102,7 +108,7 @@ function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specia
     const pdf=document.createElement('button');pdf.type='button';pdf.className='rf-primary';pdf.dataset.rfOfficialPdf='1';pdf.textContent='Gerar PDF';
     const share=document.createElement('button');share.type='button';share.className='rf-secondary';share.dataset.rfOfficialShare='1';share.textContent='Compartilhar';
     actions.prepend(share);actions.prepend(pdf);
-    pdf.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel}).catch(error=>DOC.toast(error.message||'Não foi possível gerar o PDF.','error')));
+    pdf.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel}).catch(error=>{if(error?.name!=='AbortError')DOC.toast(error.message||'Não foi possível gerar o PDF.','error')}));
     share.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel,mode:'share'}).catch(error=>{if(error?.name!=='AbortError')DOC.toast(error.message||'Não foi possível compartilhar.','error')}));
     return;
   }
