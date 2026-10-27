@@ -15,7 +15,7 @@ export default defineConfig({
   // The functional suite blocks service workers for deterministic fault injection.
   projects: [
     { name: 'chromium',
-      testIgnore: ['**/pwa-cache-p1.spec.mjs', '**/deploy-version-upgrade.spec.mjs'],
+      testIgnore: ['**/pwa-cache-p1.spec.mjs', '**/deploy-version-upgrade.spec.mjs', '**/referral-ios-session.spec.mjs'],
       use: { ...devices['Desktop Chrome'] } },
     { name: 'chromium-upgrade', testMatch: '**/deploy-version-upgrade.spec.mjs',
       use: { ...devices['Desktop Chrome'], serviceWorkers: 'allow' } },
