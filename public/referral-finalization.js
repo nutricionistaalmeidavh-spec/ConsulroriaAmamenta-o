@@ -74,8 +74,9 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
   const base=fileBase({context,baby,specialtyLabel});
   if(mode==='share'||isIOSWebKit()){
     try{
-      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`);
-      DOC.toast(result==='shared'?'Encaminhamento compartilhado.':'PDF do encaminhamento gerado.');
+      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`,{preserveAppTab:isIOSWebKit()});
+      DOC.toast(result==='shared'?'Encaminhamento compartilhado.':result==='opened'
+        ?'PDF aberto em outra aba. Seu prontuário continua aberto.':'PDF do encaminhamento gerado.');
     }catch(error){if(error?.name!=='AbortError')throw error;}
     return;
   }
