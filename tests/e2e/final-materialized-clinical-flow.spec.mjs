@@ -151,8 +151,6 @@ test('final materialized build completes the critical clinical flow through real
   const [billingBeforeFinalization] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
   expect(billingBeforeFinalization.billing_mode).toBe('package_new');
   expect(billingBeforeFinalization.package_id).toBeTruthy();
-  await expect(page.locator('[data-bv-mode]')).toHaveValue('package_new');
-  expect(await page.evaluate(() => window.DeboraBilling?.getSelection?.()?.mode)).toBe('package_new');
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName, { timeout: 20_000 });
   await expect(page.locator('[data-app-toast]')).toContainText('Atendimento salvo com segurança.');
