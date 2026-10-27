@@ -823,3 +823,195 @@ button:disabled{transform:none!important}
   .patient-card:hover,.agenda-card:hover,.settings-list>button:hover,
   .quick-actions-grid button:hover,.lactation-fab:hover{transform:none!important}
 }
+
+/* Clinical note — Phase 8 visual integration.
+   The clinical editor CSS is injected after this stylesheet by src/bootstrap.js.
+   Keep these overrides !important so the historic embedded palette cannot win.
+   This is presentation-only: do not change encounter IDs, saving or editing.
+*/
+#cn-overlay .cn-backdrop{background:rgba(51,43,52,.58)!important}
+#cn-overlay .cn-sheet{
+  background:var(--p8-surface)!important;
+  box-shadow:var(--p8-shadow-3)!important;
+}
+#cn-overlay .cn-head{
+  background:linear-gradient(180deg,var(--p8-bg-deep),var(--p8-surface))!important;
+  border-bottom-color:var(--p8-border)!important;
+}
+#cn-overlay .cn-head>button{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-ink-soft)!important;
+}
+#cn-overlay .cn-head>button:hover{background:var(--p8-lilac-soft)!important}
+#cn-overlay .cn-avatar{background:var(--p8-plum)!important;color:#fff!important}
+#cn-overlay .cn-patient-main h2{
+  color:var(--p8-ink)!important;
+  font-family:var(--p8-serif)!important;
+}
+#cn-overlay .cn-patient-main span,
+#cn-overlay .cn-meta small,
+#cn-overlay .cn-editor-head small,
+#cn-overlay .cn-section-title small{
+  color:var(--p8-lilac-deep)!important;
+}
+#cn-overlay .cn-patient-main p,
+#cn-overlay .cn-meta span,
+#cn-overlay .cn-author,
+#cn-overlay .cn-section-title>span,
+#cn-overlay .cn-addenda-list span{
+  color:var(--p8-muted)!important;
+}
+#cn-overlay .cn-meta>div{
+  background:var(--p8-surface-strong)!important;
+  border-color:var(--p8-border)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+#cn-overlay .cn-meta strong,
+#cn-overlay .cn-editor-head h3,
+#cn-overlay .cn-section-title h3,
+#cn-overlay .cn-author strong{
+  color:var(--p8-ink)!important;
+}
+#cn-overlay .cn-editor-head>span{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-lilac-deep)!important;
+}
+#cn-overlay .cn-editor-head>span[data-tone=saved]{
+  background:var(--p8-sage-soft)!important;
+  color:var(--p8-sage-deep)!important;
+}
+#cn-overlay .cn-editor-head>span[data-tone=saving]{
+  background:var(--p8-warm-soft)!important;
+  color:var(--p8-warm)!important;
+}
+#cn-overlay .cn-editor-head>span[data-tone=error],
+#cn-overlay .cn-editor-head>span[data-tone=locked]{
+  background:var(--p8-danger-soft)!important;
+  color:var(--p8-danger)!important;
+}
+#cn-overlay .cn-body>#cn-note,
+#cn-overlay .cn-addendum-field textarea{
+  background:var(--p8-surface-strong)!important;
+  color:var(--p8-ink)!important;
+  border-color:var(--p8-border-strong)!important;
+  box-shadow:var(--p8-shadow-1)!important;
+}
+#cn-overlay .cn-body>#cn-note:focus,
+#cn-overlay .cn-addendum-field textarea:focus{
+  border-color:var(--p8-lilac)!important;
+  box-shadow:var(--p8-focus),var(--p8-shadow-1)!important;
+}
+#cn-overlay .cn-body>#cn-note[readonly]{
+  background:var(--p8-bg-deep)!important;
+  color:var(--p8-ink-soft)!important;
+}
+#cn-overlay .cn-author span,
+#cn-overlay .cn-addendum-field>span,
+#cn-overlay .cn-addenda-list strong,
+#cn-overlay .cn-addenda-list p{
+  color:var(--p8-ink-soft)!important;
+}
+#cn-overlay .cn-foot{
+  background:var(--p8-surface)!important;
+  border-top-color:var(--p8-border)!important;
+}
+#cn-overlay .cn-foot button,
+#cn-overlay .cn-addendum-actions button{
+  background:var(--p8-surface-strong)!important;
+  border-color:var(--p8-border-strong)!important;
+  color:var(--p8-ink-soft)!important;
+}
+#cn-overlay .cn-foot .primary,
+#cn-overlay .cn-addendum-actions button{
+  background:var(--p8-plum)!important;
+  border-color:var(--p8-plum)!important;
+  color:#fff!important;
+}
+#cn-overlay .cn-foot .primary:hover,
+#cn-overlay .cn-addendum-actions button:hover{
+  background:var(--p8-plum-hover)!important;
+}
+#cn-overlay .cn-foot .danger{
+  background:var(--p8-danger-soft)!important;
+  border-color:var(--p8-border-strong)!important;
+  color:var(--p8-danger)!important;
+}
+#cn-overlay .cn-addenda,
+#cn-overlay .cn-addenda-list article,
+#cn-overlay .cn-revisions{
+  border-color:var(--p8-border)!important;
+}
+#cn-overlay .cn-addenda-list article,
+#cn-overlay .cn-revisions{background:var(--p8-surface-strong)!important}
+#cn-overlay .cn-empty-addenda{
+  border-color:var(--p8-border-strong)!important;
+  color:var(--p8-muted)!important;
+}
+#cn-overlay .cn-addendum-actions small,
+#cn-overlay .cn-revisions summary,
+#cn-overlay .cn-revisions p span{color:var(--p8-muted)!important}
+#cn-overlay .cn-revisions p{
+  border-color:var(--p8-border)!important;
+}
+#cn-overlay .cn-revisions p strong{color:var(--p8-ink-soft)!important}
+
+/* The date-correction editor is injected by src/encounter-date-correction.js. */
+#cn-overlay .cn-date-editor{
+  background:var(--p8-lilac-faint)!important;
+  border-color:var(--p8-border)!important;
+}
+#cn-overlay .cn-date-editor summary{color:var(--p8-lilac-deep)!important}
+#cn-overlay .cn-date-editor-inner label{color:var(--p8-ink-soft)!important}
+#cn-overlay .cn-date-editor-inner input{
+  background:var(--p8-surface-strong)!important;
+  border-color:var(--p8-border-strong)!important;
+  color:var(--p8-ink)!important;
+}
+#cn-overlay .cn-date-editor-inner input:focus{
+  border-color:var(--p8-lilac)!important;
+  box-shadow:var(--p8-focus)!important;
+}
+#cn-overlay .cn-date-editor-inner small,
+#cn-overlay .cn-date-editor-actions span{color:var(--p8-muted)!important}
+#cn-overlay .cn-date-editor-actions button{
+  background:var(--p8-plum)!important;
+  color:#fff!important;
+}
+#cn-overlay .cn-date-editor-actions button:hover{background:var(--p8-plum-hover)!important}
+
+/* Reusable clinical note widgets outside the overlay. */
+.cn-draft-recovery{
+  border-color:var(--p8-border-strong)!important;
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-ink-soft)!important;
+}
+.cn-draft-recovery button{
+  border-color:var(--p8-border-strong)!important;
+  color:var(--p8-ink-soft)!important;
+}
+.cn-draft-recovery button:first-child{
+  background:var(--p8-plum)!important;
+  border-color:var(--p8-plum)!important;
+  color:#fff!important;
+}
+.cn-stepper-item{
+  background:var(--p8-lilac-faint)!important;
+  color:var(--p8-lilac-deep)!important;
+}
+.cn-stepper-item.active{background:var(--p8-plum)!important;color:#fff!important}
+.cn-history{
+  background:var(--p8-surface)!important;
+  border-color:var(--p8-border)!important;
+}
+.cn-history-head h2,
+.cn-history-list strong{color:var(--p8-ink)!important}
+.cn-history-head small,
+.cn-history-head>span,
+.cn-history-list small,
+.cn-history-list p{color:var(--p8-muted)!important}
+.cn-history-list>button{
+  background:var(--p8-surface-strong)!important;
+  border-color:var(--p8-border)!important;
+}
+.cn-history-list>button:hover{border-color:var(--p8-lilac)!important}
+.cn-history-list b{color:var(--p8-lilac-deep)!important}
