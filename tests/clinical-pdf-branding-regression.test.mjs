@@ -106,7 +106,7 @@ test('materialização restaura PDFs canônicos sem trocar secrets, D1, ou rotas
  const shell=readFileSync('public/clinical-source/core/app-shell.js','utf8');
  assert.match(bootstrap,/brandModuleUrl/,'blob clinical PDF module must resolve the branding import to an absolute URL');
  assert.match(bootstrap,/referral-premium-pdf\\.js/);
- assert.doesNotMatch(shell,/from '\\.\\.\\/\\.\\.\\/referral-ios-pdf\\.js'/,'blob clinical shell may not statically import relative modules');
- assert.match(shell,/await import\\(new URL\\('\\/referral-ios-pdf\\.js'/);
+ assert.equal(shell.includes("from '../../referral-ios-pdf.js'"),false,'blob clinical shell must not statically import relative modules');
+ assert.equal(shell.includes("await import(new URL('/referral-ios-pdf.js'"),true,'clinical shell must resolve an absolute file URL');
  assert.match(shell,/showSavedIosReferralPdf/);
 });
