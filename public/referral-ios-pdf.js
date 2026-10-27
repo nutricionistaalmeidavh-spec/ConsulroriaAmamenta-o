@@ -2,7 +2,7 @@ import {sharePdf} from './document-pdf-service.js';
 
 // iOS promotes a blob: PDF iframe into its native document viewer, which can
 // display the technical origin instead of the attachment's file name.
-// Only the referral PDF presentation uses this device-specific file flow.
+// The same secure native file action is shared by referrals, records and care plans.
 export function isIosPdfViewer(nav=typeof navigator === 'undefined'?null:navigator){
   const agent=String(nav?.userAgent||'');
   return /iPhone|iPad|iPod/i.test(agent)
@@ -11,23 +11,23 @@ export function isIosPdfViewer(nav=typeof navigator === 'undefined'?null:navigat
 
 // Finalization persists to D1 before this UI is shown. The extra tap is
 // intentional: Web Share with files needs a fresh user gesture on Safari.
-export function showSavedIosReferralPdf({pdf,fileName,documentRef=globalThis.document,share=sharePdf}={}){
+export function showSavedIosReferralPdf({pdf,fileName,documentRef=globalThis.document,share=sharePdf,documentTitle='Encaminhamento finalizado',description='Documento salvo. No iPhone, use a opção abaixo para visualizar, salvar em Arquivos ou compartilhar o PDF.',shareTitle='Encaminhamento profissional'}={}){
   if(!pdf||!documentRef?.body)return null;
   const container=documentRef.createElement('div');
   container.className='rf-preview-layer';
   container.dataset.rfIosPdfReady='1';
   container.setAttribute('role','dialog');
   container.setAttribute('aria-modal','true');
-  container.setAttribute('aria-label','Encaminhamento finalizado — PDF pronto');
+  container.setAttribute('aria-label',documentTitle+' — PDF pronto');
 
   const header=documentRef.createElement('div');
   header.className='rf-preview-header';
   const title=documentRef.createElement('div');
   title.className='rf-preview-title';
   const heading=documentRef.createElement('h2');
-  heading.textContent='Encaminhamento finalizado';
+  heading.textContent=documentTitle;
   const note=documentRef.createElement('p');
-  note.textContent='Documento salvo. No iPhone, use a opção abaixo para visualizar, salvar em Arquivos ou compartilhar o PDF.';
+  note.textContent=description;
   title.append(heading,note);
 
   const actions=documentRef.createElement('div');
@@ -54,7 +54,7 @@ export function showSavedIosReferralPdf({pdf,fileName,documentRef=globalThis.doc
   closeButton.addEventListener('click',close);
   open.addEventListener('click',async()=>{
     try{
-      await share(pdf,fileName,'Encaminhamento profissional',{preserveAppTab:true});
+      await share(pdf,fileName,shareTitle,{preserveAppTab:true});
       close();
     }catch(error){
       if(error?.name==='AbortError')return;

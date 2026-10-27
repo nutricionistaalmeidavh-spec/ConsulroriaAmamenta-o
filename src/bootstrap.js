@@ -258,6 +258,12 @@ async function boot() {
     if (path === 'lib/encounter-form.js' || path === 'lib/pdf-service.js') {
       code = code.replace("'./weekly-care-plan.js'", `'${moduleUrls['lib/weekly-care-plan.js']}'`);
     }
+    if (path === 'lib/pdf-service.js') {
+      // Clinical modules are evaluated from blob: URLs; their imports cannot
+      // resolve relative specifiers outside the materialized module graph.
+      const brandModuleUrl = new URL('/referral-premium-pdf.js', window.location.origin).href;
+      code = code.replace("'../../../referral-premium-pdf.js'", `'${brandModuleUrl}'`);
+    }
     moduleUrls[path] = moduleUrl(code);
   }
 

@@ -1,3 +1,5 @@
+import {clinicalPdfHeader,clinicalPdfSection,clinicalPdfFooter} from '../../../referral-premium-pdf.js';
+
 function latin1Bytes(value) {
   const text = String(value ?? '');
   const bytes = new Uint8Array(text.length);
@@ -106,35 +108,22 @@ const THEMES = {
 };
 
 function pageCommands({ title, sections, layout, pageNumber, pageCount }) {
-  const theme = THEMES[layout];
-  const commands = ['q'];
-  if (layout !== 'minimalista') {
-    commands.push(`${theme.headerFill} rg`, '0 752 595 90 re f');
-  } else {
-    commands.push(`${theme.line} RG`, '0.8 w', '44 748 m 551 748 l S');
-  }
-  commands.push('Q', 'BT', `/F2 22 Tf`, `${theme.headerText} rg`, '52 800 Td', `(${pdfEscape(title)}) Tj`, 'ET');
-  commands.push('BT', '/F1 9 Tf', `${theme.headerText} rg`, '52 780 Td', '(Plano de cuidado em amamentação) Tj', 'ET');
-
-  let y = 720;
-  for (const section of sections) {
-    const wrapped = section.lines.flatMap((line) => wrapLine(line, 82));
-    const boxHeight = 30 + Math.max(1, wrapped.length) * 15;
-    if (layout !== 'minimalista') {
-      commands.push('q', `${theme.sectionFill} rg`, `44 ${y - boxHeight + 10} 507 ${boxHeight} re f`, 'Q');
+  // Layout choices remain saved; clinical PDF branding is shared with referrals.
+  const commands=clinicalPdfHeader({heading:title,subheading:'Orientações de amamentação',
+    category:'DOCUMENTO CLÍNICO / PLANO DE CUIDADOS'});
+  let y=648;
+  for(const section of sections){
+    const bar=clinicalPdfSection(section.title,y);
+    commands.push(...bar.ops);y-=bar.height+12;
+    const lines=section.lines.flatMap(line=>wrapLine(line,78));
+    for(const line of lines){
+      commands.push('0.22 0.19 0.25 rg','BT','/F1 10 Tf','60 '+y+' Td','('+pdfEscape(line)+') Tj','ET');
+      y-=15;
     }
-    commands.push('BT', '/F2 11 Tf', `${theme.accent} rg`, `52 ${y} Td`, `(${pdfEscape(section.title)}) Tj`, 'ET');
-    let textY = y - 20;
-    for (const line of wrapped) {
-      commands.push('BT', '/F1 10 Tf', `${theme.text} rg`, `52 ${textY} Td`, `(${pdfEscape(line)}) Tj`, 'ET');
-      textY -= 15;
-    }
-    if (layout === 'minimalista') commands.push('q', `${theme.line} RG`, '0.5 w', `52 ${textY + 5} m 543 ${textY + 5} l S`, 'Q');
-    y -= boxHeight + 12;
+    y-=10;
   }
-
-  commands.push('BT', '/F1 8 Tf', '0.42 0.42 0.42 rg', '52 28 Td', `(Débora Lactação  |  Documento ${pageNumber}/${pageCount}) Tj`, 'ET');
-  return `${commands.join('\n')}\n`;
+  commands.push(...clinicalPdfFooter(pageNumber,pageCount,{detail:'Documento '+pageNumber+'/'+pageCount}));
+  return commands.join('\n')+'\n';
 }
 
 function paginateSections(sections, maxLines = 28) {
@@ -152,7 +141,7 @@ function paginateSections(sections, maxLines = 28) {
   return pages.length ? pages : [[{ title: 'Plano de cuidado', lines: ['Sem conteúdo informado.'] }]];
 }
 
-export function createCarePlanPdf({ title = 'Débora Lactação', text = '', layout = 'acolhedor', patient = {}, encounter = {} } = {}) {
+export function createCarePlanPdf({ title = 'Plano de cuidados', text = '', layout = 'acolhedor', patient = {}, encounter = {} } = {}) {
   const selectedLayout = normalizePdfLayout(layout);
   const sections = structuredSections({ patient, encounter, text });
   const pages = paginateSections(sections);

@@ -77,13 +77,37 @@ function drawLine(runs,x,y,size,highlight=false){
  for(const r of runs){if(bold!==r.bold){flush();bold=r.bold}chunk+=r.text}
  flush();return ops;
 }
+
+/** Shared branding for referral, record, consent and care-plan PDFs. */
+export function clinicalPdfHeader({heading='Documento clínico',subheading='',category='DOCUMENTO CLÍNICO'}={}){
+ const ops=[rect(0,834,595,8,P.lavender),rect(382,834,213,8,P.pink),logo(42,755,42),
+  txt('GESTÃO DE AMAMENTAÇÃO',95,783,15,true,P.plum),
+  txt(String(category).slice(0,68),95,769,8,false,P.gray),rule(744),
+  txt(String(heading).slice(0,53),42,715,19,true,P.ink)];
+ if(subheading)ops.push(txt(String(subheading).slice(0,87),42,691,9,false,P.gray));
+ return ops;
+}
+export function clinicalPdfSection(title,y,{continuation=false}={}){
+ const label=String(title||'').trim()+(continuation?' (continuação)':'');
+ const lines=linesFor([{text:label,bold:true}],468,12.1);
+ const height=36+16*(lines.length-1),ops=[rect(42,y-height+6,511,height,P.blush),rect(42,y-height+6,5,height,P.purple)];
+ lines.forEach((line,i)=>ops.push(...drawLine(line,57,y-14-i*16,12.1,true)));
+ return {ops,height};
+}
+export function clinicalPdfFooter(pageNumber,pageCount,{detail=''}={}){
+ const ops=[rule(65),txt('Gestão de Amamentação  •  Documento clínico',42,43,8,false,P.gray),
+  txt('Página '+pageNumber+' de '+pageCount,482,43,8,false,P.gray)];
+ if(detail)ops.push(txt(String(detail).slice(0,82),42,29,7.6,false,P.gray));
+ return ops;
+}
+
 function makePdf(title,pages){
  const n=pages.length,objs=[],f1=3+2*n,f2=f1+1,info=f2+1;
  objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
  objs[2]='<< /Type /Pages /Kids ['+pages.map((_,i)=>(3+i*2)+' 0 R').join(' ')+'] /Count '+n+' >>';
  pages.forEach((page,i)=>{
   const a=3+2*i,b=a+1;
-  const stream=page.concat([rule(65),txt('Gestão de Amamentação  •  Documento clínico',42,43,8,false,P.gray),txt('Página '+(i+1)+' de '+n,480,43,8,false,P.gray)]).join('\n');
+  const stream=page.concat(clinicalPdfFooter(i+1,n)).join('\n');
   objs[a]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+f1+' 0 R /F2 '+f2+' 0 R >> >> /Contents '+b+' 0 R >>';
   objs[b]='<< /Length '+enc(stream).length+' >>\nstream\n'+stream+'\nendstream';
  });
@@ -103,25 +127,15 @@ export function createPremiumReferralPdf({specialtyLabel='Encaminhamento',destin
  let ops,y=645,active='';
  const start=()=>{
   ops=[];pages.push(ops);
-  ops.push(rect(0,834,595,8,P.lavender));ops.push(rect(382,834,213,8,P.pink));
-  ops.push(logo(42,755,42));
-  ops.push(txt('GESTÃO DE AMAMENTAÇÃO',95,783,15,true,P.plum));
-  ops.push(txt('DOCUMENTO CLÍNICO / ENCAMINHAMENTO PROFISSIONAL',95,769,8,false,P.gray));
-  ops.push(rule(744));
-  ops.push(txt('Encaminhamento profissional',42,715,19,true));
-  ops.push(txt(kind.slice(0,56),42,693,11,true,P.purple));
+  ops.push(...clinicalPdfHeader({heading:'Encaminhamento profissional',subheading:kind,category:'DOCUMENTO CLÍNICO / ENCAMINHAMENTO PROFISSIONAL'}));
   if(finalizedAt){const date=new Date(finalizedAt);if(!Number.isNaN(date.getTime()))ops.push(txt('Data: '+new Intl.DateTimeFormat('pt-BR').format(date),464,693,8,false,P.gray))}
   if(destination)ops.push(txt('Destino: '+String(destination).slice(0,85),42,670,9,false,P.gray));
   y=destination?647:665;
  };
  const section=(heading,continuation=false)=>{
-  const label=continuation?heading+' (continuação)':heading;
-  const headingLines=linesFor([{text:label,bold:true}],471,12.1);
-  const height=36+16*(headingLines.length-1);
-  ops.push(rect(42,y-height+6,511,height,P.blush));
-  ops.push(rect(42,y-height+6,5,height,P.purple));
-  headingLines.forEach((l,i)=>ops.push(...drawLine(l,57,y-14-i*16,12.1,true)));
-  y-=height+13;
+  const bar=clinicalPdfSection(heading,y,{continuation});
+  ops.push(...bar.ops);
+  y-=bar.height+13;
  };
  const ensure=(height)=>{if(y-height<90){start();if(active)section(active,true)}};
  start();

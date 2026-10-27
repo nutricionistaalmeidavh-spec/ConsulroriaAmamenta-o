@@ -1,4 +1,4 @@
-import {createPremiumReferralPdf} from './referral-premium-pdf.js';
+import {createPremiumReferralPdf,clinicalPdfHeader,clinicalPdfSection,clinicalPdfFooter} from './referral-premium-pdf.js';
 const CP1252 = new Map([
   ['€',0x80],['‚',0x82],['ƒ',0x83],['„',0x84],['…',0x85],['†',0x86],['‡',0x87],['ˆ',0x88],['‰',0x89],['Š',0x8A],['‹',0x8B],['Œ',0x8C],['Ž',0x8E],['‘',0x91],['’',0x92],['“',0x93],['”',0x94],['•',0x95],['–',0x96],['—',0x97],['˜',0x98],['™',0x99],['š',0x9A],['›',0x9B],['œ',0x9C],['ž',0x9E],['Ÿ',0x9F]
 ]);
@@ -72,36 +72,30 @@ function textOp(text,x,y,size=10,font='F1') {
 }
 
 function layoutTextPages({heading,subheading='',sections=[]}) {
-  const pages=[];
-  let page=null;
+  const pages=[];let page=null;
   const newPage=()=>{
-    page={ops:[],y:710};
-    page.ops.push(textOp('Débora Lactação',54,790,17,'F2'));
-    page.ops.push(textOp(heading,54,765,15,'F2'));
-    if(subheading)page.ops.push(textOp(subheading,54,747,9,'F1'));
-    page.ops.push('0.42 0.25 0.31 RG\n54 735 m\n541 735 l\nS');
+    page={ops:clinicalPdfHeader({heading,subheading,category:'DOCUMENTO CLÍNICO / PRONTUÁRIO'}),y:649};
     pages.push(page);
   };
-  const ensure=(need=20)=>{if(!page)newPage();if(page.y-need<76)newPage()};
+  const ensure=(need=20)=>{if(!page||page.y-need<90)newPage()};
   newPage();
-  for(const section of sections) {
-    const title=String(section?.title||'').trim();
-    const paragraphs=bodyParagraphs(section?.body);
+  for(const section of sections){
+    const title=String(section?.title||'').trim(),paragraphs=bodyParagraphs(section?.body);
     if(title){
-      ensure(28);
-      page.ops.push(textOp(title,54,page.y,11,'F2'));
-      page.y-=19;
+      let bar=clinicalPdfSection(title,page.y);
+      ensure(bar.height+16);
+      bar=clinicalPdfSection(title,page.y);
+      page.ops.push(...bar.ops);page.y-=bar.height+13;
     }
-    for(const paragraph of paragraphs) {
-      const lines=wrap(paragraph,88);
-      for(const line of lines){
+    for(const paragraph of paragraphs){
+      for(const line of wrap(paragraph,78)){
         ensure(16);
-        page.ops.push(textOp(line,54,page.y,9.6,'F1'));
-        page.y-=14;
+        page.ops.push('0.22 0.19 0.25 rg\n'+textOp(line,60,page.y,9.6,'F1'));
+        page.y-=15;
       }
       page.y-=5;
     }
-    page.y-=5;
+    page.y-=6;
   }
   return pages;
 }
@@ -151,19 +145,19 @@ function buildPagedPdf({title='Documento clínico',heading=title,subheading='',s
   pageDescriptors.forEach((descriptor,index)=>{
     const pageRef=3+index*2,contentRef=pageRef+1;
     if(descriptor.kind==='text'){
-      const ops=[...descriptor.page.ops,textOp(`Página ${index+1} de ${pageCount}`,488,45,7.5,'F1'),textOp('Documento clínico gerado pelo prontuário Débora Lactação.',54,45,7.5,'F1')];
+      const ops=[...descriptor.page.ops,...clinicalPdfFooter(index+1,pageCount)];
       const stream=ops.join('\n'),streamBytes=encodeWinAnsi(stream);
       objects[pageRef]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font1Ref} 0 R /F2 ${font2Ref} 0 R >> >> /Contents ${contentRef} 0 R >>`;
       objects[contentRef]=`<< /Length ${streamBytes.length} >>\nstream\n${stream}\nendstream`;
       return;
     }
     const image=descriptor.image,imageRef=3+pageCount*2+imageIndex++;
-    const maxW=487,maxH=590,scale=Math.min(maxW/image.width,maxH/image.height);
+    const maxW=487,maxH=505,scale=Math.min(maxW/image.width,maxH/image.height);
     const w=Math.max(1,image.width*scale),h=Math.max(1,image.height*scale),x=(595-w)/2,y=118+(maxH-h)/2;
     const caption=wrap(image.caption,78).slice(0,3);
-    const ops=[textOp('Débora Lactação',54,790,17,'F2'),textOp('Álbum clínico',54,765,15,'F2'),'0.42 0.25 0.31 RG\n54 735 m\n541 735 l\nS',`q\n${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im1 Do\nQ`];
+    const ops=[...clinicalPdfHeader({heading:'Álbum clínico',category:'DOCUMENTO CLÍNICO / MÍDIAS'}),`q\n${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im1 Do\nQ`];
     caption.forEach((line,lineIndex)=>ops.push(textOp(line,54,96-lineIndex*13,8.5,'F1')));
-    ops.push(textOp(`Página ${index+1} de ${pageCount}`,488,45,7.5,'F1'));
+    ops.push(...clinicalPdfFooter(index+1,pageCount));
     const stream=ops.join('\n'),streamBytes=encodeWinAnsi(stream);
     objects[pageRef]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font1Ref} 0 R /F2 ${font2Ref} 0 R >> /XObject << /Im1 ${imageRef} 0 R >> >> /Contents ${contentRef} 0 R >>`;
     objects[contentRef]=`<< /Length ${streamBytes.length} >>\nstream\n${stream}\nendstream`;
@@ -171,7 +165,7 @@ function buildPagedPdf({title='Documento clínico',heading=title,subheading='',s
   });
   objects[font1Ref]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
   objects[font2Ref]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
-  objects[infoRef]=`<< /Title (${escapePdfText(title)}) /Creator (Débora Lactação) /CreationDate (${pdfDate()}) >>`;
+  objects[infoRef]=`<< /Title (${escapePdfText(title)}) /Creator (Gestão de Amamentação) /CreationDate (${pdfDate()}) >>`;
 
   const chunks=[encodeWinAnsi('%PDF-1.4\n%âãÏÓ\n')];
   const offsets=[0];

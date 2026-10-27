@@ -1120,8 +1120,17 @@ function pdfEncounterData() {
 async function printPlan() {
   const patient = selectedWizardPatient();
   const layout = normalizePdfLayout(document.querySelector('[data-pdf-layout-encounter]')?.value || selectedPdfLayout());
-  const blob = createCarePlanPdf({ title: 'Débora Lactação', layout, patient: patient || {}, encounter: pdfEncounterData() });
+  const blob = createCarePlanPdf({ title: 'Plano de cuidados', layout, patient: patient || {}, encounter: pdfEncounterData() });
   const filename = safePdfFilename(patient ? patientLabel(patient) : 'paciente');
+  const {isIosPdfViewer,showSavedIosReferralPdf}=await import(new URL('/referral-ios-pdf.js',globalThis.location.origin).href);
+  if(isIosPdfViewer()){
+    showSavedIosReferralPdf({pdf:blob,fileName:filename.replace(/\.pdf$/i,''),
+      documentTitle:'Plano de cuidados pronto',
+      description:'Plano gerado. Toque para visualizar, salvar ou compartilhar sem sair do atendimento.',
+      shareTitle:'Plano de cuidados'});
+    toast('PDF pronto para visualizar ou compartilhar.', 'success');
+    return;
+  }
   const file = typeof File === 'function' ? new File([blob], filename, { type: 'application/pdf' }) : null;
   if (file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
     try {
