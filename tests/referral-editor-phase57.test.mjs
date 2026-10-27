@@ -99,3 +99,50 @@ test('iOS referral preview and finalized PDF never open an embedded blob viewer'
  assert.match(finalization,/if\s*\(mode==='share'\|\|isIosPdfViewer\(\)\)/);
  assert.doesNotMatch(finalization,/location\.href|location\.assign|window\.open\(/);
 });
+
+
+test('iOS PDF preview renders a file action rather than an iframe or browser navigation',async()=>{
+ const {openReferralPreview}=await import('../public/referral-preview.js');
+ const originalDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+ const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+ const created=[];
+ let shared=null;
+ const doc={createElement(tag){
+   created.push(tag);
+   return {tagName:tag,dataset:{},children:[],attributes:{},removed:false,
+     append(...nodes){this.children.push(...nodes)},
+     appendChild(node){this.children.push(node)},
+     classList:{add(){}},
+     setAttribute(key,value){this.attributes[key]=value},
+     addEventListener(key,fn){this.handlers??={};this.handlers[key]=fn},
+     focus(){},
+     remove(){this.removed=true},
+     querySelector(){return null},
+   };
+ }};
+ const panel={children:[],querySelectorAll(){return []},querySelector(){return null},appendChild(node){this.children.push(node)}};
+ try{
+   Object.defineProperty(globalThis,'document',{configurable:true,value:doc});
+   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{
+     userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',
+     canShare:()=>true,share:async(payload)=>{shared=payload},
+   }});
+   const pdf=new Blob(['%PDF-1.4 fake'],{type:'application/pdf'});
+   const preview=openReferralPreview({panel,pdf,fileName:'encaminhamento-previa'});
+   assert.equal(preview.url,null,'no blob: navigation should be created on iOS');
+   assert.equal(created.includes('iframe'),false,'no browser PDF viewer should be embedded on iOS');
+   const button=preview.container.children[0].children[1].children[0];
+   assert.equal(button.dataset.rfPreviewDownload,'1');
+   button.handlers.click();
+   await Promise.resolve();
+   assert.equal(shared?.files?.length,1,'the PDF must be passed as a native File');
+   assert.equal(shared.files[0].name,'encaminhamento-previa.pdf');
+   preview.close();
+   assert.equal(preview.container.removed,true);
+ }finally{
+   if(originalDocument)Object.defineProperty(globalThis,'document',originalDocument);
+   else delete globalThis.document;
+   if(originalNavigator)Object.defineProperty(globalThis,'navigator',originalNavigator);
+   else delete globalThis.navigator;
+ }
+});
