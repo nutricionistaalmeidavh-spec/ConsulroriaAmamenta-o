@@ -22,8 +22,8 @@ export function transformClinicalShellBranding(source){
     "import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';\nimport {isIosPdfViewer,showSavedIosReferralPdf} from '../../referral-ios-pdf.js';",
     'shell-import');
   text=replaceExactlyOnce(text,
-    "const blob = createCarePlanPdf({ title: 'Débora Lactação', layout, patient: patient || {}, encounter: pdfEncounterData() });",
-    "const blob = createCarePlanPdf({ title: 'Plano de cuidados', layout, patient: patient || {}, encounter: pdfEncounterData() });",
+    "createCarePlanPdf({ title: 'Débora Lactação',",
+    "createCarePlanPdf({ title: 'Plano de cuidados',",
     'shell-title');
   const filename="  const filename = safePdfFilename(patient ? patientLabel(patient) : 'paciente');";
   return replaceExactlyOnce(text,filename,filename+IOS_PLAN_ACTION,'shell-ios');
