@@ -63,7 +63,7 @@ test('mobile: iPhone cannot be navigated automatically to a Blob PDF after savin
 });
 
 test('iPhone without native sharing opens PDF in another tab, never replaces clinical session',async()=>{
- const source=readFileSync('public/document-pdf-service.js','utf8').replace(/^import .*\\n/gm,'').replace(/^export /gm,'');
+ const source=readFileSync('public/document-pdf-service.js','utf8').replace(/^import .*$/gm,'').replace(/^export /gm,'');
  const opened=[],revoked=[],tab={opener:{from:'app'}},session={access_token:'qa-access',refresh_token:'qa-refresh'};
  const sandbox={
    window:{open:(url,target)=>{opened.push({url,target});return tab}},
@@ -83,7 +83,7 @@ test('iPhone without native sharing opens PDF in another tab, never replaces cli
 });
 
 test('iPhone can finalize incomplete authored content without PDF navigation or logout',async()=>{
- const source=readFileSync('public/referral-finalization.js','utf8').replace(/^import .*\\n/gm,'');
+ const source=readFileSync('public/referral-finalization.js','utf8').replace(/^import .*$/gm,'');
  const session={access_token:'qa-current-access',refresh_token:'qa-current-refresh'};
  const saved=[],downloads=[],optionsSeen=[];
  const DOC={
@@ -116,6 +116,6 @@ test('iPhone can finalize incomplete authored content without PDF navigation or 
  assert.deepEqual(session,{access_token:'qa-current-access',refresh_token:'qa-current-refresh'});
  assert.equal(sandbox.window.location.href,'https://qa.test/app/#/patient/example');
  const preview=readFileSync('public/referral-preview.js','utf8');
- assert.match(preview,/if\\(!ios\\)frame\\.src=url/);
- assert.match(preview,/openPdfInNewTab\\(pdf\\)/);
+ assert.ok(preview.includes('if(!ios)frame.src=url'));
+ assert.ok(preview.includes('openPdfInNewTab(pdf)'));
 });
