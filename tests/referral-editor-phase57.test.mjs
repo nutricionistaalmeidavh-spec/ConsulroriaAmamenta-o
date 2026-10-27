@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {reviewReferralContent} from '../public/referral-review.js';
 import {isFrozenReferral,validateReferralMutation} from '../worker/referral-document-guard.js';
@@ -59,4 +60,62 @@ test('mobile: iPhone cannot be navigated automatically to a Blob PDF after savin
  assert.match(source,/isIOSWebKit/);
  assert.match(source,/reopenFinalized/);
  assert.match(source,/sharePdf/);
+});
+
+test('iPhone without native sharing opens PDF in another tab, never replaces clinical session',async()=>{
+ const source=readFileSync('public/document-pdf-service.js','utf8').replace(/^import .*\\n/gm,'').replace(/^export /gm,'');
+ const opened=[],revoked=[],tab={opener:{from:'app'}},session={access_token:'qa-access',refresh_token:'qa-refresh'};
+ const sandbox={
+   window:{open:(url,target)=>{opened.push({url,target});return tab}},
+   navigator:{canShare:()=>false},
+   URL:{createObjectURL:()=> 'blob:qa-pdf',revokeObjectURL:url=>revoked.push(url)},
+   setTimeout:()=>undefined,
+   Blob,File:class{constructor(parts,name,options){this.name=name;this.type=options.type;this.parts=parts}},
+   createPremiumReferralPdf:()=>null,
+ };
+ const share=vm.runInNewContext(source+';sharePdf',sandbox);
+ const result=await share(new Blob(['mock pdf']),'encaminhamento-qa','Encaminhamento',{preserveAppTab:true});
+ assert.equal(result,'opened');
+ assert.deepEqual(opened,[{url:'blob:qa-pdf',target:'_blank'}]);
+ assert.equal(tab.opener,null);
+ assert.equal(session.access_token,'qa-access');
+ assert.deepEqual(revoked,[]);
+});
+
+test('iPhone can finalize incomplete authored content without PDF navigation or logout',async()=>{
+ const source=readFileSync('public/referral-finalization.js','utf8').replace(/^import .*\\n/gm,'');
+ const session={access_token:'qa-current-access',refresh_token:'qa-current-refresh'};
+ const saved=[],downloads=[],optionsSeen=[];
+ const DOC={
+   saveDocument:async payload=>{const doc={...payload,id:'referral-qa-1'};saved.push(doc);return doc},
+   updateDocument:async()=>{throw new Error('should create finalized document directly')},
+   toast:()=>{},
+ };
+ const sandbox={
+   window:{DeboraDocuments:DOC,dispatchEvent:()=>{},location:{href:'https://qa.test/app/#/patient/example'}},
+   navigator:{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'},
+   createReferralPdf:()=>new Blob(['mock pdf'],{type:'application/pdf'}),
+   downloadPdf:(...args)=>downloads.push(args),
+   sharePdf:async()=> 'shared',
+   openReferralPreview:()=>{},
+   CustomEvent:class{constructor(type,args){this.type=type;this.detail=args.detail}},
+   Date,Blob,
+ };
+ vm.runInNewContext(source,sandbox);
+ const finalized=await sandbox.window.DeboraReferralFinalization.finalizeDraft({
+   draft:null,motherId:'mother-qa',babyId:'baby-qa',encounter:null,
+   context:{mother:{name:'Paciente QA'}},baby:{name:'Bebê QA'},specialtyLabel:'Fisioterapia',
+   buildPayload:()=>({content:{html:'<p>[Descreva o motivo da avaliação.]</p>',specialty:'fisioterapia'}}),
+   onFinalized:async(doc,opts)=>optionsSeen.push(opts)
+ });
+ assert.equal(finalized.status,'finalized');
+ assert.equal(saved.length,1);
+ assert.match(saved[0].content.issued_snapshot.html,/Descreva o motivo/);
+ assert.equal(downloads.length,0,'No automatic PDF navigation on iPhone');
+ assert.equal(optionsSeen[0].reopenFinalized,true,'User receives an explicit PDF action after persisting');
+ assert.deepEqual(session,{access_token:'qa-current-access',refresh_token:'qa-current-refresh'});
+ assert.equal(sandbox.window.location.href,'https://qa.test/app/#/patient/example');
+ const preview=readFileSync('public/referral-preview.js','utf8');
+ assert.match(preview,/if\\(!ios\\)frame\\.src=url/);
+ assert.match(preview,/openPdfInNewTab\\(pdf\\)/);
 });
