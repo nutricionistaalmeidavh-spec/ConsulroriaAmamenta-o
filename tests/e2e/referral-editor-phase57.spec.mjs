@@ -2,7 +2,7 @@ import {test,expect} from './fixtures.mjs';
 import {login,authHeaders,uniqueLabel} from './helpers.mjs';
 import {mkdir} from 'node:fs/promises';
 
-test('fases 5–7: prévia fiel, alerta, salvamento, finalização congelada e API bloqueada',async({page})=>{
+test('fases 5–7: prévia fiel, salvamento, finalização livre e API bloqueada',async({page})=>{
  test.setTimeout(150000);
  await login(page);
  const name=uniqueLabel('Mãe QA Encaminhamento Final');
@@ -27,7 +27,7 @@ test('fases 5–7: prévia fiel, alerta, salvamento, finalização congelada e A
  await editor.evaluate((el,html)=>{el.innerHTML=html;el.dispatchEvent(new Event('input',{bubbles:true}))},authored);
  await page.locator('[data-rf-preview]').click();
  await expect(page.locator('[data-rf-preview-frame]')).toHaveAttribute('src',/^blob:/);
- await expect(page.locator('[data-rf-preview-review]')).toContainText('sem pendências');
+ await expect(page.locator('[data-rf-preview-review]')).toHaveCount(0);
  await mkdir('artifacts/referral-phase57',{recursive:true});
  await page.screenshot({path:'artifacts/referral-phase57/preview-desktop.png',fullPage:true,animations:'disabled'});
  await page.locator('[data-rf-preview-close]').click();
@@ -42,12 +42,6 @@ test('fases 5–7: prévia fiel, alerta, salvamento, finalização congelada e A
  await page.evaluate(({id,doc})=>window.DeboraReferrals.openExisting(id,doc),{id:patient.mother.id,doc:saved.id});
  await expect(editor).toContainText('Queixa observada');
  await editor.evaluate(el=>{el.innerHTML+='<p>[Descreva o motivo da avaliação.]</p>';el.dispatchEvent(new Event('input',{bubbles:true}))});
- await page.locator('[data-rf-finalize]').click();
- await expect(page.locator('[data-rf-preview-review]')).toContainText('Descreva o motivo da avaliação');
- await page.locator('[data-rf-preview-close]').click();
- const pending=await page.evaluate(id=>window.DeboraDocuments.listDocuments(id,'referral'),patient.mother.id);
- expect(pending.find(x=>x.id===saved.id)?.status).toBe('draft');
- await editor.evaluate(el=>{el.querySelector('p:last-child')?.remove();el.dispatchEvent(new Event('input',{bubbles:true}))});
  const dl=page.waitForEvent('download');
  await page.locator('[data-rf-finalize]').click();
  const downloaded=await dl;
@@ -56,6 +50,7 @@ test('fases 5–7: prévia fiel, alerta, salvamento, finalização congelada e A
  const record=finals.find(x=>x.id===saved.id);
  expect(record.status).toBe('finalized');
  expect(record.content.issued_snapshot.html).toContain('Queixa observada');
+ expect(record.content.issued_snapshot.html).toContain('[Descreva o motivo da avaliação.]');
  const html=record.content.issued_snapshot.html;
  const patch=await page.request.patch('/api/clinical/records/clinical_documents?id=eq.'+encodeURIComponent(saved.id),{
    headers:await authHeaders(page),data:{status:'draft',content:{html:'<p>Adulterado</p>'}}
