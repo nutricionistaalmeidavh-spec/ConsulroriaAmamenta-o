@@ -98,6 +98,51 @@ assert.deepEqual(resolvePublicHostRoute('https://consulroriaamamenta-o.nutricion
   type: 'passthrough',
 });
 
+const technicalHost = 'https://consulroriaamamenta-o.nutricionistaalmeidavh.workers.dev';
+for (const [path, expected] of [
+  ['/?source=bookmark', 'https://deboralactacao.com/app/?source=bookmark'],
+  ['/index.html', 'https://deboralactacao.com/app/'],
+  ['/app/?patient=1', 'https://deboralactacao.com/app/?patient=1'],
+  ['/comercial/', 'https://deboralactacao.com/comercial/'],
+  ['/debora/', 'https://deboralactacao.com/'],
+]) {
+  assert.deepEqual(resolvePublicHostRoute(technicalHost + path, { navigation: true }), {
+    type: 'redirect',
+    location: expected,
+    status: 307,
+  }, 'browser navigations from the technical host must land on the public canonical host');
+}
+for (const path of ['/api/auth/user', '/api/webhooks/asaas', '/healthz', '/sw.js']) {
+  assert.deepEqual(resolvePublicHostRoute(technicalHost + path, { navigation: true }), {
+    type: 'passthrough',
+  }, 'API and operational requests must remain at the technical host');
+}
+assert.deepEqual(resolvePublicHostRoute(technicalHost + '/app/'), {
+  type: 'passthrough',
+}, 'non-navigation resource requests must retain workers.dev fallback');
+assert.deepEqual(resolvePublicHostRoute('https://consulroriaamamenta-o-sandbox.nutricionistaalmeidavh.workers.dev/app/', { navigation: true }), {
+  type: 'passthrough',
+}, 'sandbox domain must never be redirected to production');
+
+const technicalNavigation = await domainWorker.fetch(
+  new Request(technicalHost + '/app/?from=ios', {headers: {accept: 'text/html'}}),
+  {ASSETS: {fetch: () => new Response('fallback asset')}},
+);
+assert.equal(technicalNavigation.status, 307, 'the Worker must actually redirect iPhone-style HTML page navigations');
+assert.equal(technicalNavigation.headers.get('location'), 'https://deboralactacao.com/app/?from=ios');
+
+const technicalResource = await domainWorker.fetch(
+  new Request(technicalHost + '/documents-feature.css', {headers: {accept: 'text/css'}}),
+  {ASSETS: {fetch: () => new Response('/* technical fallback */')}},
+);
+assert.equal(technicalResource.status, 200, 'technical resources must remain available without browser redirects');
+const technicalApi = await domainWorker.fetch(
+  new Request(technicalHost + '/api/unknown-route', {headers: {accept: 'text/html'}}),
+  {ASSETS: {fetch: () => new Response('fallback asset')}},
+);
+assert.equal(technicalApi.status, 404, 'API paths must not redirect and must retain their existing contract');
+
+
 let rewrittenAssetUrl;
 const apexResponse = await domainWorker.fetch(new Request('https://deboralactacao.com/?utm_source=ig'), {
   ASSETS: {
