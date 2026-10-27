@@ -1,5 +1,4 @@
 import {createReferralPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
-import {reviewReferralContent} from './referral-review.js';
 import {openReferralPreview} from './referral-preview.js';
 import {isIosPdfViewer,showSavedIosReferralPdf} from './referral-ios-pdf.js';
 
@@ -30,8 +29,6 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   if(draft?.status==='finalized')return draft;
   const payload=buildPayload();
   if(!payload?.content?.html)throw new Error('O encaminhamento está vazio.');
-  const review=reviewReferralContent(payload.content.html);
-  if(!review.canFinalize)throw new Error('Revise os campos de modelo incompletos antes de finalizar.');
   const finalizedAt=new Date().toISOString();
   const persistedFields={
     title:`Encaminhamento · ${specialtyLabel}`,
@@ -55,11 +52,9 @@ async function finalizeDraft({draft,motherId,babyId,encounter,context,baby,speci
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:persisted?.professional_destination,html:persisted?.html,finalizedAt:finalizedDocument.finalized_at||finalizedAt});
   const finalPdfName=fileBase({context,baby,specialtyLabel});
   const nativeFileFlow=isIosPdfViewer();
-  // iOS cannot reliably open a Blob download after the asynchronous D1 save.
-  // Show a file action after persistence rather than leaving the app/page.
   if(!nativeFileFlow)downloadPdf(pdf,finalPdfName);
-  DOC.toast(nativeFileFlow?'Encaminhamento salvo. PDF pronto para abrir ou salvar.':'Encaminhamento finalizado e PDF gerado.');
-  onFinalized?.(finalizedDocument);
+  DOC.toast(nativeFileFlow?'Encaminhamento finalizado e salvo. PDF pronto para visualizar ou compartilhar.':'Encaminhamento finalizado e PDF gerado.');
+  await onFinalized?.(finalizedDocument,{reopenFinalized:false});
   window.dispatchEvent(new CustomEvent('debora:clinical-document-finalized',{detail:{motherId,documentId:finalizedDocument.id,documentType:'referral',babyId:babyId||null,encounterId:finalizedDocument.encounter_id||encounter?.id||draft?.encounter_id||null}}));
   if(nativeFileFlow)showSavedIosReferralPdf({pdf,fileName:finalPdfName});
   return finalizedDocument;
@@ -72,8 +67,11 @@ async function exportFinalized({draft,context,baby,specialtyLabel,mode='download
   const pdf=pdfFrom({context,baby,specialtyLabel,destination:frozen?.professional_destination||'',html:frozen?.html||'',finalizedAt});
   const base=fileBase({context,baby,specialtyLabel});
   if(mode==='share'||isIosPdfViewer()){
-    const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`);
-    DOC.toast(result==='shared'?'Encaminhamento compartilhado.':'PDF do encaminhamento gerado.');
+    try{
+      const result=await sharePdf(pdf,base,`Encaminhamento · ${specialtyLabel}`,{preserveAppTab:isIosPdfViewer()});
+      DOC.toast(result==='shared'?'Encaminhamento compartilhado.':result==='opened'
+        ?'PDF aberto em outra aba. Seu prontuário continua aberto.':'PDF do encaminhamento gerado.');
+    }catch(error){if(error?.name!=='AbortError')throw error;}
     return;
   }
   downloadPdf(pdf,base);
@@ -92,12 +90,11 @@ function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specia
     try{
       const draftContent=draft?.status==='finalized'?draft.content:buildPayload().content;
       const snapshot=draft?.status==='finalized'?(draftContent?.issued_snapshot||draftContent):draftContent;
-      const review=reviewReferralContent(snapshot?.html||'');
       const pdf=pdfFrom({context,baby,specialtyLabel,
         destination:snapshot?.professional_destination||'',
         html:snapshot?.html||'',
         finalizedAt:draft?.status==='finalized'?(draft.finalized_at||snapshot?.finalized_at||''):''});
-      openReferralPreview({panel,pdf,review,fileName:'encaminhamento-previa'});
+      openReferralPreview({panel,pdf,fileName:'encaminhamento-previa'});
     }catch(error){DOC.toast(error.message||'Não foi possível visualizar o PDF.','error')}
   });
   if(draft?.status==='finalized'){
@@ -108,19 +105,13 @@ function attachEditor({panel,draft,motherId,babyId,encounter,context,baby,specia
     const pdf=document.createElement('button');pdf.type='button';pdf.className='rf-primary';pdf.dataset.rfOfficialPdf='1';pdf.textContent='Gerar PDF';
     const share=document.createElement('button');share.type='button';share.className='rf-secondary';share.dataset.rfOfficialShare='1';share.textContent='Compartilhar';
     actions.prepend(share);actions.prepend(pdf);
-    pdf.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel}).catch(error=>{if(error?.name!=='AbortError')DOC.toast(error.message||'Não foi possível gerar o PDF.','error')}));
+    pdf.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel}).catch(error=>DOC.toast(error.message||'Não foi possível gerar o PDF.','error')));
     share.addEventListener('click',()=>exportFinalized({draft,context,baby,specialtyLabel,mode:'share'}).catch(error=>{if(error?.name!=='AbortError')DOC.toast(error.message||'Não foi possível compartilhar.','error')}));
     return;
   }
   const button=document.createElement('button');button.type='button';button.className='rf-finalize';button.dataset.rfFinalize='1';button.textContent='Finalizar e gerar PDF';
   actions.appendChild(button);
   button.addEventListener('click',async()=>{
-    const review=reviewReferralContent(buildPayload()?.content?.html||'');
-    if(!review.canFinalize){
-      DOC.toast('Revise os campos incompletos antes de finalizar.','error');
-      preview.click();return;
-    }
-    if(review.warnings.length&&!window.confirm('Há seções vazias ou sem título. Deseja finalizar o documento assim mesmo?'))return;
     button.disabled=true;button.textContent='Finalizando…';
     try{
       await finalizeDraft({draft,motherId,babyId,encounter,context,baby,specialtyLabel,buildPayload,onFinalized});

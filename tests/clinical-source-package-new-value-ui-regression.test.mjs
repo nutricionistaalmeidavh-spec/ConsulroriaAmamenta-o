@@ -1,4 +1,5 @@
 import test from 'node:test';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,4 +58,44 @@ test('mount do billing reutiliza o host e o bootstrap carrega uma única cópia 
   assert.match(billing, /if\(!host\)\{host=document\.createElement\('section'\);host\.dataset\.billingV2=''/);
   assert.equal((bootstrap.match(/href="\/mobile-layout-integrity\.css"/g) || []).length, 1);
   assert.equal((bootstrap.match(/src="\/billing-v2\.js"/g) || []).length, 1);
+});
+
+test('plano confirmado no D1 prevalece após remount: nenhuma conversão individual ou cobrança duplicada', async () => {
+  const start = billing.indexOf('function bvHasCommittedNewPackage(');
+  const end = billing.indexOf('function bvPatientMotherId()', start);
+  assert.ok(start >= 0 && end > start, 'a proteção deve existir no fluxo de finalização');
+
+  const rpcCalls = [];
+  const draftWrites = [];
+  const committed = {
+    billing_mode:'package_new',package_id:'package-qa-1',id:'appointment-qa-1',
+    service_label:'Consulta inicial',payment_method:'Pix',
+    value_cents:60000,package_total_cents:60000,package_sessions_total:3
+  };
+  const context = {
+    document:{querySelector:()=>({dataset:{motherId:'mother-qa-1',appointmentId:'appointment-qa-1'}})},
+    bvMotherId:()=> 'mother-qa-1',
+    bvAppointmentId:()=> 'appointment-qa-1',
+    bvMount:async()=>undefined,
+    bvMode:()=> 'individual', // a late remount accidentally reset the UI
+    bvSelection:()=>({mode:'individual',valueCents:60000}),
+    bvValidate:selection=>selection,
+    bvAppointmentRow:async()=>committed,
+    bvService:()=> 'Consulta inicial',
+    bvPayment:()=> 'Pix',
+    bvWriteDraft:draft=>draftWrites.push(draft),
+    bvRpc:async(name,payload)=>{rpcCalls.push({name,payload});throw new Error('must not rebind confirmed package')},
+    bvLoadedAppointment:null,
+    bvLoadedMother:null,
+    Date
+  };
+  const api=vm.runInNewContext(billing.slice(start,end)+'\n;({bvBeforeStart,bvBindAppointment})',context);
+  const selection=await api.bvBeforeStart('mother-qa-1');
+  assert.equal(selection.mode,'package_new');
+  assert.equal(selection.packageId,'package-qa-1');
+  const result=await api.bvBindAppointment('mother-qa-1','appointment-qa-1','encounter-qa-1',selection);
+  assert.equal(result.package_id,'package-qa-1');
+  assert.equal(rpcCalls.length,0,'never create another package or silently convert it');
+  assert.equal(draftWrites.length,1);
+  assert.equal(draftWrites[0].mode,'package_new');
 });

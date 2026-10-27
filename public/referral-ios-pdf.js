@@ -54,7 +54,7 @@ export function showSavedIosReferralPdf({pdf,fileName,documentRef=globalThis.doc
   closeButton.addEventListener('click',close);
   open.addEventListener('click',async()=>{
     try{
-      await share(pdf,fileName,'Encaminhamento profissional');
+      await share(pdf,fileName,'Encaminhamento profissional',{preserveAppTab:true});
       close();
     }catch(error){
       if(error?.name==='AbortError')return;

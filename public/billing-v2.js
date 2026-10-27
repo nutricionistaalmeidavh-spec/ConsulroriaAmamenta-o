@@ -168,15 +168,50 @@ async function bvMount(force=false){
     bvLoadedAppointment=appointmentId||null;bvLoadedMother=mid;
   }finally{bvBusy=false}
 }
+// The existing appointment is authoritative once a package has been created.
+// A late UI remount or lost browser focus must not turn its finalization into an
+// individual charge or recreate a package.
+function bvHasCommittedNewPackage(row){
+  return row?.billing_mode==='package_new'&&Boolean(row?.package_id);
+}
+function bvCommittedPackageSelection(row){
+  return{
+    mode:'package_new',
+    serviceLabel:row.service_label||bvService(),
+    paymentMethod:row.payment_method||bvPayment(),
+    valueCents:Number(row.value_cents||row.package_total_cents||0),
+    packageId:row.package_id,
+    packageTotalCents:Number(row.package_total_cents||0),
+    packageSessionsTotal:Number(row.package_sessions_total||0)
+  };
+}
 async function bvBeforeStart(mid){
   if(mid!==bvMotherId())throw new Error('Paciente da cobrança não corresponde ao atendimento.');
   const host=document.querySelector('[data-billing-v2]'),appointmentId=bvAppointmentId()||'';
   if(!host||host.dataset.motherId!==mid||host.dataset.appointmentId!==appointmentId)await bvMount(true);
+  if(appointmentId){
+    const persisted=await bvAppointmentRow(appointmentId);
+    if(bvHasCommittedNewPackage(persisted)){
+      // Rebuild the visible form from the persisted row when an asynchronous remount
+      // has temporarily selected the default 'individual' option.
+      if(bvMode()!=='package_new')await bvMount(true);
+      return bvValidate(bvCommittedPackageSelection(persisted));
+    }
+  }
   return bvValidate(bvSelection());
 }
 async function bvBindAppointment(mid,appointmentId,encounterId,selection=null){
   const s=bvValidate(selection||bvSelection());
   if(!appointmentId)throw new Error('Agendamento não disponível para salvar a cobrança.');
+  const persisted=await bvAppointmentRow(appointmentId);
+  if(bvHasCommittedNewPackage(persisted)){
+    const canonical=bvCommittedPackageSelection(persisted);
+    // The server has already created the package and its single financial entry.
+    // Rebinding (even with package_new) can never create another one.
+    bvWriteDraft({motherId:mid,appointmentId,...canonical,at:Date.now()});
+    bvLoadedAppointment=appointmentId;bvLoadedMother=mid;
+    return persisted;
+  }
   const row=await bvRpc('set_appointment_billing',{
     p_appointment_id:appointmentId,
     p_billing_mode:s.mode,

@@ -146,6 +146,11 @@ test('final materialized build completes the critical clinical flow through real
   }
   expect(pdfText).not.toContain('FIM_UNICO_2026');
 
+  // A plan created at step 1 remains the canonical billing selection at step 7,
+  // even after rendering PDFs and switching orientation modes.
+  const [billingBeforeFinalization] = await records(page, 'appointments', `id=eq.${encodeURIComponent(appointmentId)}&limit=1`);
+  expect(billingBeforeFinalization.billing_mode).toBe('package_new');
+  expect(billingBeforeFinalization.package_id).toBeTruthy();
   await page.locator('[data-wizard-next]').click();
   await expect(page.locator('[data-patient-title]')).toContainText(motherName, { timeout: 20_000 });
   await expect(page.locator('[data-app-toast]')).toContainText('Atendimento salvo com segurança.');
