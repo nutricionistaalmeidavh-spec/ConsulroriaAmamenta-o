@@ -12,9 +12,9 @@ export function applyMotherOnlyPatientMaterialization(replaceText) {
     'mother-only-form-copy');
 
   replaceText('index.html',
-    '<button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button',
-    '<button class="ui-button ui-button-ghost" data-action="edit-patient">Editar</button><button type="button" class="ui-button ui-button-ghost" data-action="patient-add-baby">+ Adicionar bebê</button><button',
-    'mother-only-patient-header-add-baby');
+    '<button type="button" data-action="add-weight">',
+    '<button type="button" data-action="patient-add-baby">+ Adicionar bebê</button><button type="button" data-action="add-weight">',
+    'mother-only-patient-quick-add-baby');
 
   replaceText('core/app-shell.js',
     "  const babies = names.length > 1 ? \x60\x24{names.slice(0, -1).join(', ')} e \x24{names.at(-1)}\x60 : names[0] || 'bebê';",
