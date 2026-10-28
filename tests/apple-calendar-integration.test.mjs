@@ -17,6 +17,12 @@ const appointment = {
 function mockEnv(tokenHash) {
   const sqlLog = [];
   const env = {
+    LICENSE_SERVICE_SECRET: 'test-only',
+    ARTISYS_LICENSING: { fetch: async () => Response.json({
+      productCode: 'debora-lactacao', planCode: 'pro_monthly', commercial: true,
+      active: true, enforceLimits: true, patientLimit: null, mediaUpload: true,
+      status: 'active', expiresAt: '2030-01-01T00:00:00.000Z',
+    }) },
     CLINICAL_DB: {
       prepare(sql) {
         const stmt = {
@@ -24,6 +30,7 @@ function mockEnv(tokenHash) {
             sqlLog.push({ sql, params });
             return {
               async first() {
+                if (sql.includes('auth_users')) return params[0] === owner ? { user_id: owner, email: 'tester@example.test' } : null;
                 if (sql.includes('calendar_apple_feeds')) {
                   return params[0] === tokenHash ? { owner_id: owner } : null;
                 }
