@@ -81,5 +81,5 @@ test('app materialized source supports mother-only UI and does not remove baby r
   assert.match(shell, /const list = babies \|\| \[\]/);
   assert.match(shell, /patient-add-baby/);
   assert.match(shell, /if \(!selectedBabies\.length && !isPrenatalAppointment\(\)\)/);
-  assert.match(shell, /babies.length \? [^\n]+ : 'Nenhum bebê cadastrado'/);
+  assert.match(shell, /if \(!names.length\) return patient\?\.mother\?\.name \|\| 'Mãe'/);
 });
