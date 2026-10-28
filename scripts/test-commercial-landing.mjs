@@ -32,12 +32,12 @@ const lower = html.toLowerCase();
 for (const section of ['id="problema"','id="produto"','id="recursos"','id="para-quem"','id="planos"','id="faq"']) {
   if (!lower.includes(section)) fail(`missing sales-story section ${section}`);
 }
-for (const phrase of ['começar grátis','até 3 mães/pacientes','r$ 99,90/mês','r$ 999,90/ano','até 12x','upload de fotos e vídeos']) {
+for (const phrase of ['começar grátis','até 3 mães/pacientes','r$ 54,90/mês','r$ 549,00/ano','até 12x','upload de fotos e vídeos']) {
   if (!lower.includes(phrase)) fail(`missing commercial promise: ${phrase}`);
 }
 if (lower.includes('r$ 49,90')) fail('old monthly price must not return to commercial index');
 if (/r\$ 499(?:\/|<)/i.test(html)) fail('old annual price must not return to commercial index');
-if (!motion.includes("'R$ 999,90' : 'R$ 99,90'")) fail('billing switch must use current monthly and annual prices');
+if (!motion.includes("'R$ 549,00' : 'R$ 54,90'")) fail('billing switch must use current monthly and annual prices');
 if (motion.includes("'R$ 499' : 'R$ 49,90'")) fail('billing switch still contains legacy prices');
 if ((html.match(/<details\b/g) || []).length < 6) fail('FAQ must contain at least 6 native details items');
 if (!html.includes('class="comparison-table"')) fail('plan comparison table is missing');
