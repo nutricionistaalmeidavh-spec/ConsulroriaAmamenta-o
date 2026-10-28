@@ -17,7 +17,7 @@ for (const path of uiFiles) {
   assert.doesNotMatch(source, /R\$ 99,90/, `${path} still contains previous monthly price`);
   assert.doesNotMatch(source, /R\$ 999,90/, `${path} still contains previous annual price`);
   assert.doesNotMatch(source, /R\$ 79,90/, `${path} still contains the former monthly price`);
-  assert.doesNotMatch(source, /R\$ 754,90/, `${path} still contains the former annual price`);
+  assert.doesNotMatch(source, /R\$ 799,90/, `${path} still contains the former annual price`);
 }
 
 for (const path of ['cloudflare/billing-schema.sql', 'cloudflare/runtime-schema.sql']) {
@@ -44,7 +44,7 @@ assert.match(seo, /name: 'Pro anual', price: '549\.00'/);
 assert.doesNotMatch(seo, /name: 'Pro mensal', price: '99\.90'/);
 assert.doesNotMatch(seo, /name: 'Pro anual', price: '999\.90'/);
 assert.doesNotMatch(seo, /name: 'Pro mensal', price: '79\.90'/);
-assert.doesNotMatch(seo, /name: 'Pro anual', price: '754\.90'/);
+assert.doesNotMatch(seo, /name: 'Pro anual', price: '799\.90'/);
 
 const logoGradient = 'linear-gradient(45deg, #a99bcf 0%, #c4a3d4 48%, #f3bfd1 100%)';
 const baseCss = read('public/comercial/styles.css');
