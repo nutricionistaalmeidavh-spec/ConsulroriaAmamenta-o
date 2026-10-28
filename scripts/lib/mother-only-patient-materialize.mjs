@@ -63,23 +63,33 @@ export function applyMotherOnlyPatientMaterialization(replaceText) {
     'mother-only-edit-with-empty-babies');
 
   replaceText('core/app-shell.js',
+    'let editingPatientId = null;',
+    'let editingPatientId = null;\nlet pendingAddBabyMotherId = null;',
+    'mother-only-add-baby-route-intent');
+
+  replaceText('core/app-shell.js',
+    'await openPatientForm(editIdFromHash(), { navigateRoute: false });',
+    'await openPatientForm(editIdFromHash(), { navigateRoute: false, addBaby: pendingAddBabyMotherId === editIdFromHash() });',
+    'mother-only-add-baby-route-rehydration');
+
+  replaceText('core/app-shell.js',
     "async function openPatientForm(motherId = null, { navigateRoute = true } = {}) {",
     "async function openPatientForm(motherId = null, { navigateRoute = true, addBaby = false } = {}) {",
     'mother-only-open-patient-editor-parameter');
 
   replaceText('core/app-shell.js',
     "  renderBabyEditors(patient ? familyBabies(patient) : [{}]);\n  setText('[data-patient-form-title]'",
-    "  renderBabyEditors(patient ? familyBabies(patient) : [{}]);\n  if (addBaby && patient) {\n    const editor = document.querySelector('[data-babies-editor]');\n    const count = editor?.querySelectorAll('[data-baby-editor]').length || 0;\n    editor?.insertAdjacentHTML('beforeend', babyEditorMarkup({}, count));\n  }\n  setText('[data-patient-form-title]'",
+    "  renderBabyEditors(patient ? familyBabies(patient) : [{}]);\n  if (addBaby && !navigateRoute && patient) {\n    const editor = document.querySelector('[data-babies-editor]');\n    const count = editor?.querySelectorAll('[data-baby-editor]').length || 0;\n    editor?.insertAdjacentHTML('beforeend', babyEditorMarkup({}, count));\n  }\n  setText('[data-patient-form-title]'",
     'mother-only-append-baby-on-explicit-action');
 
   replaceText('core/app-shell.js',
     "  if (navigateRoute) navigate('patient-form', motherId); else showScreen('patient-form');\n}",
-    "  if (navigateRoute) navigate('patient-form', motherId); else showScreen('patient-form');\n  if (addBaby) {\n    const target = patientForm.querySelector('[data-baby-editor]:last-child [data-baby-field=\"name\"]');\n    target?.focus();\n    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });\n  }\n}",
+    "  if (navigateRoute) navigate('patient-form', motherId); else showScreen('patient-form');\n  if (addBaby && !navigateRoute) {\n    pendingAddBabyMotherId = null;\n    const target = patientForm.querySelector('[data-baby-editor]:last-child [data-baby-field=\"name\"]');\n    target?.focus();\n    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });\n  }\n}",
     'mother-only-focus-new-baby');
 
   replaceText('core/app-shell.js',
     "    else if (action === 'edit-patient') await openPatientForm(currentPatientId);",
-    "    else if (action === 'edit-patient') await openPatientForm(currentPatientId);\n    else if (action === 'patient-add-baby') await openPatientForm(currentPatientId, { addBaby: true });",
+    "    else if (action === 'edit-patient') await openPatientForm(currentPatientId);\n    else if (action === 'patient-add-baby') { pendingAddBabyMotherId = currentPatientId; await openPatientForm(currentPatientId); }",
     'mother-only-click-add-baby');
 
   replaceText('core/app-shell.js',
