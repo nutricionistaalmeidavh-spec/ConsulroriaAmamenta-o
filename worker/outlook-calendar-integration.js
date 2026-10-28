@@ -1,5 +1,6 @@
 import { calendarEventTitlesForOwner } from './calendar-event-display.js';
-import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
+import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-auth-runtime.js';
+import { canUseExternalCalendar } from './calendar-access-policy.js';
 import { appleAppointmentRows, appointmentsToIcs } from './apple-calendar-ics.js';
 
 // An Outlook Calendar subscription is a read-only HTTPS ICS feed, NOT an iCloud CalDAV
@@ -57,6 +58,14 @@ async function feedResponse(request, env, token) {
     'SELECT owner_id FROM calendar_outlook_feeds WHERE token_hash=? LIMIT 1',
   ).bind(digest).first();
   if (!row?.owner_id) return response(404, { error: 'calendar_feed_not_found' });
+  // Recheck the professional's entitlement on every GET and HEAD. A valid
+  // bearer URL alone must not continue exposing data after access expires.
+  try {
+    const owner = await runtimeUserById(env, row.owner_id);
+    if (!owner || !await canUseExternalCalendar(env, owner)) {
+      return response(404, { error: 'calendar_feed_not_found' });
+    }
+  } catch { return response(404, { error: 'calendar_feed_not_found' }); }
   if (request.method === 'HEAD') return calendarResponse(null, true);
   // Resolve ownership on D1, not from any user-supplied ID. No patient details
   // or other tenant's appointments are ever included in this anonymous feed.
@@ -83,6 +92,9 @@ export async function handleOutlookCalendarIntegration(request, env, url = new U
 
     const user = await authenticateClinicalRequest(request, env);
     if (!user?.id) return response(401, { error: 'cloudflare_auth_required' });
+    if (!await canUseExternalCalendar(env, user)) {
+      return response(403, { error: 'calendar_plan_required' });
+    }
 
     // The Cloudflare Git deploy publishes Worker code and assets, not necessarily
     // the optional D1 schema. Provision the additive table on first authorized
