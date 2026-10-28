@@ -62,7 +62,7 @@ export function buildNewPatientRecords(input, user, {
   if (!motherName) throw writeError('invalid_patient_payload', 'Nome da mãe é obrigatório.');
 
   const babiesInput = normalizedBabies(input);
-  if (!babiesInput.length) throw writeError('invalid_patient_payload', 'Cadastre pelo menos um bebê.');
+  // Cadastro gestacional é um registro válido da mãe: bebês podem ser vinculados depois.
 
   // This endpoint creates a NEW patient. Caller-provided ids are intentionally ignored
   // so stale form state, demo data or records from another account cannot collide in D1.
