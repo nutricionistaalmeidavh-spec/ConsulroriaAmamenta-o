@@ -106,13 +106,6 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       if (q.type==='checkbox') control.checked=answers[q.key]===true;
       else control.value=String(answers[q.key]||'');
     }
-    // Address is a patient attribute, but the prenatal response is a point-in-time answer.
-    if (!raw) {
-      const address=root?.querySelector('[data-prenatal-answer="address"]');
-      const patientId=root?.querySelector('[data-appointment-patient]')?.value;
-      const patientAddress=root?.querySelector('[data-appointment-patient] option:checked')?.dataset.address;
-      if (address && patientAddress && patientId) address.value=patientAddress;
-    }
     previousSnapshot=String(raw||'');
   }
   function mount() {
@@ -159,7 +152,13 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   },true);
   document.addEventListener('change',event=>{
     if(event.target?.matches?.('[data-prenatal-answer]')) sync();
-    if(event.target?.matches?.('[data-appointment-patient]')) previousSnapshot=null;
+    // Nunca transportar respostas clínicas entre pacientes antes do início do atendimento.
+    if(event.target?.matches?.('[data-appointment-patient]') && !window.DeboraEncounter?.getEncounterId?.()) {
+      const hidden=getHidden();
+      if (hidden) hidden.value='';
+      previousSnapshot=null;
+      refresh();
+    }
   },true);
   document.addEventListener('click',event=>{
     if(event.target.closest?.('[data-encounter-choice][data-field="appointmentType"]')) setTimeout(refresh,0);
