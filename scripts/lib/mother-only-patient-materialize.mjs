@@ -36,6 +36,12 @@ export function applyMotherOnlyPatientMaterialization(replaceText) {
     "  renderBabySelector(patient, selectedBaby?.id);\n  renderBabyDetails(selectedBaby);\n  document.querySelector('[data-action=\"add-weight\"]')?.toggleAttribute('hidden', babies.length === 0);",
     'mother-only-hide-baby-weight-action');
 
+  // Prontuários pré-natais seguem acessíveis no histórico da mãe depois do parto.
+  replaceText('core/app-shell.js',
+    "encounters.filter((encounter) => encounter.baby_id === selectedBaby.id || allowedEncounterIds.has(encounter.id))",
+    "encounters.filter((encounter) => encounter.baby_id === selectedBaby.id || allowedEncounterIds.has(encounter.id) || (!encounter.baby_id && (!Array.isArray(encounter.identification?.babyIds) || encounter.identification.babyIds.length === 0)))",
+    'mother-only-keep-prenatal-timeline-after-birth');
+
   replaceText('core/app-shell.js',
     "if (!encounters.length) { root.innerHTML = '<div class=\"empty-live\">Nenhum atendimento clínico registrado para o bebê selecionado.</div>'; return; }",
     "if (!encounters.length) { root.innerHTML = '<div class=\"empty-live\">Nenhum atendimento clínico registrado para esta paciente.</div>'; return; }",
