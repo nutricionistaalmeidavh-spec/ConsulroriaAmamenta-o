@@ -6,13 +6,18 @@ import { createLocalRuntime, userId } from './helpers/cloudflare-local.mjs';
 const origin = 'https://deboralactacao.com';
 const calendarPath = '/api/calendar/outlook';
 const name = 'Atendimento - Gestao Amamentacao';
+const paidLicensing = async () => Response.json({
+  productCode: 'debora-lactacao', planCode: 'pro_monthly', commercial: true,
+  active: true, enforceLimits: true, patientLimit: null, mediaUpload: true,
+  status: 'active', expiresAt: '2030-01-01T00:00:00.000Z',
+});
 
 async function api(mf, url, options = {}) {
   return mf.dispatchFetch(origin + url, options);
 }
 
 test('Outlook subscription API requires a real session and does not change Google or Apple', async () => {
-  const { mf, close } = await createLocalRuntime();
+  const { mf, close } = await createLocalRuntime({licensing:paidLicensing});
   try {
     for (const [path, method] of [
       ['/status', 'GET'], ['/create', 'POST'], ['/revoke', 'POST'],
@@ -28,7 +33,7 @@ test('Outlook subscription API requires a real session and does not change Googl
 });
 
 test('Each professional has an independent, revocable, read-only Outlook ICS subscription', async () => {
-  const { mf, db, close, login } = await createLocalRuntime();
+  const { mf, db, close, login } = await createLocalRuntime({licensing:paidLicensing});
   try {
     const a = await login();
     const b = await login('other@example.test');
