@@ -8,6 +8,7 @@ import { applyWeightCorrection } from './lib/weight-correction-materialize.mjs';
 import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs';
 import { applyFinancialEntryCancellation } from './lib/financial-entry-cancel-materialize.mjs';
 import { applyClinicalPdfBranding } from './lib/clinical-pdf-branding-materialize.mjs';
+import { applyMotherOnlyPatientMaterialization } from './lib/mother-only-patient-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -518,6 +519,8 @@ replaceText('core/app-shell.js',
   'const dueAt = followupDue(clinicalState.care_plan?.followup, new Date(startsAt));',
   "const dueAt = ident.appointmentType === 'Pré-natal' ? null : followupDue(clinicalState.care_plan?.followup, new Date(startsAt));",
   'prenatal-followup-is-explicit');
+
+applyMotherOnlyPatientMaterialization(replaceText);
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
