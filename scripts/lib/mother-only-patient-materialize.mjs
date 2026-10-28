@@ -12,8 +12,8 @@ export function applyMotherOnlyPatientMaterialization(replaceText) {
     'mother-only-form-copy');
 
   replaceText('index.html',
-    '<button type="button" data-action="add-weight">',
-    '<button type="button" data-action="patient-add-baby">+ Adicionar bebê</button><button type="button" data-action="add-weight">',
+    'data-action="add-weight"',
+    'data-action="patient-add-baby">+ Adicionar bebê</button><button data-action="add-weight"',
     'mother-only-patient-quick-add-baby');
 
   replaceText('core/app-shell.js',
