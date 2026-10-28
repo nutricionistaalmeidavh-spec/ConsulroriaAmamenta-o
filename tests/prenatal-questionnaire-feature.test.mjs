@@ -18,11 +18,11 @@ test('pre-natal contains precisely the 17 approved questions in original order',
     'Doenças preexistentes ou durante a gestação', 'Histórico de depressão',
     'Uso de medicamentos', 'Cirurgias nas mamas', 'Mudanças nas mamas durante a gestação',
     'Previsão de nascimento', 'Histórico gestacional', 'Experiência prévia com amamentação',
-    'Expectativas com o pré-natal de amamentação', 'Como conheceu a Nana Neném?',
+    'Expectativas com o pré-natal de amamentação', 'Como conheceu a consultoria?',
     'Escolha da consultora de amamentação', 'Declaração de veracidade das informações',
     'Autorização para realização da consulta e compartilhamento de informações'
   ]);
-  assert.match(items[13].prompt, /Como você conheceu a Nana Neném\?/);
+  assert.match(items[13].prompt, /Como você conheceu minha consultoria de amamentação\?/);
   assert.equal(items[5].type, 'yesno');
   assert.equal(items[8].type, 'yesno');
   assert.equal(items[15].type, 'checkbox');
