@@ -24,7 +24,7 @@ test('mother-only prenatal lifecycle links newborn later without rewriting prena
   await expect(page.locator('[data-patient-title]')).toHaveText(motherName);
   await expect(page.locator('[data-action="patient-add-baby"]:visible')).toHaveCount(1);
 
-  await page.locator('[data-action="new-appointment"]:visible').click();
+  await page.locator('[data-action="new-appointment"]:visible').first().click();
   await page.locator('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').click();
   await page.locator('[data-encounter-field="startsAt"]').fill(new Date(Date.now()+3600000).toISOString().slice(0,16));
   const start = page.waitForResponse(r => r.url().includes('/api/clinical/rpc/start_clinical_encounter') && r.request().method() === 'POST');
