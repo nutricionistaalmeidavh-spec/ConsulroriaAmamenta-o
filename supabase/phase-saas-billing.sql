@@ -22,11 +22,11 @@ insert into public.billing_plan_catalog (
   jsonb_build_object('patient_limit', 3, 'media_upload', false)
 ),
 (
-  'pro_monthly', 'Pro mensal', 'monthly', 9990, 'BRL', 1, true,
+  'pro_monthly', 'Pro mensal', 'monthly', 5490, 'BRL', 1, true,
   jsonb_build_object('patient_limit', null, 'media_upload', true)
 ),
 (
-  'pro_annual', 'Pro anual', 'annual', 99990, 'BRL', 12, true,
+  'pro_annual', 'Pro anual', 'annual', 54900, 'BRL', 12, true,
   jsonb_build_object('patient_limit', null, 'media_upload', true)
 )
 on conflict (plan_code) do update set
