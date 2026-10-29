@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {getConsultantConsentDocument, AVAILABLE_CONSENT_TYPES} from '../public/consultant-consent-content.js';
-import {createConsentPdf} from '../public/document-pdf-service.js';
+import {createConsentPdf,createReferralPdf} from '../public/document-pdf-service.js';
 
 const expected=['data_processing','whatsapp','clinical_media','public_media','teleconsultation'];
 test('apenas os cinco termos disponíveis para as consultoras possuem modelo documental integral',()=>{
@@ -53,4 +53,28 @@ test('visualização e PDF usam o mesmo conteúdo sem alterar o consentimento or
   assert.match(terms,/doc\.sections\.map/);
   assert.match(terms,/snapshot_kind:'informational_copy'/);
   assert.doesNotMatch(terms,/\.saveConsents\(/);
+});
+
+test('PDF dos termos reutiliza o motor premium do encaminhamento, inclusive marca, barras e continuidade',async()=>{
+  const referral=Buffer.from(await createReferralPdf({
+    specialtyLabel:'Fonoaudiologia',
+    html:'<h2>Motivo do encaminhamento</h2><p>Solicito avaliação clínica.</p>'
+  }).arrayBuffer()).toString('latin1');
+  const firstStream=pdf=>pdf.match(/\\nstream\\n([\\s\\S]*?)\\nendstream/)?.[1]||'';
+  const sharedBrand=pdf=>firstStream(pdf).split('GESTÃO DE AMAMENTAÇÃO')[0];
+  assert.ok(sharedBrand(referral).length>100,'o cabeçalho de referência contém o desenho vetorial canônico');
+
+  for(const type of expected){
+    const doc=getConsultantConsentDocument(type);
+    const term=Buffer.from(await createConsentPdf({
+      motherName:'Paciente exemplo',consentLabel:doc.title,
+      documentSections:doc.sections,modelVersion:doc.modelVersion
+    }).arrayBuffer()).toString('latin1');
+    assert.equal(sharedBrand(term),sharedBrand(referral),type+' deve usar exatamente a marca vetorial de encaminhamento');
+    assert.match(term,/DOCUMENTO CLÍNICO \/ TERMOS E AUTORIZAÇÕES/);
+    assert.doesNotMatch(term,/DOCUMENTO CLÍNICO \/ PRONTUÁRIO/);
+    assert.match(firstStream(term),/48\\.00 \\d+\\.\\d+ 2\\.00 16\\.00 re f/,'borda lateral das seções do renderer premium');
+    assert.match(term,/Página 1 de/,'rodapé e numeração do encaminhamento');
+    assert.match(term,/\\/Count [2-9]/,'documentos longos paginados');
+  }
 });
