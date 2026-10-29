@@ -198,18 +198,31 @@ export function createConsentPdf({motherName='Paciente', consentLabel='Termo', s
     evidence ? `Evidência administrativa registrada: ${evidence}` : 'Sem evidência de assinatura eletrônica verificada nesta cópia.'
   ].filter(Boolean);
   const sections=Array.isArray(documentSections)?documentSections.filter(section=>section&&section.title&&section.body):[];
-  return buildPagedPdf({
-    title:`${consentLabel} - ${motherName}`,
-    heading:consentLabel,
-    subheading:motherName,
-    sections:[
-      ...sections,
-      {title:'Registro administrativo e histórico',body:details},
-      {title:'Limites desta representação documental',body:'Este PDF reproduz o modelo informativo atual e o estado administrativo armazenado no prontuário. Não comprova assinatura eletrônica, leitura ou aceite da versão atual pela paciente. Modelos atualizados não alteram autorizações anteriores nem renovam consentimentos automaticamente. Uma autorização que exija assinatura ou manifestação específica deve ser colhida e comprovada no fluxo próprio. Alterações e revogações de permissões continuam sendo realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
-    ]
+  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,character=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[character]);
+  const allSections=[
+    ...sections,
+    {title:'Registro administrativo e histórico',body:details},
+    {title:'Limites desta representação documental',body:'Este PDF reproduz o modelo informativo atual e o estado administrativo armazenado no prontuário. Não comprova assinatura eletrônica, leitura ou aceite da versão atual pela paciente. Modelos atualizados não alteram autorizações anteriores nem renovam consentimentos automaticamente. Uma autorização que exija assinatura ou manifestação específica deve ser colhida e comprovada no fluxo próprio. Alterações e revogações de permissões continuam sendo realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
+  ];
+  const html=allSections.map(section=>[
+    `<h2>${escapeHtml(section.title)}</h2>`,
+    ...bodyParagraphs(section.body).map(paragraph=>`<p>${escapeHtml(paragraph)}</p>`)
+  ].join('')).join('');
+  // Reutiliza o MESMO renderizador de encaminhamentos: logo, faixa, seções,
+  // tipografia, recuo, continuação, rodapé e paginação; sem layout paralelo.
+  return createPremiumReferralPdf({
+    specialtyLabel:consentLabel,
+    html,
+    documentLayout:{
+      heading:'Termos e autorizações',
+      subheading:consentLabel,
+      category:'DOCUMENTO CLÍNICO / TERMOS E AUTORIZAÇÕES',
+      pdfTitle:`${consentLabel} - ${motherName}`
+    }
   });
 }
-
 export function createReferralPdf({motherName='Paciente',babyName='',specialtyLabel='Encaminhamento',destination='',html='',finalizedAt=''}={}) {
   // Canonical API retained; the user-authored referral body is the only source of clinical content.
   return createPremiumReferralPdf({specialtyLabel,destination,html,finalizedAt});
