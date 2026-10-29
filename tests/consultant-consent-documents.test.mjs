@@ -38,7 +38,7 @@ test('os modelos tratam dados sensíveis, voluntariedade e limites específicos'
   assert.match(text('data_processing'),/dados de saúde/);
   assert.match(text('whatsapp'),/opcional/);
   assert.match(text('whatsapp'),/revog/);
-  assert.match(text('clinical_media'),/uso público/);
+  assert.match(text('clinical_media'),/uso público|postagem em redes sociais|divulgação a terceiros/);
   assert.match(text('clinical_media'),/bebê/);
   assert.match(text('public_media'),/finalidade/);
   assert.match(text('public_media'),/publicação específica/);

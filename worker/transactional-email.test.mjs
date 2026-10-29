@@ -60,3 +60,19 @@ test('Cloudflare native EMAIL binding keeps the default sender unchanged', async
   assert.equal(payload.subject, 'Pagamento confirmado — Gestão Amamentação');
   assert.match(payload.html, /Gestão Amamentação/);
 });
+
+test('signature request email escapes title and never requires a paid email service',()=>{
+  const template=transactionalTemplate('signature_request',{
+    documentTitle:'Consentimento <script>alert(1)</script>',
+    signingUrl:'https://app.deboralactacao.com/assinar?token=test',
+    expiresInHours:72,
+  });
+  assert.equal(template.subject,'Documento para assinatura — Gestão Amamentação');
+  assert.match(template.text,/72 horas/);
+  assert.match(template.html,/&lt;script&gt;/);
+  assert.doesNotMatch(template.html,/<script>/);
+  assert.match(template.html,/Ler e assinar documento/);
+  assert.throws(()=>transactionalTemplate('signature_request',{
+    documentTitle:'Termo',signingUrl:'javascript:alert(1)',expiresInHours:72,
+  }),/invalid_signature_email/);
+});

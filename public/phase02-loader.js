@@ -8,6 +8,8 @@ export async function startPhase02(){
     ensureCss();
     await import('./documents-feature.js');
     await import('./terms-feature.js');
+    const signatureCss=document.createElement('link');signatureCss.rel='stylesheet';signatureCss.href='/signature-consultant.css';document.head.appendChild(signatureCss);
+    await import('./signature-consultant.js');
   }catch(error){phase02Started=false;console.error('Falha ao carregar documentos clínicos',error);setTimeout(startPhase02,800)}
 }
 startPhase02();
