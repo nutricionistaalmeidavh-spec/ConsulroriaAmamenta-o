@@ -75,7 +75,7 @@ async function viewPublic(request,env,mode){
   if(!entry)return json(410,{error:'signature_link_invalid_or_expired'});
   const source=await getDocument(env.CLINICAL_DB,entry.id,entry.owner_id,1);
   if(!source)return json(409,{error:'signature_document_unavailable'});
-  if(mode==='document')return pdfResponse(await readPdf(env,source),'termo-para-assinatura');
+  if(mode==='document') { try {return pdfResponse(await readPdf(env,source),'termo-para-assinatura')} catch {return json(503,{error:'signature_document_integrity_failed'})} }
   const mother=await recordByIdForOwner(env.CLINICAL_DB,'mothers',entry.mother_id,entry.owner_id);
   if(!mother)return json(410,{error:'signature_mother_unavailable'});
   return json(200,{title:entry.document_title,full_name:mother.record.name,status:'awaiting_signature',
@@ -85,7 +85,7 @@ async function confirmSignature(env,entry,role,input){
   const db=env.CLINICAL_DB;
   const mother=await recordByIdForOwner(db,'mothers',entry.mother_id,entry.owner_id);
   if(!mother) return json(410,{error:'signature_mother_unavailable'});
-  const expectedName=role==='mother'?mother.record.name:input.expectedName;
+  const expectedName=role==='mother'?mother.record.name:input?.expectedName;
   let signature;
   try{signature=parseSignature(input,expectedName)}catch(e){return json(422,{error:e.message})}
   const prior=role==='mother'?'sent':'mother_signed';
@@ -149,11 +149,17 @@ export async function handleSignatureFlowRuntime(request,env,url=new URL(request
   if(verifyPath&&request.method==='GET'){
     const requestId=verifyPath[1],expectedHash=str(url.searchParams.get('sha256'));
     if(!/^[a-f0-9]{64}$/.test(expectedHash))return json(400,{error:'sha256_required'});
-    const entry=await env.CLINICAL_DB.prepare("SELECT id,owner_id,status FROM signature_requests WHERE id=? AND status='completed'").bind(requestId).first();
+    const entry=await env.CLINICAL_DB.prepare("SELECT id,owner_id,mother_id,status FROM signature_requests WHERE id=? AND status='completed'").bind(requestId).first();
     if(!entry)return json(404,{valid:false});
     const pdf=await getDocument(env.CLINICAL_DB,entry.id,entry.owner_id,3);
     if(!pdf||pdf.sha256!==expectedHash)return json(200,{valid:false});
+    const evidence=await env.CLINICAL_DB.prepare(`SELECT event_hash,event_at FROM signature_events
+      WHERE request_id=? AND owner_id=? AND event_type='signed' AND actor_role='consultant'
+      ORDER BY event_at DESC LIMIT 1`).bind(entry.id,entry.owner_id).first();
+    if(!evidence?.event_hash)return json(200,{valid:false});
     try{
+      const expected=await eventSeal(env,entry,'consultant',evidence.event_at,pdf.sha256);
+      if(expected!==evidence.event_hash)return json(200,{valid:false});
       const actual=await readPdf(env,pdf);
       return json(200,{valid:actual.length>0,request_id:entry.id,sha256:pdf.sha256,seal_type:'platform_hmac_not_icp_brasil'});
     }catch{return json(200,{valid:false})}
@@ -188,5 +194,5 @@ export async function handleSignatureFlowRuntime(request,env,url=new URL(request
   if(entry.status!=='mother_signed')return json(409,{error:'signature_mother_must_sign_first'});
   if(Number(request.headers.get('content-length')||0)>230000)return json(413,{error:'signature_payload_too_large'});
   const body=await request.json().catch(()=>null);
-  return confirmSignature(env,entry,'consultant',{...body,expectedName:user.user_metadata?.full_name||user.name||user.email,actorEmail:user.email});
+  return confirmSignature(env,entry,'consultant',{...body,expectedName:user.user_metadata?.full_name||user.user_metadata?.name||body?.full_name,actorEmail:user.email});
 }
