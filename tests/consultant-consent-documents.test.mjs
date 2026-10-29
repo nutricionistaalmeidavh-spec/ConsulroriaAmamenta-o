@@ -60,7 +60,7 @@ test('PDF dos termos reutiliza o motor premium do encaminhamento, inclusive marc
     specialtyLabel:'Fonoaudiologia',
     html:'<h2>Motivo do encaminhamento</h2><p>Solicito avaliação clínica.</p>'
   }).arrayBuffer()).toString('latin1');
-  const firstStream=pdf=>pdf.match(/\\nstream\\n([\\s\\S]*?)\\nendstream/)?.[1]||'';
+  const firstStream=pdf=>pdf.match(/\nstream\n([\s\S]*?)\nendstream/)?.[1]||'';
   const sharedBrand=pdf=>firstStream(pdf).split('GESTÃO DE AMAMENTAÇÃO')[0];
   assert.ok(sharedBrand(referral).length>100,'o cabeçalho de referência contém o desenho vetorial canônico');
 
@@ -73,8 +73,8 @@ test('PDF dos termos reutiliza o motor premium do encaminhamento, inclusive marc
     assert.equal(sharedBrand(term),sharedBrand(referral),type+' deve usar exatamente a marca vetorial de encaminhamento');
     assert.match(term,/DOCUMENTO CLÍNICO \/ TERMOS E AUTORIZAÇÕES/);
     assert.doesNotMatch(term,/DOCUMENTO CLÍNICO \/ PRONTUÁRIO/);
-    assert.match(firstStream(term),/48\\.00 \\d+\\.\\d+ 2\\.00 16\\.00 re f/,'borda lateral das seções do renderer premium');
+    assert.match(firstStream(term),/48\.00 \d+\.\d+ 2\.00 16\.00 re f/,'borda lateral das seções do renderer premium');
     assert.match(term,/Página 1 de/,'rodapé e numeração do encaminhamento');
-    assert.match(term,/\\/Count [2-9]/,'documentos longos paginados');
+    assert.match(term,/\/Count [2-9]/,'documentos longos paginados');
   }
 });
