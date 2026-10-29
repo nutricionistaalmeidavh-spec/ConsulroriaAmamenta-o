@@ -37,7 +37,7 @@ async function ensureSnapshot(context,consent){
 async function pdfFor(context,consent){
   const meta=consentMeta(consent.consent_type,consent),s=status(consent);
   const doc=getConsultantConsentDocument(consent.consent_type);
-  return createConsentPdf({motherName:context.mother.name,consentLabel:doc?.title||meta.title,statusLabel:s.label,acceptedAt:fmtDate(consent.accepted_at),revokedAt:consent.revoked_at?fmtDate(consent.revoked_at):'',version:consent.version||'',evidence:consent.evidence||'',documentSections:doc?.sections||[],modelVersion:doc?.modelVersion||''});
+  return createConsentPdf({motherName:context.mother.name,consentLabel:doc?.title||meta.title,statusLabel:s.label,acceptedAt:fmtDate(consent.accepted_at),revokedAt:consent.revoked_at?fmtDate(consent.revoked_at):'',version:consent.version||'',evidence:consent.evidence||'',documentSections:doc.sections,modelVersion:doc?.modelVersion||''});
 }
 async function openConsent(motherId,consentType,trigger){
   lastTrigger=trigger||document.activeElement;
