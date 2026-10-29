@@ -20,7 +20,7 @@ const html = fs.readFileSync(htmlPath, 'utf8').toLowerCase();
 const app = fs.readFileSync(appPath, 'utf8').toLowerCase();
 const sql = fs.readFileSync(migrationPath, 'utf8').toLowerCase();
 
-for (const required of ['freemium', 'até 3', 'sem upload de fotos e vídeos', 'r$ 99,90', 'r$ 999,90', '12x']) {
+for (const required of ['freemium', 'até 3', 'sem upload de fotos e vídeos', 'r$ 54,90', 'r$ 549,00', '12x']) {
   if (!html.includes(required)) fail(`pricing UI missing: ${required}`);
 }
 

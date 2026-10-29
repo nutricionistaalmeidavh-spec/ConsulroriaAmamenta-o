@@ -26,7 +26,7 @@ for (const planCode of ['pro_monthly', 'pro_annual']) {
         assert.equal(url.hostname, 'api.asaas.com');
         if (url.pathname === '/v3/checkouts' && request.method === 'POST') {
           creates++; const body = await request.json(); reference = body.externalReference;
-          assert.equal(body.items[0].value, planCode === 'pro_monthly' ? 99.9 : 999.9);
+          assert.equal(body.items[0].value, planCode === 'pro_monthly' ? 54.9 : 549);
           return Response.json({ id: 'checkout_new', link: 'https://asaas.test/checkout_new' });
         }
         if (url.pathname === '/v3/checkouts/checkout_new') return Response.json({ id: 'checkout_new', status: paid ? 'PAID' : 'ACTIVE', externalReference: reference });
