@@ -77,7 +77,7 @@ async function render(motherId,type,title){
         const bytes=file||generated||await makePdf();
         if(bytes.size>4*1024*1024||bytes.size<64||(file&&!/\\.pdf$/i.test(file.name)&&file.type!=='application/pdf'))throw Error('Selecione um PDF válido até 4 MB.');
         const response=await fetch('/api/clinical/signatures/requests/'+item.id+'/document',{method:'POST',headers:{...auth(),'content-type':'application/pdf','x-document-reviewed':'true'},body:bytes,cache:'no-store'});
-        if(!response.ok)throw Error((await response.json().catch(()=>({})).error||'Falha ao salvar PDF');
+        if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error||'Falha ao salvar PDF');}
         notice('PDF integral congelado para assinatura.');
       });
     }else{
