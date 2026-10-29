@@ -8,7 +8,7 @@ const pro = (overrides = {}) => ({
   productCode: 'debora-lactacao', planCode: 'pro_monthly',
   active: true, commercial: true, enforceLimits: true,
   patientLimit: null, mediaUpload: true, status: 'active',
-  expiresAt: '2030-01-01T00:00:00.000Z', ...overrides,
+  expiresAt: '2030-01-01T00:00:00.000Z', calendarAccess: true, ...overrides,
 });
 const free = {
   productCode: 'debora-lactacao', planCode: 'freemium',
@@ -34,6 +34,9 @@ test('only verified active Pro or explicit partner can use external calendar', a
       ARTISYS_LICENSING: { fetch: licensing(current) },
     };
     assert.equal(await canUseExternalCalendar(env, user), true);
+    current.value = pro({ calendarAccess:false });
+    assert.equal(await canUseExternalCalendar(env,user),false,'central entitlement must be authoritative');
+    current.value = pro();
     for (const access of [free, legacy, pro({status:'trialing'}), pro({expiresAt:'2020-01-01T00:00:00.000Z'})]) {
       current.value = access;
       if (access.expiresAt === '2020-01-01T00:00:00.000Z') {
@@ -43,8 +46,9 @@ test('only verified active Pro or explicit partner can use external calendar', a
       }
     }
     current.value = free;
-    assert.equal(await canUseExternalCalendar({...env,CALENDAR_PARTNER_EMAILS:' OTHER@example.test, Audit@Example.test '},user),true);
-    assert.equal(await canUseExternalCalendar(env,{...user,app_metadata:{calendar_partner:true}}),true);
+    // No separate email list, editable profile role, or referral coupon is trusted.
+    assert.equal(await canUseExternalCalendar({...env,CALENDAR_PARTNER_EMAILS:'audit@example.test'},user),false);
+    assert.equal(await canUseExternalCalendar(env,{...user,app_metadata:{calendar_partner:true}}),false);
     assert.equal(await canUseExternalCalendar(env,{...user,user_metadata:{calendar_partner:true}}),false);
     assert.equal(await canUseExternalCalendar(env,{...user,app_metadata:{partner_admin:true}}),false);
     assert.equal(await canUseExternalCalendar(env,{...user,partner_code:'COUPON'}),false);
@@ -64,7 +68,7 @@ test('Apple and Outlook reject unpaid accounts, permit Pro/partner, and stop exi
       assert.equal((await api(path(provider)+'/status',{headers})).status,403);
       assert.equal((await api(path(provider)+'/create',{method:'POST',headers})).status,403);
     }
-    current.value = pro();
+    current.value = pro({calendarAccess:true});
     const urls = [];
     for(const provider of ['apple','outlook']) {
       const create = await api(path(provider)+'/create',{method:'POST',headers});
@@ -81,8 +85,9 @@ test('Apple and Outlook reject unpaid accounts, permit Pro/partner, and stop exi
     for(const provider of ['apple','outlook']) {
       assert.equal((await api(path(provider)+'/status',{headers})).status,403);
     }
-    await db.prepare('UPDATE auth_users SET app_metadata_json=? WHERE user_id=?')
-      .bind(JSON.stringify({calendar_partner:true}),userId).run();
+    // A manual partnership classified by the Central shares the same
+    // authoritative, verified entitlement as a paid subscription.
+    current.value = pro({planCode:'pro_6m',source:'mercado_livre_manual',calendarAccess:true});
     for(const provider of ['apple','outlook']) {
       assert.equal((await api(path(provider)+'/status',{headers})).status,200,'partner access');
     }
