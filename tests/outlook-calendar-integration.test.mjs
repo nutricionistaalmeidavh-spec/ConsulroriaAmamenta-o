@@ -9,7 +9,7 @@ const name = 'Atendimento - Gestao Amamentacao';
 const paidLicensing = async () => Response.json({
   productCode: 'debora-lactacao', planCode: 'pro_monthly', commercial: true,
   active: true, enforceLimits: true, patientLimit: null, mediaUpload: true,
-  status: 'active', expiresAt: '2030-01-01T00:00:00.000Z',
+  status: 'active', calendarAccess: true, expiresAt: '2030-01-01T00:00:00.000Z',
 });
 
 async function api(mf, url, options = {}) {
