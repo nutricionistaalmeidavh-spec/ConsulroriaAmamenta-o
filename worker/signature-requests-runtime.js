@@ -30,7 +30,7 @@ async function sha256(value){
 function publicRequest(row){
   return {id:row.id,mother_id:row.mother_id,consent_type:row.consent_type,
     document_title:row.document_title,recipient_email:row.recipient_email,
-    status:row.status,created_at:row.created_at,expires_at:row.expires_at,sent_at:row.sent_at};
+    status:row.status,document_frozen:Boolean(row.document_frozen),created_at:row.created_at,expires_at:row.expires_at,sent_at:row.sent_at};
 }
 async function openRequest(db,ownerId,motherId,type){
   return db.prepare(`SELECT * FROM signature_requests WHERE owner_id=? AND mother_id=? AND consent_type=?
@@ -87,8 +87,9 @@ async function createDraft(env,user,input,now,uuid){
 async function listDrafts(env,user,url){
   const motherId=str(url.searchParams.get('mother_id'));
   if(!motherId)return response(400,{error:'mother_id_required'});
-  const rows=await env.CLINICAL_DB.prepare(`SELECT * FROM signature_requests
-    WHERE owner_id=? AND mother_id=? ORDER BY created_at DESC LIMIT 100`)
+  const rows=await env.CLINICAL_DB.prepare(`SELECT r.*, d.frozen_at AS document_frozen FROM signature_requests r
+    LEFT JOIN signature_documents d ON d.request_id=r.id AND d.owner_id=r.owner_id AND d.version=1
+    WHERE r.owner_id=? AND r.mother_id=? ORDER BY r.created_at DESC LIMIT 100`)
     .bind(user.id,motherId).all();
   return response(200,{requests:(rows.results||[]).map(publicRequest)});
 }
