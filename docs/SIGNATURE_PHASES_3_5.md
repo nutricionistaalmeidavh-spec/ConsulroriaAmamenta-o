@@ -2,7 +2,7 @@
 
 ## Escopo implementado
 
-A etapa aproveita a fundação já criada nas fases 0–2 e **não altera conteúdo ou layout dos documentos originais**.
+A etapa aproveita a fundação já criada nas fases 0–2 e incorpora as atualizações de termos integrais existentes na `main` antes da merge da PR. **Não altera conteúdo ou layout dos documentos originais**.
 
 ### Fase 3 — Assinatura da mãe sem login
 - Página `/assinar` isolada do app com CSP e `noindex`; a URL do link é limpa assim que o JavaScript inicia.
@@ -14,7 +14,7 @@ A etapa aproveita a fundação já criada nas fases 0–2 e **não altera conte�
 
 ### Fase 4 — Assinatura da consultora
 - Um botão `Solicitar assinatura` foi incluído na interface existente de cada termo elegível; sem novo editor ou mudança no status de consentimento.
-- A consultora deve **selecionar e revisar o arquivo PDF com o texto integral** antes de autorizar envio. O gerador atual de `createConsentPdf()` é **apenas um comprovante do status**, portanto **não será usado automaticamente para coletar consentimento**.
+- A consultora gera o PDF a partir do modelo integral `getConsultantConsentDocument()` (v2.0) e do gerador canônico `createConsentPdf()` com o cabeçalho/rodapé do encaminhamento. A consultora **deve visualizar e revisar** o texto, com opção explícita de anexar PDF alternativo. A revisão jurídica desses modelos é pré-requisito para produção.
 - A assinatura da mãe precede obrigatoriamente a da consultora.
 - A consultora assina somente com sessão autenticada. A identidade da conta é gravada na evidência.
 - A versão 3 corresponde ao PDF com as duas assinaturas.

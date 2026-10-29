@@ -122,12 +122,14 @@ function makePdf(title,pages){
  chunks.push(enc(xs.join('')));const out=new Uint8Array(chunks.reduce((sum,c)=>sum+c.length,0));let j=0;for(const c of chunks){out.set(c,j);j+=c.length}
  return new Blob([out],{type:'application/pdf'});
 }
-export function createPremiumReferralPdf({specialtyLabel='Encaminhamento',destination='',html='',finalizedAt=''}={}){
+export function createPremiumReferralPdf({specialtyLabel='Encaminhamento',destination='',html='',finalizedAt='',documentLayout=null}={}){
+ // Other clinical documents may reuse this exact referral renderer with only header labels changed.
+ const layout=documentLayout&&typeof documentLayout==='object'?documentLayout:null;
  const kind=String(specialtyLabel||'Encaminhamento'),blocks=parseReferralHtml(html),pages=[];
  let ops,y=645,active='';
  const start=()=>{
   ops=[];pages.push(ops);
-  ops.push(...clinicalPdfHeader({heading:'Encaminhamento profissional',subheading:kind,category:'DOCUMENTO CLÍNICO / ENCAMINHAMENTO PROFISSIONAL'}));
+  ops.push(...clinicalPdfHeader({heading:layout?.heading||'Encaminhamento profissional',subheading:layout?.subheading||kind,category:layout?.category||'DOCUMENTO CLÍNICO / ENCAMINHAMENTO PROFISSIONAL'}));
   if(finalizedAt){const date=new Date(finalizedAt);if(!Number.isNaN(date.getTime()))ops.push(txt('Data: '+new Intl.DateTimeFormat('pt-BR').format(date),464,693,8,false,P.gray))}
   if(destination)ops.push(txt('Destino: '+String(destination).slice(0,85),42,670,9,false,P.gray));
   y=destination?647:665;
@@ -154,5 +156,5 @@ export function createPremiumReferralPdf({specialtyLabel='Encaminhamento',destin
   }
   y-=heading?9:8;
  }
- return makePdf('Encaminhamento - '+kind,pages);
+ return makePdf(layout?.pdfTitle||'Encaminhamento - '+kind,pages);
 }

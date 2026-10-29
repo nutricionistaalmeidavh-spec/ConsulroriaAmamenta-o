@@ -1,7 +1,7 @@
 name: Validate electronic signatures (phases 0-5)
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
     paths:
       - 'worker/signature-*.js'
       - 'worker/signature-requests-runtime.js'
@@ -44,7 +44,7 @@ jobs:
       - name: Run D1/R2 signing and email regression tests
         run: node --test tests/signature-foundation.test.mjs tests/signature-flow.test.mjs worker/transactional-email.test.mjs
       - name: Verify existing clinical documents
-        run: node --test tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+        run: node --test tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs tests/consultant-consent-documents.test.mjs
       - name: Build app without paid provider
         run: npm run build
       - name: Verify public signing page is present in dist

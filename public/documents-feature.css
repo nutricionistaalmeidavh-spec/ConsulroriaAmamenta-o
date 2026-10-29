@@ -9,3 +9,10 @@
 @media (min-width:800px){.df-layer{place-items:center}.df-sheet{border-radius:28px;padding:26px;max-height:82vh}.df-patient-card{margin-inline:0}}
 @media (max-width:520px){.df-patient-card{padding:16px;border-radius:20px}.df-term-list button{grid-template-columns:minmax(0,1fr) auto}.df-term-list b{display:none}.df-mini-status{padding:6px 8px}.df-sheet{padding-inline:18px}.df-term-view dl>div{grid-template-columns:1fr;gap:4px}.df-actions{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.df-layer *, .df-patient-card *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Texto completo dos cinco modelos já disponíveis na ficha; leitura mobile-first. */
+.df-term-full{margin:18px 0 20px;padding:2px 0;border-top:1px solid var(--df-border);border-bottom:1px solid var(--df-border)}
+.df-term-section{padding:15px 0}
+.df-term-section+.df-term-section{border-top:1px solid var(--df-border)}
+.df-term-section h3{margin:0 0 7px;color:var(--df-ink);font-size:14px;line-height:1.4;font-weight:800}
+.df-term-section p{margin:0;color:var(--df-ink);font-size:13px;line-height:1.7;white-space:normal;overflow-wrap:break-word}

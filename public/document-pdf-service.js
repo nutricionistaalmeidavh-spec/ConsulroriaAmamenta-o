@@ -187,26 +187,42 @@ function fileName(value='documento') {
   return String(value || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'documento';
 }
 
-export function createConsentPdf({motherName='Paciente', consentLabel='Termo', statusLabel='Não informado', acceptedAt='', revokedAt='', version='', evidence=''}={}) {
+export function createConsentPdf({motherName='Paciente', consentLabel='Termo', statusLabel='Não informado', acceptedAt='', revokedAt='', version='', evidence='', documentSections=[], modelVersion=''}={}) {
   const details=[
     `Paciente: ${motherName}`,
-    `Status registrado: ${statusLabel}`,
-    acceptedAt ? `Aceite registrado em: ${acceptedAt}` : '',
+    `Status administrativo registrado: ${statusLabel}`,
+    acceptedAt ? `Aceite anteriormente registrado em: ${acceptedAt}` : 'Sem data de aceite registrada.',
     revokedAt ? `Revogação registrada em: ${revokedAt}` : '',
-    version ? `Versão do consentimento: ${version}` : '',
-    evidence ? `Evidência registrada: ${evidence}` : ''
+    version ? `Versão do registro de consentimento: ${version}` : 'Versão do registro de consentimento: não informada.',
+    modelVersion ? `Versão do modelo documental: ${modelVersion}` : '',
+    evidence ? `Evidência administrativa registrada: ${evidence}` : 'Sem evidência de assinatura eletrônica verificada nesta cópia.'
   ].filter(Boolean);
-  return buildPagedPdf({
-    title:`${consentLabel} - ${motherName}`,
-    heading:consentLabel,
-    subheading:motherName,
-    sections:[
-      {title:'Registro',body:details},
-      {title:'Observação',body:'Este PDF é uma representação documental do consentimento armazenado no prontuário. Alterações futuras de consentimento devem ser realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
-    ]
+  const sections=Array.isArray(documentSections)?documentSections.filter(section=>section&&section.title&&section.body):[];
+  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,character=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[character]);
+  const allSections=[
+    ...sections,
+    {title:'Registro administrativo e histórico',body:details},
+    {title:'Limites desta representação documental',body:'Este PDF reproduz o modelo informativo atual e o estado administrativo armazenado no prontuário. Não comprova assinatura eletrônica, leitura ou aceite da versão atual pela paciente. Modelos atualizados não alteram autorizações anteriores nem renovam consentimentos automaticamente. Uma autorização que exija assinatura ou manifestação específica deve ser colhida e comprovada no fluxo próprio. Alterações e revogações de permissões continuam sendo realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
+  ];
+  const html=allSections.map(section=>[
+    `<h2>${escapeHtml(section.title)}</h2>`,
+    ...bodyParagraphs(section.body).map(paragraph=>`<p>${escapeHtml(paragraph)}</p>`)
+  ].join('')).join('');
+  // Reutiliza o MESMO renderizador de encaminhamentos: logo, faixa, seções,
+  // tipografia, recuo, continuação, rodapé e paginação; sem layout paralelo.
+  return createPremiumReferralPdf({
+    specialtyLabel:consentLabel,
+    html,
+    documentLayout:{
+      heading:'Termos e autorizações',
+      subheading:consentLabel,
+      category:'DOCUMENTO CLÍNICO / TERMOS E AUTORIZAÇÕES',
+      pdfTitle:`${consentLabel} - ${motherName}`
+    }
   });
 }
-
 export function createReferralPdf({motherName='Paciente',babyName='',specialtyLabel='Encaminhamento',destination='',html='',finalizedAt=''}={}) {
   // Canonical API retained; the user-authored referral body is the only source of clinical content.
   return createPremiumReferralPdf({specialtyLabel,destination,html,finalizedAt});
