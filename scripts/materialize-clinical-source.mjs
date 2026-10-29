@@ -8,6 +8,7 @@ import { applyWeightCorrection } from './lib/weight-correction-materialize.mjs';
 import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs';
 import { applyFinancialEntryCancellation } from './lib/financial-entry-cancel-materialize.mjs';
 import { applyClinicalPdfBranding } from './lib/clinical-pdf-branding-materialize.mjs';
+import { applyMotherOnlyPatientMaterialization } from './lib/mother-only-patient-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -472,6 +473,54 @@ replaceText('core/app-shell.js',
   "  showScreen(screen);\n}\n\nfunction renderPatientList",
   "  if (location.hash !== routeAtStart) return;\n  showScreen(screen);\n}\n\nfunction renderPatientList",
   'route-discard-outdated-response');
+
+
+/*
+ * Preserve the prenatal selection contract at the canonical materialization
+ * boundary. The clinical runtime is regenerated from archived release assets;
+ * modifying public/clinical-source/core/app-shell.js alone is not durable.
+ */
+replaceText('core/app-shell.js',
+  'function selectedWizardBabies() {',
+  `function isPrenatalAppointment() {
+  return document.querySelector('[data-encounter-choice][data-field="appointmentType"][aria-pressed="true"]')?.dataset.value === 'Pré-natal';
+}
+function prenatalDeclarationConfirmed() {
+  const raw = document.querySelector('[data-encounter-field="prenatalAnswers"]')?.value || '';
+  try { return JSON.parse(raw)?.declaration === true; } catch { return false; }
+}
+function selectedWizardBabies() {
+  if (isPrenatalAppointment()) return [];`,
+  'prenatal-care-type-and-no-baby');
+
+const requireBabySource = "if (!selectedBabies.length) throw new Error('Selecione pelo menos um bebê.');";
+const appShellBeforePrenatal = Buffer.from(resolved.get('core/app-shell.js')).toString('utf8');
+if (appShellBeforePrenatal.split(requireBabySource).length - 1 !== 2) {
+  throw new Error('prenatal: expected exactly two postpartum baby checks');
+}
+replaceText('core/app-shell.js', requireBabySource,
+  "if (!selectedBabies.length && !isPrenatalAppointment()) throw new Error('Selecione pelo menos um bebê.');",
+  'prenatal-no-baby-at-start');
+// Second occurrence is the finalization validation.
+replaceText('core/app-shell.js', requireBabySource,
+  "if (!selectedBabies.length && !isPrenatalAppointment()) throw new Error('Selecione pelo menos um bebê.');",
+  'prenatal-no-baby-at-finalization');
+
+replaceText('core/app-shell.js',
+  "  if (!patient) throw new Error('Selecione uma paciente.');\n  const selectedBabies = selectedWizardBabies();",
+  "  if (!patient) throw new Error('Selecione uma paciente.');\n  if (isPrenatalAppointment() && !prenatalDeclarationConfirmed()) throw new Error('Confirme a declaração de veracidade das informações para finalizar o pré-natal.');\n  const selectedBabies = selectedWizardBabies();",
+  'prenatal-truth-declaration');
+
+replaceText('core/app-shell.js',
+  "  ident.babyIds = selectedBabies.map((baby) => baby.id);\n  clinicalState.identification = ident;",
+  "  ident.babyIds = selectedBabies.map((baby) => baby.id);\n  clinicalState.identification = ident;\n  if (ident.appointmentType === 'Pré-natal') { clinicalState.care_plan ||= {}; clinicalState.care_plan.followup = 'Personalizado'; }",
+  'prenatal-no-default-postpartum-followup');
+replaceText('core/app-shell.js',
+  'const dueAt = followupDue(clinicalState.care_plan?.followup, new Date(startsAt));',
+  "const dueAt = ident.appointmentType === 'Pré-natal' ? null : followupDue(clinicalState.care_plan?.followup, new Date(startsAt));",
+  'prenatal-followup-is-explicit');
+
+applyMotherOnlyPatientMaterialization(replaceText);
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {

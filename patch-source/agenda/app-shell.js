@@ -614,7 +614,15 @@ function decorateClinicalChoices() {
   add('[data-wizard-step="3"] .tag-choice', 'maternal_assessment', 'symptoms', true);
   add('[data-wizard-step="6"] .chip', 'care_plan', 'libraryItems', true);
 }
+function isPrenatalAppointment() {
+  return document.querySelector('[data-encounter-choice][data-field="appointmentType"][aria-pressed="true"]')?.dataset.value === 'Pré-natal';
+}
+function prenatalDeclarationConfirmed() {
+  const raw = document.querySelector('[data-encounter-field="prenatalAnswers"]')?.value || '';
+  try { return JSON.parse(raw)?.declaration === true; } catch { return false; }
+}
 function selectedWizardBabies() {
+  if (isPrenatalAppointment()) return [];
   const patient = selectedWizardPatient();
   if (!patient) return [];
   const target = document.querySelector('[data-appointment-baby]')?.value;
@@ -658,7 +666,7 @@ async function ensureEncounterStarted() {
   const patient = selectedWizardPatient();
   if (!patient) throw new Error('Selecione uma paciente antes de iniciar o atendimento.');
   const selectedBabies = selectedWizardBabies();
-  if (!selectedBabies.length) throw new Error('Selecione pelo menos um bebê.');
+  if (!selectedBabies.length && !isPrenatalAppointment()) throw new Error('Selecione pelo menos um bebê.');
   const draft = collectEncounterDraft(appointmentScreen), ident = draft.identification || {};
   const startsAt = ident.startsAt ? clinicInputToIso(ident.startsAt) : new Date().toISOString();
   const valueCents = Math.max(0, Math.round(Number(ident.value || 0) * 100));
@@ -782,14 +790,22 @@ async function saveDraft({ silent = false } = {}) {
 async function finalizeEncounter() {
   const patient = selectedWizardPatient();
   if (!patient) throw new Error('Selecione uma paciente.');
+  if (isPrenatalAppointment() && !prenatalDeclarationConfirmed()) {
+    throw new Error('Confirme a declaração de veracidade das informações para finalizar o pré-natal.');
+  }
   const selectedBabies = selectedWizardBabies();
-  if (!selectedBabies.length) throw new Error('Selecione pelo menos um bebê.');
+  if (!selectedBabies.length && !isPrenatalAppointment()) throw new Error('Selecione pelo menos um bebê.');
   await ensureEncounterStarted();
   const singleBabyId = selectedBabies.length === 1 ? selectedBabies[0].id : null;
   const clinicalState = collectEncounterDraft(appointmentScreen);
   const ident = clinicalState.identification || {};
   ident.babyIds = selectedBabies.map((baby) => baby.id);
   clinicalState.identification = ident;
+  // O pré-natal não utiliza o follow-up automático padrão de 48h do pós-parto.
+  if (ident.appointmentType === 'Pré-natal') {
+    clinicalState.care_plan ||= {};
+    clinicalState.care_plan.followup = 'Personalizado';
+  }
   const startsAt = ident.startsAt ? clinicInputToIso(ident.startsAt) : new Date().toISOString();
   const valueCents = Math.max(0, Math.round(Number(ident.value || 0) * 100));
   const finalBillingSelection = await window.DeboraBilling?.beforeStart?.(patient.mother.id);
@@ -816,7 +832,7 @@ async function finalizeEncounter() {
       await repositories.babies.update(baby.id, { current_weight_g: weight });
     }
   }
-  const dueAt = followupDue(clinicalState.care_plan?.followup, new Date(startsAt));
+  const dueAt = ident.appointmentType === 'Pré-natal' ? null : followupDue(clinicalState.care_plan?.followup, new Date(startsAt));
   if (dueAt) await appData.createOrSupersedeFollowup({ mother_id: patient.mother.id, baby_id: singleBabyId, encounter_id: encounter.id, due_at: dueAt, notes: selectedBabies.length > 1 ? `Acompanhamento de ${selectedBabies.map((baby) => baby.name).join(' e ')}` : 'Acompanhamento após atendimento' });
   const billingResult = await window.DeboraBilling?.finalize?.(patient.mother.id, currentAppointmentId, encounter.id);
   if (!billingResult?.handled && valueCents > 0) await appData.ensureFinancialEntryForEncounter({ mother_id: patient.mother.id, appointment_id: currentAppointmentId, encounter_id: encounter.id, description: ident.appointmentType || 'Atendimento', amount_cents: valueCents, due_at: startsAt.slice(0,10) });
