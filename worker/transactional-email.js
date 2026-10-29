@@ -16,6 +16,18 @@ function layout(title, content, action = null) {
 }
 
 export function transactionalTemplate(kind, data = {}) {
+  if (kind === 'signature_request') {
+    const title=text(data.documentTitle), url=text(data.signingUrl), hours=Number(data.expiresInHours||72);
+    if(!title||title.length>160||!/^https:\/\//.test(url)||!Number.isInteger(hours)||hours<1||hours>168)
+      throw new TypeError('invalid_signature_email');
+    return {
+      subject:'Documento para assinatura — Gestão Amamentação',
+      text:'Sua consultora enviou um documento para leitura e assinatura: '+title+'. Acesse '+url+'. O link expira em '+hours+' horas. Se não solicitou este documento, ignore esta mensagem.',
+      html:layout('Documento para assinatura',
+        '<p>Sua consultora de amamentação enviou um documento para leitura e assinatura.</p><p><strong>'+escapeHtml(title)+'</strong></p><p>Você poderá acessar pelo celular, sem criar uma conta. O link expira em '+hours+' horas.</p>',
+        {label:'Ler e assinar documento',url}),
+    };
+  }
   if (kind === 'password_recovery') {
     const minutes = Math.max(1, Math.round(Number(data.expiresInSeconds || 1800) / 60));
     return {
