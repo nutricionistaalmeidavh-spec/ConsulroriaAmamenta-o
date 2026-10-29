@@ -16,7 +16,7 @@ export function createSignatureControl({placeholder='Nome completo'}={}){
   <label class="ds-checkbox"><input type="checkbox" data-accept> Concordo com o documento e confirmo minha assinatura eletrônica.</label>`;
   const radios=[...root.querySelectorAll('input[type="radio"]')],drawing=root.querySelector('[data-drawing]');
   const canvas=root.querySelector('canvas'),ctx=canvas.getContext('2d');
-  ctx.strokeStyle='#713f59';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle='#382d3b';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
   let drawingActive=false,drawn=false;
   const mode=()=>radios.find(x=>x.checked)?.value||'drawn';
   // Radios share a generated group name so other signature dialogs remain independent.
