@@ -39,6 +39,8 @@ if (container && !container.querySelector('[data-apple-calendar-integration]')) 
   const card = document.createElement('article');
   card.className = 'detail-card apple-calendar-card';
   card.dataset.appleCalendarIntegration = 'true';
+  // Keep the integration invisible until the backend confirms Pro/partner access.
+  card.style.display = 'none';
   card.innerHTML = [
     '<div class="apple-calendar-main">',
     '<span class="apple-calendar-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 15h3"/></svg></span>',
@@ -140,9 +142,13 @@ if (container && !container.querySelector('[data-apple-calendar-integration]')) 
       headers: { Authorization: 'Bearer ' + bearer },
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(res.status === 401
-      ? 'Sessão expirada. Entre novamente.'
-      : 'Não foi possível acessar o Apple Calendário. Tente novamente.');
+    if (!res.ok) {
+      const error = new Error(res.status === 401 ? 'Sessão expirada. Entre novamente.'
+        : res.status === 403 ? 'Disponível somente no plano Pro ou para parceiras autorizadas.'
+        : 'Não foi possível acessar o Apple Calendário. Tente novamente.');
+      error.status = res.status;
+      throw error;
+    }
     return data;
   }
 
@@ -168,11 +174,19 @@ if (container && !container.querySelector('[data-apple-calendar-integration]')) 
     try {
       const status = await api('/api/calendar/apple/status');
       if (typeof status.active !== 'boolean') throw new Error('Resposta inválida do calendário.');
+      card.style.display = '';
       active = status.active;
       failed = false;
       if (!active) { expanded = false; clearFreshLink(); }
       notice('');
     } catch (error) {
+      if (error.status === 403) {
+        card.style.display = 'none';
+        active = null;
+        expanded = false;
+        clearFreshLink();
+        return;
+      }
       failed = true;
       expanded = false;
       notice(error.message || 'Não foi possível verificar a assinatura.', true);

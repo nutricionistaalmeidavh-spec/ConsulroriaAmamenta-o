@@ -138,6 +138,6 @@ test('Cloudflare Worker rejects other users on all protected Google Calendar act
       .bind(userId).first();
     assert.equal(Number(savedStates.n), 1);
     const apple = await runtime.mf.dispatchFetch('http://localhost/api/calendar/apple/status', { headers: authDebora });
-    assert.equal(apple.status, 200);
+    assert.equal(apple.status, 403); // Google pilot alone does not grant the paid Apple feature.
   } finally { await runtime.close(); }
 });
