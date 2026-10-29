@@ -14,6 +14,7 @@ import { handleBlock6RpcRuntime, isAuthenticatedMother } from './block6-rpc-runt
 import { handleMotherAiChat } from './mother-ai-chat-runtime.js';
 import { handleMotherAiHistory } from './mother-ai-history-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
+import { handleSignatureRequestRuntime } from './signature-requests-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
@@ -253,6 +254,10 @@ export default {
         }
       }
     }
+
+    // Own scope + clinician auth are enforced again in the isolated module.
+    const signatureRequestResponse = await handleSignatureRequestRuntime(request, env, url);
+    if (signatureRequestResponse) return withNoIndex(signatureRequestResponse);
 
     const motherAiHistoryResponse = await handleMotherAiHistory(request, env, url);
     if (motherAiHistoryResponse) return withNoIndex(motherAiHistoryResponse);
