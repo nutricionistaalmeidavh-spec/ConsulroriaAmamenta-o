@@ -66,3 +66,46 @@ test('dispatch is disabled until full recipient signing flow exists; no prematur
     assert.equal(state.status,'draft');
   }finally{s.db.close()}
 });
+
+test('delivery uses frozen R2 document and token hash, never persists raw link token',async()=>{
+  const s=setup();try{
+    await s.mother('consultora-a','mae-1','maria@example.com');
+    const created=await (await s.run('POST','/api/clinical/signatures/requests',{mother_id:'mae-1',consent_type:'whatsapp'})).json();
+    await s.db.prepare(`INSERT INTO signature_documents
+      (id,request_id,owner_id,version,r2_key,sha256,frozen_at,created_at)
+      VALUES(?,?,?,?,?,?,?,?)`).bind('doc-1',created.id,'consultora-a',1,'private/doc-1.pdf','a'.repeat(64),new Date().toISOString(),new Date().toISOString()).run();
+    s.env.SIGNATURE_DELIVERY_ENABLED='true';s.env.SIGNATURE_PUBLIC_FLOW_READY='true';
+    s.env.CLINICAL_FILES={head:async key=>key==='private/doc-1.pdf'?{size:1024}:null};
+    let message=null;
+    const sent=await s.run('POST',`/api/clinical/signatures/requests/${created.id}/send`,{},undefined,{
+      sendEmail:async (_env,m)=>{message=m;return {provider:'test'}},
+    });
+    assert.equal(sent.status,200);
+    assert.equal((await sent.json()).status,'sent');
+    assert.equal(message.to,'maria@example.com');
+    const link=new URL(message.data.signingUrl);
+    assert.equal(link.origin,'https://app.deboralactacao.com');
+    const raw=link.searchParams.get('token');
+    assert.match(raw,/^[a-f0-9]{64}$/);
+    const token=await s.db.prepare('SELECT token_sha256 FROM signature_tokens WHERE request_id=?').bind(created.id).first();
+    assert.match(token.token_sha256,/^[a-f0-9]{64}$/);
+    assert.notEqual(token.token_sha256,raw);
+    const retry=await s.run('POST',`/api/clinical/signatures/requests/${created.id}/send`,{},undefined,{sendEmail:async()=>assert.fail('duplicate delivery')});
+    assert.equal(retry.status,409);
+  }finally{s.db.close()}
+});
+test('failed delivery is fail-closed and revokes its token',async()=>{
+  const s=setup();try{
+    await s.mother('consultora-a','mae-1','maria@example.com');
+    const draft=await (await s.run('POST','/api/clinical/signatures/requests',{mother_id:'mae-1',consent_type:'whatsapp'})).json();
+    await s.db.prepare(`INSERT INTO signature_documents
+      (id,request_id,owner_id,version,r2_key,sha256,frozen_at,created_at)
+      VALUES(?,?,?,?,?,?,?,?)`).bind('doc-1',draft.id,'consultora-a',1,'private/doc-1.pdf','a'.repeat(64),new Date().toISOString(),new Date().toISOString()).run();
+    s.env.SIGNATURE_DELIVERY_ENABLED='true';s.env.SIGNATURE_PUBLIC_FLOW_READY='true';
+    s.env.CLINICAL_FILES={head:async()=>({size:1024})};
+    const resp=await s.run('POST',`/api/clinical/signatures/requests/${draft.id}/send`,{},undefined,{sendEmail:async()=>{throw Error('transient_failure')}});
+    assert.equal(resp.status,503);
+    assert.equal((await s.db.prepare('SELECT status FROM signature_requests WHERE id=?').bind(draft.id).first()).status,'delivery_failed');
+    assert.ok((await s.db.prepare('SELECT revoked_at FROM signature_tokens WHERE request_id=?').bind(draft.id).first()).revoked_at);
+  }finally{s.db.close()}
+});
