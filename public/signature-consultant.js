@@ -65,11 +65,14 @@ async function render(motherId,type,title){
           documentSections:doc.sections,modelVersion:doc.modelVersion});
       };
       btn('Visualizar termo integral',async()=>{
-        generated=await makePdf();
-        const url=URL.createObjectURL(generated);
-        const w=window.open(url,'_blank','noopener,noreferrer');
+        const w=window.open('about:blank','_blank');
         if(!w)throw Error('Permita a abertura de nova aba para revisar o PDF.');
-        setTimeout(()=>URL.revokeObjectURL(url),60000);
+        try{
+          generated=await makePdf();
+          const url=URL.createObjectURL(generated);
+          w.location.href=url;
+          setTimeout(()=>URL.revokeObjectURL(url),300000);
+        }catch(error){w.close();throw error;}
       });
       btn('Preparar documento revisado',async()=>{
         if(!wrap.querySelector('[data-ds-reviewed]').checked)throw Error('Confirme que conferiu o PDF integral.');
