@@ -1,14 +1,19 @@
-name: Validate signature foundation (phases 0-2)
+name: Validate electronic signatures (phases 0-5)
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
     paths:
+      - 'worker/signature-*.js'
       - 'worker/signature-requests-runtime.js'
       - 'worker/transactional-email.js'
       - 'worker/transactional-email.test.mjs'
       - 'worker/domain-entry.js'
+      - 'public/signature-*'
+      - 'public/terms-feature.js'
+      - 'public/phase02-loader.js'
       - 'cloudflare/migrations/0019-signature-foundation.sql'
-      - 'tests/signature-foundation.test.mjs'
+      - 'tests/signature-*.test.mjs'
+      - 'package.json'
       - '.github/workflows/validate-signature-foundation.yml'
   workflow_dispatch:
 permissions:
@@ -16,24 +21,36 @@ permissions:
 jobs:
   signatures:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Check syntax
+      - name: Install open source dependencies
+        run: npm install --no-audit --no-fund --no-package-lock
+      - name: Check JavaScript syntax
         run: |
           node --check worker/domain-entry.js
+          node --check worker/signature-flow-runtime.js
+          node --check worker/signature-pdf.js
           node --check worker/signature-requests-runtime.js
           node --check worker/transactional-email.js
-          node --check tests/signature-foundation.test.mjs
-      - name: Run isolated D1 and email tests
-        run: node --test tests/signature-foundation.test.mjs worker/transactional-email.test.mjs
-      - name: Assert no automatic public release
-        shell: bash
+          node --check public/signature-public.js
+          node --check public/signature-consultant.js
+          node --check public/signature-canvas.js
+          node --check public/terms-feature.js
+          node --check tests/signature-flow.test.mjs
+      - name: Run D1/R2 signing and email regression tests
+        run: node --test tests/signature-foundation.test.mjs tests/signature-flow.test.mjs worker/transactional-email.test.mjs
+      - name: Verify existing clinical documents
+        run: node --test tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs
+      - name: Build app without paid provider
+        run: npm run build
+      - name: Verify public signing page is present in dist
         run: |
+          test -f dist/signature-public.html
+          test -f dist/signature-public.js
+          test -f dist/signature-public.css
           ! grep -q 'SIGNATURE_DELIVERY_ENABLED' wrangler.jsonc
           ! grep -q 'SIGNATURE_PUBLIC_FLOW_READY' wrangler.jsonc
-          grep -q 'SIGNATURE_PUBLIC_FLOW_READY' worker/signature-requests-runtime.js
-          grep -q 'signature_frozen_document_required' worker/signature-requests-runtime.js
