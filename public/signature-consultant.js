@@ -1,3 +1,5 @@
+import {createConsentPdf} from './document-pdf-service.js';
+import {getConsultantConsentDocument} from './consultant-consent-content.js';
 import {createSignatureControl} from './signature-canvas.js';
 const DOC=window.DeboraDocuments;
 const text=v=>String(v??'').trim();
@@ -47,15 +49,36 @@ async function render(motherId,type,title){
   if(item.status==='draft'||item.status==='delivery_failed'){
     if(!item.document_frozen){
       const wrap=document.createElement('div');wrap.className='ds-upload';
-      wrap.innerHTML='<label>PDF integral revisado <input type="file" accept="application/pdf,.pdf" data-ds-file></label><label><input type="checkbox" data-ds-reviewed> Conferi o conteúdo integral, os dados e o layout deste PDF antes de enviá-lo.</label>';
+      wrap.innerHTML='<p>O termo utiliza o modelo integral e o layout PDF já usados no sistema.</p><label>PDF alternativo (opcional) <input type="file" accept="application/pdf,.pdf"></label><label><input type="checkbox" data-ds-reviewed> Conferi o texto integral e os dados deste documento antes do envio.</label>';
       body.append(wrap);
-      btn('Preparar documento',async()=>{
-        const f=wrap.querySelector('input[type=file]').files[0];
-        if(!f||f.size>4*1024*1024||f.size<64||(!/\.pdf$/i.test(f.name)&&f.type!=='application/pdf'))throw Error('Selecione um PDF válido de até 4 MB.');
-        if(!wrap.querySelector('[data-ds-reviewed]').checked)throw Error('Confirme que revisou o PDF integral.');
-        const response=await fetch('/api/clinical/signatures/requests/'+item.id+'/document',{method:'POST',headers:{...auth(),'content-type':'application/pdf','x-document-reviewed':'true'},body:f,cache:'no-store'});
+      let generated=null;
+      const makePdf=async()=>{
+        const context=await DOC.patientContext(motherId);
+        const doc=getConsultantConsentDocument(type);
+        if(!context?.mother||!doc?.sections?.length)throw Error('Não foi possível carregar o termo integral.');
+        const consents=await DOC.consents(motherId);
+        const consent=consents.find(x=>x.consent_type===type)||{};
+        return createConsentPdf({motherName:context.mother.name,consentLabel:doc.title,
+          statusLabel:consent.granted&&!consent.revoked_at?'Autorizado':'Não autorizado',
+          acceptedAt:consent.accepted_at||'',revokedAt:consent.revoked_at||'',
+          version:consent.version||'',evidence:consent.evidence||'',
+          documentSections:doc.sections,modelVersion:doc.modelVersion});
+      };
+      btn('Visualizar termo integral',async()=>{
+        generated=await makePdf();
+        const url=URL.createObjectURL(generated);
+        const w=window.open(url,'_blank','noopener,noreferrer');
+        if(!w)throw Error('Permita a abertura de nova aba para revisar o PDF.');
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+      });
+      btn('Preparar documento revisado',async()=>{
+        if(!wrap.querySelector('[data-ds-reviewed]').checked)throw Error('Confirme que conferiu o PDF integral.');
+        const file=wrap.querySelector('input[type=file]').files[0];
+        const bytes=file||generated||await makePdf();
+        if(bytes.size>4*1024*1024||bytes.size<64||(file&&!/\\.pdf$/i.test(file.name)&&file.type!=='application/pdf'))throw Error('Selecione um PDF válido até 4 MB.');
+        const response=await fetch('/api/clinical/signatures/requests/'+item.id+'/document',{method:'POST',headers:{...auth(),'content-type':'application/pdf','x-document-reviewed':'true'},body:bytes,cache:'no-store'});
         if(!response.ok)throw Error((await response.json().catch(()=>({})).error||'Falha ao salvar PDF');
-        notice('Versão integral do PDF congelada para assinatura.');
+        notice('PDF integral congelado para assinatura.');
       });
     }else{
       btn('Visualizar PDF preparado',()=>downloadPdf(item.id));
