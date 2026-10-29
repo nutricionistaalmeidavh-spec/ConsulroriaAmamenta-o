@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS signature_requests (
   source_consent_id TEXT,
   source_sha256 TEXT NOT NULL,
   source_snapshot_json TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sending','sent','delivery_failed','expired','cancelled','completed')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sending','sent','delivery_failed','signing_mother','mother_signed','signing_consultant','expired','cancelled','completed')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   expires_at TEXT,
