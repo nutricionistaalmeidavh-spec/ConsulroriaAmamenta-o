@@ -1,0 +1,39 @@
+name: Validate signature foundation (phases 0-2)
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    paths:
+      - 'worker/signature-requests-runtime.js'
+      - 'worker/transactional-email.js'
+      - 'worker/transactional-email.test.mjs'
+      - 'worker/domain-entry.js'
+      - 'cloudflare/migrations/0019-signature-foundation.sql'
+      - 'tests/signature-foundation.test.mjs'
+      - '.github/workflows/validate-signature-foundation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signatures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check syntax
+        run: |
+          node --check worker/domain-entry.js
+          node --check worker/signature-requests-runtime.js
+          node --check worker/transactional-email.js
+          node --check tests/signature-foundation.test.mjs
+      - name: Run isolated D1 and email tests
+        run: node --test tests/signature-foundation.test.mjs worker/transactional-email.test.mjs
+      - name: Assert no automatic public release
+        shell: bash
+        run: |
+          ! grep -q 'SIGNATURE_DELIVERY_ENABLED' wrangler.jsonc
+          ! grep -q 'SIGNATURE_PUBLIC_FLOW_READY' wrangler.jsonc
+          grep -q 'SIGNATURE_PUBLIC_FLOW_READY' worker/signature-requests-runtime.js
+          grep -q 'signature_frozen_document_required' worker/signature-requests-runtime.js
