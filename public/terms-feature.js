@@ -1,4 +1,5 @@
 import {createConsentPdf,downloadPdf,sharePdf} from './document-pdf-service.js';
+import {getConsultantConsentDocument} from './consultant-consent-content.js';
 
 const DOC=window.DeboraDocuments;
 const LABELS={
@@ -26,22 +27,27 @@ function overlay(title,html){
 }
 async function ensureSnapshot(context,consent){
   const s=status(consent),meta=consentMeta(consent.consent_type,consent);
-  const content={source:'consents',consent_id:consent.id,consent_type:consent.consent_type,granted:Boolean(consent.granted),status:s.label,version:consent.version||'',accepted_at:consent.accepted_at||null,revoked_at:consent.revoked_at||null,evidence:consent.evidence||'',snapshot_at:new Date().toISOString()};
-  try{return await DOC.saveDocument({document_type:'term',title:meta.title,status:'finalized',source_consent_id:consent.id,content,finalized_at:new Date().toISOString()})}catch(error){
+  const doc=getConsultantConsentDocument(consent.consent_type);
+  const content={source:'consents',snapshot_kind:'informational_copy',model_version:doc?.modelVersion||'',model_sections:doc?.sections||[],signature_verified:false,consent_id:consent.id,consent_type:consent.consent_type,granted:Boolean(consent.granted),status:s.label,version:consent.version||'',accepted_at:consent.accepted_at||null,revoked_at:consent.revoked_at||null,evidence:consent.evidence||'',snapshot_at:new Date().toISOString()};
+  try{return await DOC.saveDocument({document_type:'term',title:doc?.title||meta.title,status:'finalized',source_consent_id:consent.id,content,finalized_at:new Date().toISOString()})}catch(error){
     if(/clinical_documents|schema cache|relation .* does not exist/i.test(error.message||''))return null;
     throw error;
   }
 }
 async function pdfFor(context,consent){
   const meta=consentMeta(consent.consent_type,consent),s=status(consent);
-  return createConsentPdf({motherName:context.mother.name,consentLabel:meta.title,statusLabel:s.label,acceptedAt:fmtDate(consent.accepted_at),revokedAt:consent.revoked_at?fmtDate(consent.revoked_at):'',version:consent.version||'',evidence:consent.evidence||''});
+  const doc=getConsultantConsentDocument(consent.consent_type);
+  return createConsentPdf({motherName:context.mother.name,consentLabel:doc?.title||meta.title,statusLabel:s.label,acceptedAt:fmtDate(consent.accepted_at),revokedAt:consent.revoked_at?fmtDate(consent.revoked_at):'',version:consent.version||'',evidence:consent.evidence||'',documentSections:doc?.sections||[],modelVersion:doc?.modelVersion||''});
 }
 async function openConsent(motherId,consentType,trigger){
   lastTrigger=trigger||document.activeElement;
   const [context,rows]=await Promise.all([DOC.patientContext(motherId),DOC.consents(motherId)]);if(!context)throw new Error('Paciente não encontrada.');
   const consent=rows.find(c=>c.consent_type===consentType)||{consent_type:consentType,granted:false};
   const meta=consentMeta(consentType,consent),s=status(consent);
-  const sheet=overlay(meta.title,`<div class="df-term-view"><div class="df-status ${s.tone}"><span></span>${DOC.escapeHTML(s.label)}</div><p>${DOC.escapeHTML(meta.description)}</p><dl><div><dt>Paciente</dt><dd>${DOC.escapeHTML(context.mother.name)}</dd></div><div><dt>Aceite</dt><dd>${DOC.escapeHTML(fmtDate(consent.accepted_at))}</dd></div><div><dt>Revogação</dt><dd>${DOC.escapeHTML(consent.revoked_at?fmtDate(consent.revoked_at):'—')}</dd></div><div><dt>Versão</dt><dd>${DOC.escapeHTML(consent.version||'Não informada')}</dd></div></dl><div class="df-term-note">Este documento reflete o registro eletrônico atual. Para alterar a autorização, use <strong>Editar cadastro</strong>; gerar ou compartilhar um PDF não muda o consentimento.</div><div class="df-actions"><button type="button" class="df-primary" data-term-pdf>Gerar PDF</button><button type="button" class="df-secondary" data-term-share>Compartilhar</button></div></div>`);
+  const doc=getConsultantConsentDocument(consentType);
+  if(!doc)throw new Error('Não existe modelo documental para esta autorização.');
+  const sections=doc.sections.map(section=>`<section class="df-term-section"><h3>${DOC.escapeHTML(section.title)}</h3><p>${DOC.escapeHTML(section.body)}</p></section>`).join('');
+  const sheet=overlay(doc.title,`<div class="df-term-view"><div class="df-status ${s.tone}"><span></span>${DOC.escapeHTML(s.label)}</div><p>${DOC.escapeHTML(meta.description)}</p><div class="df-term-note">Modelo documental informativo v${DOC.escapeHTML(doc.modelVersion)}. O conteúdo atualizado não substitui a autorização anteriormente registrada nem comprova assinatura da paciente.</div><div class="df-term-full">${sections}</div><dl><div><dt>Paciente</dt><dd>${DOC.escapeHTML(context.mother.name)}</dd></div><div><dt>Estado do registro</dt><dd>${DOC.escapeHTML(s.label)}</dd></div><div><dt>Aceite anterior</dt><dd>${DOC.escapeHTML(fmtDate(consent.accepted_at))}</dd></div><div><dt>Revogação</dt><dd>${DOC.escapeHTML(consent.revoked_at?fmtDate(consent.revoked_at):'—')}</dd></div><div><dt>Versão do aceite anterior</dt><dd>${DOC.escapeHTML(consent.version||'Não informada')}</dd></div></dl><div class="df-term-note">Esta cópia não comprova assinatura eletrônica nem a leitura do modelo atualizado. Para alterar a autorização, utilize <strong>Editar cadastro</strong>; gerar ou compartilhar o PDF não modifica o consentimento.</div><div class="df-actions"><button type="button" class="df-primary" data-term-pdf>Gerar PDF</button><button type="button" class="df-secondary" data-term-share>Compartilhar</button></div></div>`);
   const run=async(mode)=>{try{const blob=await pdfFor(context,consent);if(consent.id)await ensureSnapshot(context,consent);const name=`termo-${consentType}-${context.mother.name}`;if(mode==='share'){const result=await sharePdf(blob,name,meta.title);DOC.toast(result==='shared'?'Termo compartilhado.':'PDF gerado para compartilhamento.')}else{downloadPdf(blob,name);DOC.toast('PDF do termo gerado.')}}catch(error){DOC.toast(error.message||'Não foi possível gerar o documento.','error')}};
   sheet.querySelector('[data-term-pdf]').addEventListener('click',()=>run('pdf'));sheet.querySelector('[data-term-share]').addEventListener('click',()=>run('share'));
 }
