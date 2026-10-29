@@ -187,22 +187,25 @@ function fileName(value='documento') {
   return String(value || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'documento';
 }
 
-export function createConsentPdf({motherName='Paciente', consentLabel='Termo', statusLabel='Não informado', acceptedAt='', revokedAt='', version='', evidence=''}={}) {
+export function createConsentPdf({motherName='Paciente', consentLabel='Termo', statusLabel='Não informado', acceptedAt='', revokedAt='', version='', evidence='', documentSections=[], modelVersion=''}={}) {
   const details=[
     `Paciente: ${motherName}`,
-    `Status registrado: ${statusLabel}`,
-    acceptedAt ? `Aceite registrado em: ${acceptedAt}` : '',
+    `Status administrativo registrado: ${statusLabel}`,
+    acceptedAt ? `Aceite anteriormente registrado em: ${acceptedAt}` : 'Sem data de aceite registrada.',
     revokedAt ? `Revogação registrada em: ${revokedAt}` : '',
-    version ? `Versão do consentimento: ${version}` : '',
-    evidence ? `Evidência registrada: ${evidence}` : ''
+    version ? `Versão do registro de consentimento: ${version}` : 'Versão do registro de consentimento: não informada.',
+    modelVersion ? `Versão do modelo documental: ${modelVersion}` : '',
+    evidence ? `Evidência administrativa registrada: ${evidence}` : 'Sem evidência de assinatura eletrônica verificada nesta cópia.'
   ].filter(Boolean);
+  const sections=Array.isArray(documentSections)?documentSections.filter(section=>section&&section.title&&section.body):[];
   return buildPagedPdf({
     title:`${consentLabel} - ${motherName}`,
     heading:consentLabel,
     subheading:motherName,
     sections:[
-      {title:'Registro',body:details},
-      {title:'Observação',body:'Este PDF é uma representação documental do consentimento armazenado no prontuário. Alterações futuras de consentimento devem ser realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
+      ...sections,
+      {title:'Registro administrativo e histórico',body:details},
+      {title:'Limites desta representação documental',body:'Este PDF reproduz o modelo informativo atual e o estado administrativo armazenado no prontuário. Não comprova assinatura eletrônica, leitura ou aceite da versão atual pela paciente. Modelos atualizados não alteram autorizações anteriores nem renovam consentimentos automaticamente. Uma autorização que exija assinatura ou manifestação específica deve ser colhida e comprovada no fluxo próprio. Alterações e revogações de permissões continuam sendo realizadas no cadastro da paciente; o PDF não substitui o registro eletrônico.'}
     ]
   });
 }
