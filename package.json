@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "lucide": "^0.469.0",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "pdf-lib": "^1.17.1"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.0.0"
