@@ -15,6 +15,7 @@ import { handleMotherAiChat } from './mother-ai-chat-runtime.js';
 import { handleMotherAiHistory } from './mother-ai-history-runtime.js';
 import { handleCloudflarePatientWrite } from './patient-write-runtime.js';
 import { handleSignatureRequestRuntime } from './signature-requests-runtime.js';
+import { handleSignatureFlowRuntime } from './signature-flow-runtime.js';
 import { handleRelationalIntegrityGuard } from './relational-integrity-runtime.js';
 import { handleUsageObservabilityRuntime } from './usage-observability-runtime.js';
 import { cleanupExpiredUsageSessions } from './usage-presence-service.js';
@@ -183,6 +184,20 @@ export default {
     const url = normalized.url;
     const calendarMutationCopy = isCalendarMutation(request, url) ? request.clone() : null;
     const observeCalendar = result => observeCalendarMutation(result, calendarMutationCopy, env, ctx);
+
+    if (url.pathname === '/assinar' || url.pathname === '/app/assinar') {
+      if (request.method !== 'GET') return apiNotFound();
+      const source = await env.ASSETS.fetch(rewriteAssetRequest(request, '/signature-public.html'));
+      const protectedHeaders = new Headers(source.headers);
+      protectedHeaders.set('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+      protectedHeaders.set('referrer-policy','no-referrer');
+      protectedHeaders.set('x-frame-options','DENY');
+      protectedHeaders.set('cache-control','no-store');
+      protectedHeaders.set('x-robots-tag','noindex, nofollow');
+      return new Response(source.body,{status:source.status,headers:protectedHeaders});
+    }
+    const signatureFlowResponse = await handleSignatureFlowRuntime(request, env, url);
+    if (signatureFlowResponse) return withNoIndex(signatureFlowResponse);
 
     if (ownedFilesRequest && !env.CLINICAL_DB) {
       return cloudflareIdentityRequired(503, 'cloudflare_d1_required');
