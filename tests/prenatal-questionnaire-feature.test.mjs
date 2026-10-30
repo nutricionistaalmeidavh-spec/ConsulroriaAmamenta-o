@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const feature = await import('../public/prenatal-questionnaire-feature.js');
 const app = readFileSync(resolve(root, 'public/clinical-source/core/app-shell.js'), 'utf8');
+const bootstrap = readFileSync(resolve(root, 'src/bootstrap.js'), 'utf8');
 const entry = readFileSync(resolve(root, 'index.html'), 'utf8');
 
 test('pre-natal contains precisely the 17 approved questions in original order', () => {
@@ -54,7 +55,9 @@ test('draft serialization preserves free text and explicit consent without assum
 });
 
 test('prenatal module is loaded in the real frontend and question set is isolated', () => {
-  assert.match(entry, /prenatal-questionnaire-feature\.js/);
+  assert.match(bootstrap, /await importPublicModule\('\/prenatal-questionnaire-feature\.js\?canonical-runtime=1'\)/);
+  assert.ok(bootstrap.indexOf('document.close()') < bootstrap.indexOf("await importPublicModule('/prenatal-questionnaire-feature.js?canonical-runtime=1')"));
+  assert.doesNotMatch(entry, /<script[^>]+src="\/prenatal-questionnaire-feature\.js"/);
   assert.match(app, /if \(!selectedBabies\.length && !isPrenatalAppointment\(\)\)/);
   assert.match(app, /p_baby_ids: selectedBabies\.map/);
   assert.match(app, /if \(isPrenatalAppointment\(\) && !prenatalDeclarationConfirmed/);
