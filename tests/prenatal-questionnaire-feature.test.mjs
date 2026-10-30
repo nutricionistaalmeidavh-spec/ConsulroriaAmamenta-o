@@ -71,6 +71,7 @@ test('prenatal rendering uses explicit canonical hooks without DOM mutations or 
   assert.doesNotMatch(source, /setInterval\\s*\\(/);
   assert.match(source, /window\\.DeboraPrenatal\\s*=\\s*Object\\.freeze\\(\\{\\s*refresh\\s*\\}\\)/);
   assert.match(materializer, /prenatal-canonical-wizard-refresh/);
-  assert.match(materializer, /prenatal-canonical-type-selection-refresh/);
+  assert.match(source, /window\.addEventListener\('click', event =>/);
+  assert.match(source, /\[data-encounter-choice\]\[data-field="appointmentType"\]/);
   assert.match(materializer, /globalThis\\.DeboraPrenatal\\?\\.refresh\\?\\.\\(\\)/);
 });
