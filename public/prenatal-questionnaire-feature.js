@@ -42,12 +42,12 @@ export function serializePrenatalAnswers(answers={}) {
 if (typeof window!=='undefined' && typeof document!=='undefined') {
   const steps = [
     [2,'Informações iniciais'],[3,'Histórico e saúde'],[4,'Gestação e expectativas'],
-    [5,'Origem do atendimento'],[6,'Declarações e autorização']
+    [5,'Origem do atendimento'],[6,'Declarações e autorização'],
+    [7,'Finalização do pré-natal']
   ];
   const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   let previousSnapshot=null;
   let mountedOn=null;
-  let timer=null;
 
   function questionMarkup(item) {
     const id='pn-answer-'+item.number;
@@ -111,13 +111,20 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   function mount() {
     const screen=getScreen();
     if (!screen) return;
-    if (mountedOn===screen && getHidden()) return;
+    // Uma atualização parcial pode substituir apenas uma etapa: não assumir que
+    // o formulário inteiro continua montado porque a etapa 2 ainda existe.
+    if (mountedOn===screen && steps.every(([step])=>screen.querySelector(`[data-wizard-step="${step}"] [data-prenatal-form]`))) return;
     ensureStyle();
     for (const [step,title] of steps) {
       const card=screen.querySelector(`[data-wizard-step="${step}"]`);
       if (!card || card.querySelector('[data-prenatal-form]')) continue;
       const panel=document.createElement('div');
       panel.dataset.prenatalForm=String(step);
+      if (step===7) {
+        panel.innerHTML='<span class="section-kicker">PRÉ-NATAL · ETAPA 7</span><h2>Finalização do pré-natal</h2><p>Confira as informações registradas. Para concluir o atendimento, toque em Continuar. O registro permanecerá no histórico da mãe.</p>';
+        card.appendChild(panel);
+        continue;
+      }
       panel.innerHTML=`<span class="section-kicker">PRÉ-NATAL · ETAPA ${step}</span><h2>${escapeHTML(title)}</h2>${PRENATAL_QUESTIONS.filter(q=>q.step===step).map(questionMarkup).join('')}${step===6?'<p class="pn-notice">Esta autorização é independente e não realiza compartilhamento automático de dados ou documentos. A ausência de autorização não impede o registro de um rascunho.</p>':''}`;
       if (step===2) panel.insertAdjacentHTML('beforeend','<input type="hidden" data-encounter-field="prenatalAnswers" data-section="maternal_assessment">');
       card.appendChild(panel);
@@ -125,11 +132,35 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
     mountedOn=screen;
     previousSnapshot=null;
   }
+  // Ocultar visualmente não basta: collectEncounterDraft percorre todos os
+  // [data-section] mesmo quando o controle está escondido pelo CSS. Suspender
+  // a vinculação dos campos pós-parto evita gravar respostas indevidas no pré-natal.
+  function isolateLegacyFields(screen, prenatal) {
+    for (const card of screen.querySelectorAll('[data-wizard-step="2"],[data-wizard-step="3"],[data-wizard-step="4"],[data-wizard-step="5"],[data-wizard-step="6"]')) {
+      for (const child of card.children) {
+        if (child.hasAttribute('data-prenatal-form')) continue;
+        const fields=[child,...child.querySelectorAll('[data-section],[data-postpartum-section]')];
+        for (const field of fields) {
+          if (prenatal && field.hasAttribute('data-section')) {
+            field.dataset.postpartumSection=field.dataset.section;
+            field.removeAttribute('data-section');
+          } else if (!prenatal && field.hasAttribute('data-postpartum-section')) {
+            field.dataset.section=field.dataset.postpartumSection;
+            field.removeAttribute('data-postpartum-section');
+          }
+        }
+      }
+    }
+  }
   function refresh() {
     const screen=getScreen();
     if (!screen) return;
     mount();
     const prenatal=isPrenatal(activeType());
+    isolateLegacyFields(screen,prenatal);
+    const motherLabel=screen.querySelector('[data-appointment-patient]')?.closest('label')?.querySelector('span');
+    const wantedLabel=prenatal?'Mãe':'Mãe + bebê';
+    if(motherLabel && motherLabel.textContent!==wantedLabel) motherLabel.textContent=wantedLabel;
     if (screen.dataset.prenatalMode!==String(prenatal)) screen.dataset.prenatalMode=String(prenatal);
     for (const [step] of steps) {
       const card=screen.querySelector(`[data-wizard-step="${step}"]`);
@@ -160,10 +191,13 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       refresh();
     }
   },true);
-  document.addEventListener('click',event=>{
-    if(event.target.closest?.('[data-encounter-choice][data-field="appointmentType"]')) setTimeout(refresh,0);
-  },true);
-  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(refresh,45)}).observe(document.documentElement,{childList:true,subtree:true});
-  window.addEventListener('hashchange',()=>setTimeout(refresh,0));
+  // O shell finaliza a escolha no document.click; o clique chega a window
+  // depois dele. Sincronização direta, sem observer, polling ou timer.
+  window.addEventListener('click', event => {
+    const choice=event.target?.closest?.('[data-encounter-choice][data-field="appointmentType"]');
+    if (choice && getScreen()?.contains(choice)) refresh();
+  });
+  // renderWizard() chama este hook na montagem, no reset e após hidratar rascunhos.
+  window.DeboraPrenatal = Object.freeze({ refresh });
   refresh();
 }

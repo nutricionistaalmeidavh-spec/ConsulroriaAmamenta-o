@@ -237,6 +237,9 @@ async function ensureClinicalAdditiveFeatures() {
   // Re-import under a distinct module URL after document.close() so its observer and
   // initial mount bind to the live clinical DOM instead of the discarded placeholder.
   await importPublicModule('/clinical-care-flow-feature.js?canonical-runtime=1');
+  // document.write() replaces the outer HTML; mount the prenatal questionnaire only
+  // against the final clinical DOM so legacy postpartum fields can be hidden.
+  await importPublicModule('/prenatal-questionnaire-feature.js?canonical-runtime=1');
   await importPublicModule('/billing-service-consistency.js');
 }
 

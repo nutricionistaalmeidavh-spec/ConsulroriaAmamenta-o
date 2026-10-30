@@ -522,6 +522,18 @@ replaceText('core/app-shell.js',
 
 applyMotherOnlyPatientMaterialization(replaceText);
 
+/*
+ * Prenatal UI is an explicit projection of canonical wizard state.
+ * Hook the existing source-of-truth renderer, leaving format-choice hardening
+ * untouched. Type choices are synchronized through an explicit window click.
+ * No observer, no polling, and no second state owner.
+ */
+replaceText('core/app-shell.js',
+  "  window.scrollTo({ top: 0, behavior: 'smooth' });\n}\nfunction selectedWizardPatient()",
+  "  globalThis.DeboraPrenatal?.refresh?.();\n  window.scrollTo({ top: 0, behavior: 'smooth' });\n}\nfunction selectedWizardPatient()",
+  'prenatal-canonical-wizard-refresh');
+
+
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   modules[outputPath] = {
