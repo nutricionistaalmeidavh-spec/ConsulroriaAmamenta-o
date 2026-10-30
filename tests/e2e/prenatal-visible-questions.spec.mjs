@@ -64,7 +64,8 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   }
   await page.locator('[data-wizard-next]').click();
   const step7 = screen.locator('[data-wizard-step="7"]');
-  await expect(step7.getByText('Finalização do pré-natal')).toBeVisible();
+  await expect(step7.getByRole('heading',{name:'Prontuário'})).toBeVisible();
+  await expect(page.locator('[data-wizard-next]')).toHaveText('Abrir prontuário');
   await expect(step7.getByText('Follow-up', { exact: true })).toBeHidden();
   await expect(step7.locator('[data-action="print-plan"]')).toBeHidden();
   await page.locator('[data-wizard-prev]').click();
