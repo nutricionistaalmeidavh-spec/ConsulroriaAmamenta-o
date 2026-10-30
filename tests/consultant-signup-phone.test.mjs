@@ -16,10 +16,10 @@ const envFor = db => ({ CLINICAL_DB: db, CLINICAL_AUTH_SECRET: 'local-unit-secre
 test('signup UI requests optional cellphone and sends it in both signup paths', () => {
   const html = readFileSync(new URL('../public/comercial/index.html', import.meta.url), 'utf8');
   const js = readFileSync(new URL('../public/comercial/app.js', import.meta.url), 'utf8');
-  assert.match(html, /id="signup-form"[\\s\\S]*name="phone"[\\s\\S]*name="password"/);
-  assert.match(js, /body: JSON.stringify\\(\\{ email, password, phone, planCode: selectedPlan/);
-  assert.match(js, /email,\\s*password,\\s*phone,\\s*data:/);
-  assert.match(js, /phoneInput.value = user.phone \\|\\| ''/);
+  assert.match(html, /id="signup-form"[\s\S]*name="phone"[\s\S]*name="password"/);
+  assert.match(js, /body: JSON.stringify\(\{ email, password, phone, planCode: selectedPlan/);
+  assert.match(js, /email,\s*password,\s*phone,\s*data:/);
+  assert.match(js, /phoneInput.value = user.phone \|\| ''/);
 });
 
 test('optional phone is normalized, absent phone is supported, malformed phone rejected', () => {
