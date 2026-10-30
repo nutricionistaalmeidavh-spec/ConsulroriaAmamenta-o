@@ -76,6 +76,8 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await page.locator('[data-wizard-next]').click();
   await expect(step2.getByText('Queixa principal')).toBeVisible();
   await expect(step2.locator('[data-prenatal-number="1"]')).toBeHidden();
+  await expect(step3.locator('[data-encounter-field="painScore"][data-section="maternal_assessment"]')).toHaveCount(1);
+
   // Draft hydration changes aria-pressed without click. The canonical
   // hydration lifecycle invokes this explicit bridge after applying the draft.
   // No DOM observer is required.
