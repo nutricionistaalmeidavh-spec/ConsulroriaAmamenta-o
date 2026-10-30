@@ -48,7 +48,6 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   let previousSnapshot=null;
   let mountedOn=null;
-  let timer=null;
 
   function questionMarkup(item) {
     const id='pn-answer-'+item.number;
@@ -192,30 +191,9 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       refresh();
     }
   },true);
-  document.addEventListener('click',event=>{
-    if(event.target.closest?.('[data-encounter-choice][data-field="appointmentType"]')) setTimeout(refresh,0);
-  },true);
-  // O shell reaplica aria-pressed sem eventos ao reabrir rascunhos.
-  // Monitorar somente mutações estruturais no wizard (não trocas de nós de texto
-  // em outros painéis) e aria-pressed do tipo de atendimento. Agendar no máximo
-  // uma atualização por ciclo evita starvation do debounce e loops de render.
-  function affectsWizard(record) {
-    if (record.type==='attributes') return record.target?.matches?.(
-      '[data-encounter-choice][data-section="identification"][data-field="appointmentType"]');
-    if (record.type!=='childList') return false;
-    const changedNodes=[...record.addedNodes,...record.removedNodes];
-    if (!changedNodes.some(node=>node.nodeType===1)) return false;
-    if (record.target?.closest?.('[data-screen="appointment"]')) return true;
-    return changedNodes.some(node=>node.nodeType===1
-      && (node.matches?.('[data-screen="appointment"]')
-        || node.querySelector?.('[data-screen="appointment"]')));
-  }
-  new MutationObserver((mutations)=>{
-    if (!mutations.some(affectsWizard) || timer!==null) return;
-    timer=setTimeout(()=>{timer=null;refresh()},45);
-  }).observe(document.documentElement,{
-    childList:true,subtree:true,attributes:true,attributeFilter:['aria-pressed']
-  });
-  window.addEventListener('hashchange',()=>setTimeout(refresh,0));
+  // A aplicação canônica chama refresh() explicitamente ao montar o wizard,
+  // alterar o tipo de atendimento e reidratar um rascunho.
+  // Não usar MutationObserver, polling nem timers para sincronizar o DOM.
+  window.DeboraPrenatal = Object.freeze({ refresh });
   refresh();
 }
