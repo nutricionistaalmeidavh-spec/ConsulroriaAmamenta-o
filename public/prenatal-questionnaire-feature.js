@@ -139,7 +139,7 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
     for (const card of screen.querySelectorAll('[data-wizard-step="2"],[data-wizard-step="3"],[data-wizard-step="4"],[data-wizard-step="5"],[data-wizard-step="6"]')) {
       for (const child of card.children) {
         if (child.hasAttribute('data-prenatal-form')) continue;
-        const fields=[child,...child.querySelectorAll('[data-section]')];
+        const fields=[child,...child.querySelectorAll('[data-section],[data-postpartum-section]')];
         for (const field of fields) {
           if (prenatal && field.hasAttribute('data-section')) {
             field.dataset.postpartumSection=field.dataset.section;
