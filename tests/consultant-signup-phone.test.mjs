@@ -9,8 +9,8 @@ import { handleCloudflareBillingRuntime } from '../worker/cloudflare-billing-run
 const post = (path, body) => new Request('https://app.test' + path, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
 });
-const envFor = db => ({ CLINICAL_DB: db, CLINICAL_AUTH_SECRET: 'local-unit-secret',
-  ARTISYS_LICENSING: { fetch: async () => Response.json({ productCode: 'debora-lactacao', commercial: true, active: true, status: 'active', planCode: 'pro_monthly' }) },
+const envFor = db => ({ CLINICAL_DB: db, CLINICAL_AUTH_SECRET: 'local-unit-secret', LICENSE_SERVICE_SECRET: 'local-unit-license',
+  ARTISYS_LICENSING: { fetch: async () => Response.json({ productCode: 'debora-lactacao', commercial: true, active: false, status: 'freemium', planCode: 'freemium' }) },
 });
 
 test('signup UI requests optional cellphone and sends it in both signup paths', () => {
