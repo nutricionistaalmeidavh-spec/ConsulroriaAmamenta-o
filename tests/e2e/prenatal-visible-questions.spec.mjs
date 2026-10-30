@@ -48,6 +48,16 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await expect(step6.getByText('Pega adequada')).toBeHidden();
   await expect(step6.getByText('Ordenha / complemento, se aplicável')).toBeHidden();
   await expect(step6.locator('[data-prenatal-answer="consultationAuthorization"]')).not.toBeChecked();
+  // Hidden legacy inputs must not enter the saved prenatal payload.
+  for (const number of [2,3,4,5,6]) {
+    await expect(screen.locator(`[data-wizard-step="${number}"] > :not([data-prenatal-form]) [data-section]`)).toHaveCount(0);
+  }
+  await page.locator('[data-wizard-next]').click();
+  const step7 = screen.locator('[data-wizard-step="7"]');
+  await expect(step7.getByText('Finalização do pré-natal')).toBeVisible();
+  await expect(step7.getByText('Follow-up', { exact: true })).toBeHidden();
+  await expect(step7.locator('[data-action="print-plan"]')).toBeHidden();
+  await page.locator('[data-wizard-prev]').click();
 
   // Switching modes must restore the existing postpartum workflow.
   for (let step = 6; step > 1; step--) await page.locator('[data-wizard-prev]').click();
