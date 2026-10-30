@@ -42,7 +42,7 @@ for (const planCode of ['pro_monthly', 'pro_annual']) {
     });
     try {
       const email = `${planCode}@example.test`, password = 'New-client-only-2026!';
-      const signup = await call('/api/billing/signup', { email, password, planCode });
+      const signup = await call('/api/billing/signup', { email, password, planCode, phone: '(16) 99999-4321' });
       assert.equal(signup.status, 200, await signup.clone().text());
       const proof = await signup.json();
       assert.equal(await runtime.db.prepare('SELECT user_id FROM auth_users WHERE email=?').bind(email).first(), null);
@@ -62,7 +62,10 @@ for (const planCode of ['pro_monthly', 'pro_annual']) {
       assert.equal((await (await call('/api/billing/pending-status', proof)).json()).status, 'account_activated');
       const login = await call('/api/auth/token?grant_type=password', { email, password });
       assert.equal(login.status, 200, await login.clone().text());
-      const token = (await login.json()).access_token;
+      const loginPayload = await login.json();
+      assert.equal(loginPayload.user.phone, '(16) 99999-4321', 'paid account retains signup cellphone');
+      assert.equal((await runtime.db.prepare('SELECT phone FROM auth_users WHERE email=?').bind(email).first()).phone, '(16) 99999-4321');
+      const token = loginPayload.access_token;
       const status = await call('/api/billing/status', undefined, token);
       assert.equal((await status.json()).status, 'active');
       const attempts = await Promise.all([1, 2].map(() => call('/api/billing/checkout', { planCode }, token)));
