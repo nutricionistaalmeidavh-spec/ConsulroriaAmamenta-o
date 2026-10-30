@@ -38,6 +38,11 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   const step4 = screen.locator('[data-wizard-step="4"]');
   await expect(step4.locator('[data-prenatal-number="10"]')).toBeVisible();
   await expect(step4.getByText('Avaliação do bebê')).toBeHidden();
+  // Component replacement must be recovered by the observer without a full reload.
+  await step4.locator('[data-prenatal-form]').evaluate((panel) => panel.remove());
+  await expect(step4.locator('[data-prenatal-number="10"]')).toBeVisible();
+  await expect(screen.locator('[data-prenatal-form]')).toHaveCount(6);
+
 
   await page.locator('[data-wizard-next]').click();
   const step5 = screen.locator('[data-wizard-step="5"]');
@@ -69,4 +74,19 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await page.locator('[data-wizard-next]').click();
   await expect(step2.getByText('Queixa principal')).toBeVisible();
   await expect(step2.locator('[data-prenatal-number="1"]')).toBeHidden();
+  // Hydration of an existing draft updates aria-pressed programmatically (no click).
+  // The observer must update visibility and section isolation for that path too.
+  await page.evaluate(() => {
+    document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Consulta inicial"]').setAttribute('aria-pressed', 'false');
+    document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').setAttribute('aria-pressed', 'true');
+  });
+  await expect(screen).toHaveAttribute('data-prenatal-mode', 'true');
+  await expect(step2.locator('[data-prenatal-number="1"]')).toBeVisible();
+  await expect(step2.getByText('Queixa principal')).toBeHidden();
+  await page.evaluate(() => {
+    document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').setAttribute('aria-pressed', 'false');
+    document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Consulta inicial"]').setAttribute('aria-pressed', 'true');
+  });
+  await expect(screen).toHaveAttribute('data-prenatal-mode', 'false');
+  await expect(step2.getByText('Queixa principal')).toBeVisible();
 });
