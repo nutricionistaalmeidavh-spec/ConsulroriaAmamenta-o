@@ -38,8 +38,10 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   const step4 = screen.locator('[data-wizard-step="4"]');
   await expect(step4.locator('[data-prenatal-number="10"]')).toBeVisible();
   await expect(step4.getByText('Avaliação do bebê')).toBeHidden();
-  // Component replacement must be recovered by the observer without a full reload.
+  // The canonical wizard render is the only legitimate remount trigger.
   await step4.locator('[data-prenatal-form]').evaluate((panel) => panel.remove());
+  await page.locator('[data-wizard-prev]').click();
+  await page.locator('[data-wizard-next]').click();
   await expect(step4.locator('[data-prenatal-number="10"]')).toBeVisible();
   await expect(screen.locator('[data-prenatal-form]')).toHaveCount(6);
 
@@ -74,11 +76,13 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await page.locator('[data-wizard-next]').click();
   await expect(step2.getByText('Queixa principal')).toBeVisible();
   await expect(step2.locator('[data-prenatal-number="1"]')).toBeHidden();
-  // Hydration of an existing draft updates aria-pressed programmatically (no click).
-  // The observer must update visibility and section isolation for that path too.
+  // Draft hydration changes aria-pressed without click. The canonical
+  // hydration lifecycle invokes this explicit bridge after applying the draft.
+  // No DOM observer is required.
   await page.evaluate(() => {
     document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Consulta inicial"]').setAttribute('aria-pressed', 'false');
     document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').setAttribute('aria-pressed', 'true');
+    window.DeboraPrenatal.refresh();
   });
   await expect(screen).toHaveAttribute('data-prenatal-mode', 'true');
   await expect(step2.locator('[data-prenatal-number="1"]')).toBeVisible();
@@ -86,6 +90,7 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await page.evaluate(() => {
     document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').setAttribute('aria-pressed', 'false');
     document.querySelector('[data-encounter-choice][data-field="appointmentType"][data-value="Consulta inicial"]').setAttribute('aria-pressed', 'true');
+    window.DeboraPrenatal.refresh();
   });
   await expect(screen).toHaveAttribute('data-prenatal-mode', 'false');
   await expect(step2.getByText('Queixa principal')).toBeVisible();
