@@ -8,6 +8,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const feature = await import('../public/prenatal-questionnaire-feature.js');
 const app = readFileSync(resolve(root, 'public/clinical-source/core/app-shell.js'), 'utf8');
 const bootstrap = readFileSync(resolve(root, 'src/bootstrap.js'), 'utf8');
+const materializer = readFileSync(resolve(root, 'scripts/materialize-clinical-source.mjs'), 'utf8');
+const source = readFileSync(resolve(root, 'public/prenatal-questionnaire-feature.js'), 'utf8');
 const entry = readFileSync(resolve(root, 'index.html'), 'utf8');
 
 test('pre-natal contains precisely the 17 approved questions in original order', () => {
@@ -62,4 +64,13 @@ test('prenatal module is loaded in the real frontend and question set is isolate
   assert.match(app, /p_baby_ids: selectedBabies\.map/);
   assert.match(app, /if \(isPrenatalAppointment\(\) && !prenatalDeclarationConfirmed/);
   assert.match(app, /ident\.appointmentType === 'Pré-natal' \? null : followupDue/);
+});
+
+test('prenatal rendering uses explicit canonical hooks without DOM mutations or polling', () => {
+  assert.doesNotMatch(source, /new\\s+MutationObserver\\s*\\(/);
+  assert.doesNotMatch(source, /setInterval\\s*\\(/);
+  assert.match(source, /window\\.DeboraPrenatal\\s*=\\s*Object\\.freeze\\(\\{\\s*refresh\\s*\\}\\)/);
+  assert.match(materializer, /prenatal-canonical-wizard-refresh/);
+  assert.match(materializer, /prenatal-canonical-type-selection-refresh/);
+  assert.match(materializer, /globalThis\\.DeboraPrenatal\\?\\.refresh\\?\\.\\(\\)/);
 });
