@@ -28,8 +28,8 @@ async function cnCapture(e){`,
     'postpartum-backward-only'
   );
   replaceExactlyOnce(
-    "${cnState.direction==='forward'?'Continuar':cnState.direction==='backward'?'Voltar à queixa':'Fechar'}",
-    "${cnState.direction==='forward'?(cnIsPrenatalWizardMode()?'Salvar prontuário e concluir':'Continuar'):cnState.direction==='backward'?'Voltar à queixa':'Fechar'}",
+    "${direction==='forward'?'Continuar':direction==='backward'?'Voltar à queixa':'Fechar'}",
+    "${direction==='forward'?(cnIsPrenatalWizardMode()?'Salvar prontuário e concluir':'Continuar'):direction==='backward'?'Voltar à queixa':'Fechar'}",
     'prenatal-final-action-label'
   );
   return source;
