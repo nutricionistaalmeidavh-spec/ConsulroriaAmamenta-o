@@ -195,16 +195,24 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   document.addEventListener('click',event=>{
     if(event.target.closest?.('[data-encounter-choice][data-field="appointmentType"]')) setTimeout(refresh,0);
   },true);
-  // O shell canônico reaplica escolhas via aria-pressed ao reabrir rascunhos,
-  // sem disparar click/change. Observar só esse atributo (além de childList)
-  // impede que as próprias mudanças em data-section e data-prenatal-* criem loops.
+  // O shell reaplica aria-pressed sem eventos ao reabrir rascunhos.
+  // Monitorar somente mutações estruturais no wizard (não trocas de nós de texto
+  // em outros painéis) e aria-pressed do tipo de atendimento. Agendar no máximo
+  // uma atualização por ciclo evita starvation do debounce e loops de render.
+  function affectsWizard(record) {
+    if (record.type==='attributes') return record.target?.matches?.(
+      '[data-encounter-choice][data-section="identification"][data-field="appointmentType"]');
+    if (record.type!=='childList') return false;
+    const changedNodes=[...record.addedNodes,...record.removedNodes];
+    if (!changedNodes.some(node=>node.nodeType===1)) return false;
+    if (record.target?.closest?.('[data-screen="appointment"]')) return true;
+    return changedNodes.some(node=>node.nodeType===1
+      && (node.matches?.('[data-screen="appointment"]')
+        || node.querySelector?.('[data-screen="appointment"]')));
+  }
   new MutationObserver((mutations)=>{
-    const changed=mutations.some(record=>record.type==='childList'
-      || (record.type==='attributes' && record.target?.matches?.(
-        '[data-encounter-choice][data-section="identification"][data-field="appointmentType"]')));
-    if (!changed) return;
-    clearTimeout(timer);
-    timer=setTimeout(refresh,45);
+    if (!mutations.some(affectsWizard) || timer!==null) return;
+    timer=setTimeout(()=>{timer=null;refresh()},45);
   }).observe(document.documentElement,{
     childList:true,subtree:true,attributes:true,attributeFilter:['aria-pressed']
   });
