@@ -11,7 +11,10 @@ test('Pré-natal replaces all postpartum steps in the live canonical browser and
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   expect((await saved).status()).toBe(201);
 
-  await page.locator('[data-action="new-appointment"]:visible').first().click();
+  await expect(page.locator('[data-patient-title]')).toHaveText(motherName);
+  await page.locator('[data-screen="patient"] [data-action="new-appointment"]:visible').click();
+  await expect(page.locator('[data-screen="appointment"]')).toBeVisible();
+  await expect(page.locator('[data-wizard-step="1"]')).toBeVisible();
   await page.locator('[data-encounter-choice][data-field="appointmentType"][data-value="Pré-natal"]').click();
   const screen = page.locator('[data-screen="appointment"]');
   await expect(screen).toHaveAttribute('data-prenatal-mode', 'true');
