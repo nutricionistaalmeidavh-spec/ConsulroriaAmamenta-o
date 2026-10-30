@@ -67,11 +67,11 @@ test('prenatal module is loaded in the real frontend and question set is isolate
 });
 
 test('prenatal rendering uses explicit canonical hooks without DOM mutations or polling', () => {
-  assert.doesNotMatch(source, /new\\s+MutationObserver\\s*\\(/);
-  assert.doesNotMatch(source, /setInterval\\s*\\(/);
-  assert.match(source, /window\\.DeboraPrenatal\\s*=\\s*Object\\.freeze\\(\\{\\s*refresh\\s*\\}\\)/);
+  assert.doesNotMatch(source, /new\s+MutationObserver\s*\(/);
+  assert.doesNotMatch(source, /setInterval\s*\(/);
+  assert.match(source, /window\.DeboraPrenatal\s*=\s*Object\.freeze\(\{\s*refresh\s*\}\)/);
   assert.match(materializer, /prenatal-canonical-wizard-refresh/);
   assert.match(source, /window\.addEventListener\('click', event =>/);
   assert.match(source, /\[data-encounter-choice\]\[data-field="appointmentType"\]/);
-  assert.match(materializer, /globalThis\\.DeboraPrenatal\\?\\.refresh\\?\\.\\(\\)/);
+  assert.match(materializer, /globalThis\.DeboraPrenatal\?\.refresh\?\.\(\)/);
 });
