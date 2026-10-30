@@ -43,7 +43,7 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   const steps = [
     [2,'Informações iniciais'],[3,'Histórico e saúde'],[4,'Gestação e expectativas'],
     [5,'Origem do atendimento'],[6,'Declarações e autorização'],
-    [7,'Finalização do pré-natal']
+    [7,'Prontuário']
   ];
   const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   let previousSnapshot=null;
@@ -121,7 +121,7 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       const panel=document.createElement('div');
       panel.dataset.prenatalForm=String(step);
       if (step===7) {
-        panel.innerHTML='<span class="section-kicker">PRÉ-NATAL · ETAPA 7</span><h2>Finalização do pré-natal</h2><p>Confira as informações registradas. Para concluir o atendimento, toque em Continuar. O registro permanecerá no histórico da mãe.</p>';
+        panel.innerHTML='<span class="section-kicker">PRÉ-NATAL · ETAPA 7</span><h2>Prontuário</h2><p>Última etapa: registre o atendimento no prontuário clínico da mãe. Abra o prontuário, escreva a evolução e selecione Salvar prontuário e concluir. O registro ficará no histórico da paciente.</p>';
         card.appendChild(panel);
         continue;
       }
@@ -166,6 +166,9 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       const card=screen.querySelector(`[data-wizard-step="${step}"]`);
       if (card && card.dataset.prenatalActive!==String(prenatal)) card.dataset.prenatalActive=String(prenatal);
     }
+    const lastStep=screen.querySelector('[data-wizard-step="7"]');
+    const next=screen.querySelector('[data-wizard-next]');
+    if(prenatal && next && lastStep && !lastStep.hidden) next.textContent='Abrir prontuário';
     const hidden=getHidden();
     if (hidden && String(hidden.value||'')!==previousSnapshot) hydrate(hidden.value);
   }
