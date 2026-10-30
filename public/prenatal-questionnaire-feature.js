@@ -112,7 +112,9 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   function mount() {
     const screen=getScreen();
     if (!screen) return;
-    if (mountedOn===screen && getHidden()) return;
+    // Uma atualização parcial pode substituir apenas uma etapa: não assumir que
+    // o formulário inteiro continua montado porque a etapa 2 ainda existe.
+    if (mountedOn===screen && steps.every(([step])=>screen.querySelector(`[data-wizard-step="${step}"] [data-prenatal-form]`))) return;
     ensureStyle();
     for (const [step,title] of steps) {
       const card=screen.querySelector(`[data-wizard-step="${step}"]`);
@@ -193,7 +195,19 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
   document.addEventListener('click',event=>{
     if(event.target.closest?.('[data-encounter-choice][data-field="appointmentType"]')) setTimeout(refresh,0);
   },true);
-  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(refresh,45)}).observe(document.documentElement,{childList:true,subtree:true});
+  // O shell canônico reaplica escolhas via aria-pressed ao reabrir rascunhos,
+  // sem disparar click/change. Observar só esse atributo (além de childList)
+  // impede que as próprias mudanças em data-section e data-prenatal-* criem loops.
+  new MutationObserver((mutations)=>{
+    const changed=mutations.some(record=>record.type==='childList'
+      || (record.type==='attributes' && record.target?.matches?.(
+        '[data-encounter-choice][data-section="identification"][data-field="appointmentType"]')));
+    if (!changed) return;
+    clearTimeout(timer);
+    timer=setTimeout(refresh,45);
+  }).observe(document.documentElement,{
+    childList:true,subtree:true,attributes:true,attributeFilter:['aria-pressed']
+  });
   window.addEventListener('hashchange',()=>setTimeout(refresh,0));
   refresh();
 }
