@@ -42,7 +42,8 @@ export function serializePrenatalAnswers(answers={}) {
 if (typeof window!=='undefined' && typeof document!=='undefined') {
   const steps = [
     [2,'Informações iniciais'],[3,'Histórico e saúde'],[4,'Gestação e expectativas'],
-    [5,'Origem do atendimento'],[6,'Declarações e autorização']
+    [5,'Origem do atendimento'],[6,'Declarações e autorização'],
+    [7,'Finalização do pré-natal']
   ];
   const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   let previousSnapshot=null;
@@ -118,6 +119,11 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       if (!card || card.querySelector('[data-prenatal-form]')) continue;
       const panel=document.createElement('div');
       panel.dataset.prenatalForm=String(step);
+      if (step===7) {
+        panel.innerHTML='<span class="section-kicker">PRÉ-NATAL · ETAPA 7</span><h2>Finalização do pré-natal</h2><p>Confira as informações registradas. Para concluir o atendimento, toque em Continuar. O registro permanecerá no histórico da mãe.</p>';
+        card.appendChild(panel);
+        continue;
+      }
       panel.innerHTML=`<span class="section-kicker">PRÉ-NATAL · ETAPA ${step}</span><h2>${escapeHTML(title)}</h2>${PRENATAL_QUESTIONS.filter(q=>q.step===step).map(questionMarkup).join('')}${step===6?'<p class="pn-notice">Esta autorização é independente e não realiza compartilhamento automático de dados ou documentos. A ausência de autorização não impede o registro de um rascunho.</p>':''}`;
       if (step===2) panel.insertAdjacentHTML('beforeend','<input type="hidden" data-encounter-field="prenatalAnswers" data-section="maternal_assessment">');
       card.appendChild(panel);
@@ -125,11 +131,35 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
     mountedOn=screen;
     previousSnapshot=null;
   }
+  // Ocultar visualmente não basta: collectEncounterDraft percorre todos os
+  // [data-section] mesmo quando o controle está escondido pelo CSS. Suspender
+  // a vinculação dos campos pós-parto evita gravar respostas indevidas no pré-natal.
+  function isolateLegacyFields(screen, prenatal) {
+    for (const card of screen.querySelectorAll('[data-wizard-step="2"],[data-wizard-step="3"],[data-wizard-step="4"],[data-wizard-step="5"],[data-wizard-step="6"]')) {
+      for (const child of card.children) {
+        if (child.hasAttribute('data-prenatal-form')) continue;
+        const fields=[child,...child.querySelectorAll('[data-section]')];
+        for (const field of fields) {
+          if (prenatal && field.hasAttribute('data-section')) {
+            field.dataset.postpartumSection=field.dataset.section;
+            field.removeAttribute('data-section');
+          } else if (!prenatal && field.hasAttribute('data-postpartum-section')) {
+            field.dataset.section=field.dataset.postpartumSection;
+            field.removeAttribute('data-postpartum-section');
+          }
+        }
+      }
+    }
+  }
   function refresh() {
     const screen=getScreen();
     if (!screen) return;
     mount();
     const prenatal=isPrenatal(activeType());
+    isolateLegacyFields(screen,prenatal);
+    const motherLabel=screen.querySelector('[data-appointment-patient]')?.closest('label')?.querySelector('span');
+    const wantedLabel=prenatal?'Mãe':'Mãe + bebê';
+    if(motherLabel && motherLabel.textContent!==wantedLabel) motherLabel.textContent=wantedLabel;
     if (screen.dataset.prenatalMode!==String(prenatal)) screen.dataset.prenatalMode=String(prenatal);
     for (const [step] of steps) {
       const card=screen.querySelector(`[data-wizard-step="${step}"]`);
