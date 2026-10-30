@@ -56,7 +56,7 @@ test('draft serialization preserves free text and explicit consent without assum
 
 test('prenatal module is loaded in the real frontend and question set is isolated', () => {
   assert.match(bootstrap, /await importPublicModule\('\/prenatal-questionnaire-feature\.js\?canonical-runtime=1'\)/);
-  assert.ok(bootstrap.indexOf('document.close()') < bootstrap.indexOf("await importPublicModule('/prenatal-questionnaire-feature.js?canonical-runtime=1')"));
+  assert.match(bootstrap, /document\.close\(\);\s*await ensureClinicalPhaseLoaders\(\);\s*await ensureClinicalAdditiveFeatures\(\);/);
   assert.doesNotMatch(entry, /<script[^>]+src="\/prenatal-questionnaire-feature\.js"/);
   assert.match(app, /if \(!selectedBabies\.length && !isPrenatalAppointment\(\)\)/);
   assert.match(app, /p_baby_ids: selectedBabies\.map/);
