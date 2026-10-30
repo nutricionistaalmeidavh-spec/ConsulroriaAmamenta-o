@@ -191,9 +191,13 @@ if (typeof window!=='undefined' && typeof document!=='undefined') {
       refresh();
     }
   },true);
-  // A aplicação canônica chama refresh() explicitamente ao montar o wizard,
-  // alterar o tipo de atendimento e reidratar um rascunho.
-  // Não usar MutationObserver, polling nem timers para sincronizar o DOM.
+  // O shell finaliza a escolha no document.click; o clique chega a window
+  // depois dele. Sincronização direta, sem observer, polling ou timer.
+  window.addEventListener('click', event => {
+    const choice=event.target?.closest?.('[data-encounter-choice][data-field="appointmentType"]');
+    if (choice && getScreen()?.contains(choice)) refresh();
+  });
+  // renderWizard() chama este hook na montagem, no reset e após hidratar rascunhos.
   window.DeboraPrenatal = Object.freeze({ refresh });
   refresh();
 }
