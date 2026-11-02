@@ -115,6 +115,12 @@ export async function listObservedUsers(env, query={}, now=new Date()) {
   if(query.lastSeenFrom){where.push('p.last_seen_at>=?');params.push(String(query.lastSeenFrom))}
   if(query.lastSeenTo){where.push('p.last_seen_at<=?');params.push(String(query.lastSeenTo))}
   params.push(limit+1);
+  // Read-only fallback for older accounts: profile contact lives in canonical supabase_records.
+  // Do not duplicate it into auth_users or expose the rest of the profile.
+  const profilePhone = `(SELECT json_extract(r.record_json,'$.phone') FROM supabase_records r
+    WHERE r.table_name='professional_profiles' AND r.owner_id=u.user_id
+      AND json_valid(r.record_json) AND NULLIF(TRIM(json_extract(r.record_json,'$.phone')),'') IS NOT NULL
+    ORDER BY r.source_updated_at DESC LIMIT 1)`;
   const sql=`WITH usage AS (
       SELECT user_id,
         SUM(CASE WHEN usage_date=? THEN session_count ELSE 0 END) sessions_today,
@@ -123,7 +129,8 @@ export async function listObservedUsers(env, query={}, now=new Date()) {
         SUM(CASE WHEN usage_date>=? THEN active_seconds ELSE 0 END) active_30d
       FROM user_usage_daily WHERE usage_date>=? GROUP BY user_id
     )
-    SELECT u.user_id,u.email,u.created_at,u.last_sign_in_at,p.last_seen_at,p.current_session_id,
+    SELECT u.user_id,u.email,COALESCE(NULLIF(TRIM(u.phone),''),${profilePhone}) phone,
+      u.created_at,u.last_sign_in_at,p.last_seen_at,p.current_session_id,
       s.plan_code,s.status subscription_status,s.current_period_end,
       COALESCE(usage.sessions_today,0) sessions_today,COALESCE(usage.active_today,0) active_today,
       COALESCE(usage.active_7d,0) active_7d,COALESCE(usage.active_30d,0) active_30d
@@ -136,7 +143,7 @@ export async function listObservedUsers(env, query={}, now=new Date()) {
   const rows=(await db.prepare(sql).bind(...params).all()).results||[];
   const hasMore=rows.length>limit, visible=rows.slice(0,limit), cutoff=onlineCutoff(now);
   const items=visible.map(row=>({
-    userId:row.user_id,email:row.email||null,createdAt:row.created_at||null,lastSignInAt:row.last_sign_in_at||null,lastSeenAt:row.last_seen_at||null,
+    userId:row.user_id,email:row.email||null,phone:row.phone||null,createdAt:row.created_at||null,lastSignInAt:row.last_sign_in_at||null,lastSeenAt:row.last_seen_at||null,
     online:Boolean(row.current_session_id&&row.last_seen_at&&row.last_seen_at>=cutoff),
     planCode:['active','trialing','past_due'].includes(String(row.subscription_status||''))?row.plan_code:'freemium',
     subscriptionStatus:row.subscription_status||null,currentPeriodEnd:row.current_period_end||null,
