@@ -6,7 +6,8 @@ import { observabilitySummary, listObservedUsers, listObservedSales, listUserSes
 function d1() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(`
-    CREATE TABLE auth_users(user_id TEXT PRIMARY KEY,email TEXT,created_at TEXT,last_sign_in_at TEXT);
+    CREATE TABLE auth_users(user_id TEXT PRIMARY KEY,email TEXT,phone TEXT,created_at TEXT,last_sign_in_at TEXT);
+    CREATE TABLE supabase_records(table_name TEXT,record_key TEXT,owner_id TEXT,record_json TEXT,source_updated_at TEXT);
     CREATE TABLE billing_pending_signups(user_id TEXT PRIMARY KEY,email TEXT);
     CREATE TABLE billing_checkout_requests(id TEXT PRIMARY KEY,owner_id TEXT,plan_code TEXT,provider TEXT,status TEXT,external_checkout_id TEXT,subtotal_cents INTEGER,discount_cents INTEGER,total_cents INTEGER,created_at TEXT,updated_at TEXT);
     CREATE TABLE subscriptions(id TEXT PRIMARY KEY,owner_id TEXT,provider TEXT,plan_code TEXT,status TEXT,current_period_end TEXT,updated_at TEXT,UNIQUE(owner_id,provider));
@@ -38,6 +39,7 @@ test('observability contracts expose only administrative account, billing and us
   const env = { CLINICAL_DB: db };
   db.sqlite.prepare('INSERT INTO auth_users(user_id,email,created_at,last_sign_in_at) VALUES(?,?,?,?)')
     .run('u1','safe@example.test','2026-09-25T10:00:00.000Z','2026-09-25T11:00:00.000Z');
+  db.sqlite.prepare('INSERT INTO supabase_records VALUES(?,?,?,?,?)').run('professional_profiles','p1','u1',JSON.stringify({phone:'(16) 98888-1234',clinicalNote:'private'}),'2026-09-25T11:00:00Z');
   db.sqlite.prepare('INSERT INTO user_presence VALUES(?,?,?,?,?,?)')
     .run('u1','2026-09-25T10:00:00.000Z','2026-09-25T11:59:30.000Z','s1','h1','2026-09-25T11:59:30.000Z');
   db.sqlite.prepare('INSERT INTO user_sessions VALUES(?,?,?,?,?,?,?)')
@@ -58,4 +60,5 @@ test('observability contracts expose only administrative account, billing and us
   ];
 
   for (const payload of payloads) assertAdministrativeOnly(payload);
+  assert.equal(payloads[1].items[0].phone,'(16) 98888-1234');
 });

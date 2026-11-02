@@ -6,7 +6,8 @@ import { encodeCursor, decodeCursor, observabilitySummary, listObservedUsers, li
 function d1() {
   const sqlite=new DatabaseSync(':memory:');
   sqlite.exec(`
-    CREATE TABLE auth_users(user_id TEXT PRIMARY KEY,email TEXT,created_at TEXT,last_sign_in_at TEXT);
+    CREATE TABLE auth_users(user_id TEXT PRIMARY KEY,email TEXT,phone TEXT,created_at TEXT,last_sign_in_at TEXT);
+    CREATE TABLE supabase_records(table_name TEXT,record_key TEXT,owner_id TEXT,record_json TEXT,source_updated_at TEXT);
     CREATE TABLE billing_pending_signups(user_id TEXT PRIMARY KEY,email TEXT);
     CREATE TABLE billing_checkout_requests(id TEXT PRIMARY KEY,owner_id TEXT,plan_code TEXT,provider TEXT,status TEXT,external_checkout_id TEXT,subtotal_cents INTEGER,discount_cents INTEGER,total_cents INTEGER,created_at TEXT,updated_at TEXT);
     CREATE TABLE subscriptions(id TEXT PRIMARY KEY,owner_id TEXT,provider TEXT,plan_code TEXT,status TEXT,current_period_end TEXT,updated_at TEXT,UNIQUE(owner_id,provider));
@@ -34,14 +35,21 @@ test('users paginate stably, include legacy null dates, usage and online state',
   ins.run('u3','c@test','2026-09-25T12:00:00.000Z','2026-09-25T12:00:00.000Z');
   ins.run('u2','b@test','2026-09-25T12:00:00.000Z',null);
   ins.run('u1','a@test',null,null);
+  db.sqlite.prepare("UPDATE auth_users SET phone='(16) 99999-1111' WHERE user_id='u3'").run();
+  db.sqlite.prepare('INSERT INTO supabase_records VALUES(?,?,?,?,?)').run('professional_profiles','p3','u3',JSON.stringify({phone:'(16) 90000-0000',notes:'não mostrar'}),'2026-09-25T12:00:00Z');
+  db.sqlite.prepare('INSERT INTO supabase_records VALUES(?,?,?,?,?)').run('professional_profiles','p2','u2',JSON.stringify({phone:'(16) 98888-2222',notes:'não mostrar'}),'2026-09-25T12:00:00Z');
   db.sqlite.prepare('INSERT INTO user_presence VALUES(?,?,?,?,?,?)').run('u3','2026-09-25T11:00:00Z','2026-09-25T12:00:30.000Z','s3','h','2026-09-25T12:00:30Z');
   db.sqlite.prepare('INSERT INTO user_usage_daily VALUES(?,?,?,?,?,?)').run('u3','2026-09-25',2,180,'2026-09-25T11:00:00Z','2026-09-25T12:00:30Z');
   db.sqlite.prepare('INSERT INTO subscriptions VALUES(?,?,?,?,?,?,?)').run('sub','u3','asaas','pro_monthly','active','2026-10-25','2026-09-25T12:00:00Z');
   const p1=await listObservedUsers(e,{limit:'2'},new Date('2026-09-25T12:01:00Z'));
   assert.deepEqual(p1.items.map(x=>x.userId),['u3','u2']); assert.equal(p1.hasMore,true); assert.ok(p1.nextCursor);
   assert.equal(p1.items[0].online,true); assert.equal(p1.items[0].activeSecondsToday,180); assert.equal(p1.items[0].planCode,'pro_monthly');
+  assert.equal(p1.items[0].phone,'(16) 99999-1111','auth phone wins over legacy profile');
+  assert.equal(p1.items[1].phone,'(16) 98888-2222','existing professional profile is used without migrating users');
+  assert.equal(JSON.stringify(p1.items).includes('não mostrar'),false,'no clinical/profile metadata escapes');
+
   const p2=await listObservedUsers(e,{limit:'2',cursor:p1.nextCursor},new Date('2026-09-25T12:01:00Z'));
-  assert.deepEqual(p2.items.map(x=>x.userId),['u1']); assert.equal(p2.hasMore,false);
+  assert.deepEqual(p2.items.map(x=>x.userId),['u1']); assert.equal(p2.hasMore,false); assert.equal(p2.items[0].phone,null);
 });
 
 test('summary excludes sandbox from production billing and revenue',async()=>{
