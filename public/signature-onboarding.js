@@ -65,7 +65,9 @@ async function prepareOne(mother,type,reviewed){
   if(!existing.document_frozen){
     const model=getConsultantConsentDocument(type);
     if(!model?.sections?.length)throw Error('O texto integral desse documento não está disponível.');
-    // Server renders the approved full document from the canonical legal model.\n    const response=await request('/'+existing.id+'/document','POST',{reviewed:true});\n    if(response.status!=='frozen'&&response.version!==1)throw Error('Não foi possível preparar o PDF.');
+    // Server renders the approved full document from the canonical legal model.
+    const response=await request('/'+existing.id+'/document','POST',{reviewed:true});
+    if(response.status!=='frozen'&&response.version!==1)throw Error('Não foi possível preparar o PDF.');
   }
   try{
     const sent=await request('/'+existing.id+'/send','POST',{});
