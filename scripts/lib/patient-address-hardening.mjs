@@ -1,5 +1,6 @@
 const MOTHER_PHONE_FIELD = '<label class="field"><span>Telefone</span><input name="motherPhone" inputmode="tel" autocomplete="tel" placeholder="(16) 99999-9999"></label>';
 const MOTHER_ADDRESS_FIELD = '<label class="field"><span>Endereço padrão</span><input name="motherAddress" autocomplete="street-address" placeholder="Rua, número, bairro, cidade"></label>';
+const MOTHER_EMAIL_FIELD = '<label class="field"><span>E-mail da mãe</span><input name="motherEmail" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="mae@exemplo.com"></label>';
 const APPOINTMENT_VALUE_FIELD = '<label class="field"><span>Valor</span><div class="unit-input"><b>R$</b><input type="number" min="0" step="0.01" value="0" data-encounter-field="value" data-section="identification"></div></label>';
 const APPOINTMENT_ADDRESS_FIELD = '<label class="field"><span>Endereço do atendimento</span><input data-encounter-field="address" data-section="identification" autocomplete="street-address" placeholder="Informe o local quando aplicável"></label>';
 const MOTHER_PHONE_DETAIL = '<div><dt>Telefone</dt><dd data-mother-phone>—</dd></div>';
@@ -13,6 +14,7 @@ function replaceOnce(source, before, after, label) {
 
 export function hardenPatientAddressHtml(source) {
   source = replaceOnce(source, MOTHER_PHONE_FIELD, `${MOTHER_PHONE_FIELD}${MOTHER_ADDRESS_FIELD}`, 'mother-address-field');
+  source = replaceOnce(source, `${MOTHER_PHONE_FIELD}${MOTHER_ADDRESS_FIELD}`, `${MOTHER_PHONE_FIELD}${MOTHER_ADDRESS_FIELD}${MOTHER_EMAIL_FIELD}`, 'signature-onboarding-email-field');
   source = replaceOnce(source, APPOINTMENT_VALUE_FIELD, `${APPOINTMENT_VALUE_FIELD}${APPOINTMENT_ADDRESS_FIELD}`, 'appointment-address-field');
   source = replaceOnce(source, MOTHER_PHONE_DETAIL, `${MOTHER_PHONE_DETAIL}${MOTHER_ADDRESS_DETAIL}`, 'mother-address-detail');
   return source;
@@ -31,6 +33,20 @@ export function hardenPatientAddressApp(source) {
     "      name: get('motherName').trim(), phone: get('motherPhone').trim(), birth_date: get('motherBirthDate') || null,",
     "      name: get('motherName').trim(), phone: get('motherPhone').trim(), address: get('motherAddress').trim(), birth_date: get('motherBirthDate') || null,",
     'patient-payload'
+  );
+
+  // Signature onboarding email is a real canonical mother field, not a transient UI destination.
+  source = replaceOnce(
+    source,
+    "  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherAddress', patient?.mother?.address); val('motherBirthDate', patient?.mother?.birth_date);",
+    "  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherAddress', patient?.mother?.address); val('motherEmail', patient?.mother?.email); val('motherBirthDate', patient?.mother?.birth_date);",
+    'signature-onboarding-prefill-email'
+  );
+  source = replaceOnce(
+    source,
+    "      name: get('motherName').trim(), phone: get('motherPhone').trim(), address: get('motherAddress').trim(), birth_date: get('motherBirthDate') || null,",
+    "      name: get('motherName').trim(), phone: get('motherPhone').trim(), address: get('motherAddress').trim(), email: get('motherEmail').trim().toLowerCase(), birth_date: get('motherBirthDate') || null,",
+    'signature-onboarding-persist-email'
   );
 
   source = replaceOnce(
