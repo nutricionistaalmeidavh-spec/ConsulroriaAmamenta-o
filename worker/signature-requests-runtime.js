@@ -135,8 +135,12 @@ async function sendRequest(env,user,requestId,deps){
       .bind(requestId,user.id,hash,timestamp,expires).run();
     const url=new URL('/assinar',signingOrigin(env));url.searchParams.set('token',raw);
     const transport=deps.sendEmail||sendTransactionalEmail;
+    const consultantName=str(user.user_metadata?.full_name||user.user_metadata?.name||'Consultora responsável')
+      .replace(/[\r\n]/g,' ').slice(0,130);
+    const confirmedEmail=user.email_confirmed_at&&validEmail(email(user.email))?email(user.email):'';
     await transport(env,{kind:'signature_request',to:current.recipient_email,
-      data:{documentTitle:current.document_title,signingUrl:url.toString(),expiresInHours:72}});
+      ...(confirmedEmail?{replyTo:confirmedEmail}:{}),
+      data:{documentTitle:current.document_title,consultantName,signingUrl:url.toString(),expiresInHours:72}});
     await db.batch([
       db.prepare(`UPDATE signature_requests SET status='sent',updated_at=?,sent_at=?,expires_at=?
         WHERE id=? AND owner_id=? AND status='sending'`).bind(timestamp,timestamp,expires,requestId,user.id),
