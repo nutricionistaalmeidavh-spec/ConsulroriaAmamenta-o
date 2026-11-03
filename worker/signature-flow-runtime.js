@@ -137,7 +137,31 @@ async function confirmSignature(env,entry,role,input){
     const eventData={source_sha256:source.sha256,final_sha256:resultHash,mode:signature.mode,
       seal_version:1,seal_key_id:sealKeyId,
       email:role==='mother'?entry.recipient_email:input.actorEmail,full_name:signature.legalName};
+    // The patient editor can change identity while R2 is being written.
+    // Verify both lock status and maternal identity inside the same D1 batch
+    // that persists the signature, not in a stale preflight read.
+    const original=JSON.parse(entry.source_snapshot_json||'{}');
+    const guardRole=role==='mother'
+      ?`CASE WHEN EXISTS(
+          SELECT 1 FROM signature_requests WHERE id=? AND owner_id=? AND status='signing_mother'
+        ) AND EXISTS(
+          SELECT 1 FROM supabase_records WHERE table_name='mothers' AND owner_id=?
+            AND json_extract(record_json,'$.id')=?
+            AND lower(json_extract(record_json,'$.email'))=?
+            AND json_extract(record_json,'$.name')=?
+        ) THEN 'system' ELSE 'stale' END`
+      :`CASE WHEN EXISTS(
+          SELECT 1 FROM signature_requests WHERE id=? AND owner_id=? AND status='signing_consultant'
+        ) THEN 'system' ELSE 'stale' END`;
+    const guardParams=role==='mother'
+      ?[entry.id,entry.owner_id,entry.owner_id,entry.mother_id,entry.recipient_email,original.mother_name]
+      :[entry.id,entry.owner_id];
+    const statusGuard=db.prepare(`INSERT INTO signature_events
+      (id,request_id,owner_id,event_type,actor_role,event_at,metadata_json)
+      VALUES(?,?,?,'signature_state_guard',${guardRole},?,?)`)
+      .bind(uid(),entry.id,entry.owner_id,...guardParams,when,JSON.stringify({role}));
     const steps=[
+      statusGuard,
       ...consentEffects,
       db.prepare(`INSERT INTO signature_documents
         (id,request_id,owner_id,version,r2_key,sha256,frozen_at,created_at)
