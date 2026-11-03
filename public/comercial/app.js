@@ -485,6 +485,8 @@ async function routeAuthenticatedSession() {
     return;
   }
 
+  const phoneInput = document.querySelector('#onboarding-form input[name="phone"]');
+  if (phoneInput && !phoneInput.value) phoneInput.value = user.phone || '';
   showView('onboarding');
 }
 
@@ -532,6 +534,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
   const form = event.currentTarget;
   const data = new FormData(form);
   const email = String(data.get('email') || '').trim();
+  const phone = String(data.get('phone') || '').trim();
   const password = String(data.get('password') || '');
   const confirmPassword = String(data.get('confirmPassword') || '');
   const submittedPartnerCode = normalizePartnerCode(data.get('partnerCode'));
@@ -558,7 +561,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
     if (['pro_monthly', 'pro_annual'].includes(selectedPlan)) {
       const response = await fetch('/api/asaas/signup', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, planCode: selectedPlan, partnerCode, attributionSource }),
+        body: JSON.stringify({ email, password, phone, planCode: selectedPlan, partnerCode, attributionSource }),
       });
       const pending = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -589,6 +592,7 @@ document.querySelector('#signup-form').addEventListener('submit', async (event) 
       body: {
         email,
         password,
+        phone,
         data: {
           signup_source: 'commercial_saas',
           plan_intent: selectedPlan,

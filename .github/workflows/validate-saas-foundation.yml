@@ -148,6 +148,8 @@ jobs:
           node-version: '22'
       - name: Install test runtime
         run: npm install --no-audit --no-fund
+      - name: Validate consultant signup phone and legacy login compatibility
+        run: node --test tests/consultant-signup-phone.test.mjs
       - name: Validate additive SaaS contract
         run: node scripts/test-saas-foundation.mjs
       - name: Validate commercial funnel and onboarding

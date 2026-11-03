@@ -77,6 +77,12 @@ CREATE TABLE IF NOT EXISTS billing_pending_signups (
 );
 CREATE INDEX IF NOT EXISTS billing_pending_signups_status_idx ON billing_pending_signups(status,created_at DESC);
 
+-- Additive contact data: legacy pending signups and accounts remain unchanged.
+CREATE TABLE IF NOT EXISTS billing_signup_contacts (
+  user_id TEXT PRIMARY KEY REFERENCES billing_pending_signups(user_id) ON DELETE CASCADE,
+  phone TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS billing_plan_catalog (
   plan_code TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,

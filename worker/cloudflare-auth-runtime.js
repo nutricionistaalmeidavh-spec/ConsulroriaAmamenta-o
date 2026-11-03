@@ -4,6 +4,7 @@ import {
 } from './cloudflare-auth-compat.js';
 import { isDirectManualGrant, reservePregrantedIdentity, resolvePregrantedAccess } from './signup-identity.js';
 import { activateManualFirstAccessCredentials } from './manual-first-access.js';
+import { normalizeConsultantSignupPhone } from './signup-phone.js';
 import { sendBestEffortTransactionalEmail, sendTransactionalEmail } from './transactional-email.js';
 
 const ACCESS_TTL_SECONDS = 60 * 60;
@@ -311,6 +312,9 @@ async function handleSignup(request, env) {
   const input = await request.json().catch(() => null);
   const email = String(input?.email || '').trim().toLowerCase();
   const password = String(input?.password || '');
+  let phone;
+  try { phone = normalizeConsultantSignupPhone(input?.phone); }
+  catch { return json(400, { error: 'invalid_signup_phone', message: 'Informe um celular válido com DDD.' }); }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { message: 'Informe um e-mail válido e senha com pelo menos 8 caracteres.' });
   }
@@ -380,8 +384,8 @@ async function handleSignup(request, env) {
     database.prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
-    ) VALUES(?,?,NULL,?,NULL,?,?,NULL,?,?,0,?)`)
-      .bind(userId, email, now, now, now, userMetadata, appMetadata, now),
+    ) VALUES(?,?,?,?,NULL,?,?,NULL,?,?,0,?)`)
+      .bind(userId, email, phone, now, now, now, userMetadata, appMetadata, now),
     database.prepare(`INSERT INTO auth_credentials(
       user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
     ) VALUES(?,?,?,?, 'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
@@ -394,9 +398,9 @@ async function handleSignup(request, env) {
     statements[0] = database.prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
-    ) SELECT user_id,email,NULL,NULL,NULL,?,?,NULL,?,?,0,? FROM billing_pending_signups
+    ) SELECT user_id,email,?,NULL,NULL,?,?,NULL,?,?,0,? FROM billing_pending_signups
       WHERE user_id=? AND password_hash=?`)
-      .bind(now,now,userMetadata,appMetadata,now,userId,pending.password_hash);
+      .bind(phone,now,now,userMetadata,appMetadata,now,userId,pending.password_hash);
     statements[1] = database.prepare(`INSERT INTO auth_credentials(
       user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
     ) SELECT p.user_id,p.password_salt,p.password_hash,p.password_iterations,'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP

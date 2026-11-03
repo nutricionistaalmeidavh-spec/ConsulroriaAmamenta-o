@@ -2,6 +2,7 @@ import { unzipSync } from 'fflate';
 import { CANONICAL_PRODUCT_NAME, CANONICAL_PRODUCT_SHORT_NAME, resolveAppIdentity } from './app-identity.js';
 import { enhanceClinicalNoteWithDateCorrection, encounterDateCorrectionCss } from './encounter-date-correction.js';
 import { enhanceClinicalNoteWithRecovery } from './clinical-note-recovery.js';
+import { enhanceClinicalNoteWithPrenatalFinalStep } from './clinical-note-prenatal-final-step.js';
 
 window.__deboraUnzipSync = unzipSync;
 
@@ -237,6 +238,9 @@ async function ensureClinicalAdditiveFeatures() {
   // Re-import under a distinct module URL after document.close() so its observer and
   // initial mount bind to the live clinical DOM instead of the discarded placeholder.
   await importPublicModule('/clinical-care-flow-feature.js?canonical-runtime=1');
+  // document.write() replaces the outer HTML; mount the prenatal questionnaire only
+  // against the final clinical DOM so legacy postpartum fields can be hidden.
+  await importPublicModule('/prenatal-questionnaire-feature.js?canonical-runtime=1');
   await importPublicModule('/billing-service-consistency.js');
 }
 
@@ -282,7 +286,7 @@ async function boot() {
   );
 
   const shellUrl = moduleUrl(shell);
-  const clinicalUrl = moduleUrl(enhanceClinicalNoteWithRecovery(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js'])));
+  const clinicalUrl = moduleUrl(enhanceClinicalNoteWithPrenatalFinalStep(enhanceClinicalNoteWithRecovery(enhanceClinicalNoteWithDateCorrection(runtime['features/clinical-note-feature.js']))));
   const patientUrl = '/patient-fixes-v2.js';
   const css = runtime['styles.css'];
   const config = genericizeClinicalConfig(runtime['config.js']);

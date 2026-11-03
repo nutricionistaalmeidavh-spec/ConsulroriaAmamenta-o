@@ -2,6 +2,7 @@ import { authenticateClinicalRequest, runtimeUserById } from './cloudflare-clini
 import { CLOUDFLARE_PBKDF2_ITERATIONS, cloudflarePasswordHash } from './cloudflare-auth-compat.js';
 import { resolveProductAccess } from './product-access-runtime.js';
 import { reservePregrantedIdentity } from './signup-identity.js';
+import { normalizeConsultantSignupPhone } from './signup-phone.js';
 import { sendBestEffortTransactionalEmail } from './transactional-email.js';
 
 const ASAAS_API_URL = 'https://api.asaas.com/v3';
@@ -238,6 +239,9 @@ async function preparePendingSignup(request, env) {
   const email = String(input?.email || '').trim().toLowerCase();
   const password = String(input?.password || '');
   const planCode = String(input?.planCode || '');
+  let phone;
+  try { phone = normalizeConsultantSignupPhone(input?.phone); }
+  catch { return json(400, { error: 'invalid_signup_phone' }); }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 256) {
     return json(400, { error: 'invalid_signup_fields' });
   }
@@ -253,9 +257,12 @@ async function preparePendingSignup(request, env) {
     const actual = await cloudflarePasswordHash(password, pending.password_salt, Number(pending.password_iterations || CLOUDFLARE_PBKDF2_ITERATIONS));
     if (!safeEqual(actual, pending.password_hash)) return json(400, { error: 'signup_credentials_invalid' });
     if (pending.status === 'activated') return json(409, { error: 'existing_account_login_required' });
-    await db(env).prepare(`UPDATE billing_pending_signups
+    const updates = [db(env).prepare(`UPDATE billing_pending_signups
       SET plan_code=?,signup_nonce_hash=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`)
-      .bind(planCode, nonceHash, pending.user_id).run();
+      .bind(planCode, nonceHash, pending.user_id)];
+    if (phone) updates.push(db(env).prepare(`INSERT INTO billing_signup_contacts(user_id,phone) VALUES(?,?)
+      ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone`).bind(pending.user_id, phone));
+    await db(env).batch(updates);
     return json(200, { userId: pending.user_id, signupNonce: nonce, status: pending.status });
   }
 
@@ -264,10 +271,12 @@ async function preparePendingSignup(request, env) {
   if (reservation) return json(403, reservation);
   const salt = randomToken(18);
   const hash = await cloudflarePasswordHash(password, salt, CLOUDFLARE_PBKDF2_ITERATIONS);
-  await db(env).prepare(`INSERT INTO billing_pending_signups(
+  const inserts = [db(env).prepare(`INSERT INTO billing_pending_signups(
       user_id,email,password_salt,password_hash,password_iterations,plan_code,signup_nonce_hash,status,created_at,updated_at
     ) VALUES(?,?,?,?,?,?,?,'pending',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`)
-    .bind(userId, email, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS, planCode, nonceHash).run();
+    .bind(userId, email, salt, hash, CLOUDFLARE_PBKDF2_ITERATIONS, planCode, nonceHash)];
+  if (phone) inserts.push(db(env).prepare('INSERT INTO billing_signup_contacts(user_id,phone) VALUES(?,?)').bind(userId, phone));
+  await db(env).batch(inserts);
   return json(200, { userId, signupNonce: nonce, status: 'pending' });
 }
 
@@ -288,16 +297,18 @@ async function activatePendingSignup(env, userId) {
   if (pending.status === 'activated') return runtimeUserById(env, userId);
 
   const now = new Date().toISOString();
+  const contact = await db(env).prepare('SELECT phone FROM billing_signup_contacts WHERE user_id=?').bind(userId).first();
   const userMetadata = JSON.stringify({ signup_source: 'commercial_saas', plan_intent: pending.plan_code });
   const appMetadata = JSON.stringify({ commercial_account: true, payment_activated: true, activation_source: 'asaas_verified_payment' });
   const activation = await db(env).batch([
     db(env).prepare(`INSERT INTO auth_users(
       user_id,email,phone,email_confirmed_at,phone_confirmed_at,created_at,updated_at,last_sign_in_at,
       user_metadata_json,app_metadata_json,password_reset_required,migrated_at
-    ) VALUES(?,?,NULL,?,NULL,?,?,NULL,?,?,0,?)
+    ) VALUES(?,?,?,?,NULL,?,?,NULL,?,?,0,?)
     ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,email_confirmed_at=excluded.email_confirmed_at,
+      phone=COALESCE(auth_users.phone,excluded.phone),
       updated_at=excluded.updated_at,user_metadata_json=excluded.user_metadata_json,app_metadata_json=excluded.app_metadata_json,
-      password_reset_required=0 WHERE auth_users.password_reset_required=0`).bind(userId, pending.email, now, pending.created_at || now, now, userMetadata, appMetadata, now),
+      password_reset_required=0 WHERE auth_users.password_reset_required=0`).bind(userId, pending.email, contact?.phone || null, now, pending.created_at || now, now, userMetadata, appMetadata, now),
     db(env).prepare(`INSERT INTO auth_credentials(
       user_id,password_salt,password_hash,password_iterations,password_algorithm,created_at,updated_at
     ) SELECT user_id,password_salt,password_hash,password_iterations,'PBKDF2-SHA256',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
