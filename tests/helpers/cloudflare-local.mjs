@@ -43,6 +43,7 @@ export async function createLocalRuntime({ port = 0, assets = false, outboundSer
     'cloudflare/migrations/0015-mother-ai-history.sql',
     'cloudflare/migrations/0016-mother-ai-pilot-telemetry.sql',
     'cloudflare/migrations/0019-signature-foundation.sql',
+    'cloudflare/migrations/0019-signature-foundation.sql',
   ]) {
     const sql = (await readFile(path, 'utf8')).replace(/^--.*$/gm, '');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
