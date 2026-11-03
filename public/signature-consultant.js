@@ -24,7 +24,7 @@ function close(){current?.remove();current=null}
 function notice(message,error=false){const target=current?.querySelector('[data-ds-notice]');if(target){target.textContent=message;target.style.color=error?'#9b2345':'#564551'}}
 async function latest(motherId,type){
   const rows=await api('?mother_id='+encodeURIComponent(motherId));
-  return rows.requests.find(x=>x.consent_type===type)||null;
+  return rows.requests.find(x=>x.consent_type===type&&!['cancelled','expired'].includes(x.status))||null;
 }
 async function downloadPdf(id){
   const response=await fetch('/api/clinical/signatures/requests/'+encodeURIComponent(id)+'/document',{
