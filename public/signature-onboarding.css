@@ -17,3 +17,6 @@
 .signature-preview-sheet p{font-size:14px;line-height:1.65;white-space:pre-wrap}
 .signature-preview-sheet button{min-height:44px}
 @media(max-width:520px){[data-consent-panel] .signature-send-row{gap:6px}[data-consent-panel] .signature-read-button{font-size:11px;padding:6px}.signature-preview-layer{padding:0;align-items:flex-end}.signature-preview-sheet{border-radius:20px 20px 0 0;max-height:94vh}}
+
+[data-consent-panel] .signature-confirm-row{display:flex;align-items:start;gap:10px;margin:15px 0;color:var(--ui-text,#332b34);font-size:13px;line-height:1.5}
+[data-consent-panel] .signature-confirm-row input{flex:0 0 auto;width:20px;height:20px;margin:0;accent-color:var(--ui-accent,#382d3b)}
