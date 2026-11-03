@@ -6,6 +6,7 @@ import {createSqliteD1} from './helpers/sqlite-d1.mjs';
 import {persistPatientEdit} from '../worker/patient-write-runtime.js';
 import {handleSignatureRequestRuntime} from '../worker/signature-requests-runtime.js';
 import {handleSignatureFlowRuntime} from '../worker/signature-flow-runtime.js';
+import {canonicalConsentStatements} from '../worker/signature-consent-sync.js';
 
 const owner={id:'consultora-a',email:'consultora@example.com',email_confirmed_at:'2026-10-01T12:00:00Z',user_metadata:{full_name:'Consultora Teste'}};
 async function setup(){
@@ -150,5 +151,37 @@ test('document version chain rejects a forged earlier signed PDF even with valid
   const middle=await x.db.prepare('SELECT r2_key FROM signature_documents WHERE request_id=? AND version=2').bind(d.id).first();
   x.objects.get(middle.r2_key)[12]^=1;
   assert.equal((await (await x.call('GET',verification)).json()).valid,false);
+ }finally{x.close()}
+});
+
+test('a recipient edit during email transport revokes the token and never resurrects sent state',async()=>{
+ const x=await setup();try{
+  const d=await x.create();await x.freeze(d.id);
+  const url='/api/clinical/signatures/requests/'+d.id+'/send';
+  const req=new Request('https://assinaturas.example.test'+url,{method:'POST'});
+  const response=await handleSignatureRequestRuntime(req,x.env,undefined,{
+    authenticate:async()=>owner,
+    sendEmail:async()=>{
+      await persistPatientEdit(x.env,owner,{mother:{id:'mae-1',email:'changed-during-send@example.com'},consents:{}});
+      return {provider:'fake'};
+    },
+  });
+  assert.notEqual(response.status,200);
+  assert.equal((await x.db.prepare('SELECT status FROM signature_requests WHERE id=?').bind(d.id).first()).status,'cancelled');
+  const token=await x.db.prepare('SELECT revoked_at FROM signature_tokens WHERE request_id=?').bind(d.id).first();
+  assert.ok(token.revoked_at);
+ }finally{x.close()}
+});
+test('D1 consent CAS aborts on concurrent record changes instead of overwriting a later revocation',async()=>{
+ const x=await setup();try{
+  const d=await x.create('whatsapp');
+  const statements=await canonicalConsentStatements(x.db,{...d,owner_id:owner.id,created_at:new Date().toISOString()},new Date().toISOString(),'b'.repeat(64));
+  const current={id:'concurrent',owner_id:owner.id,mother_id:'mae-1',consent_type:'whatsapp',
+    granted:false,revoked_at:new Date().toISOString(),accepted_at:null};
+  await x.db.prepare("INSERT INTO supabase_records (table_name,record_key,owner_id,record_json) VALUES('consents',?,?,?)")
+    .bind(current.id,owner.id,JSON.stringify(current)).run();
+  await assert.rejects(()=>x.db.batch(statements));
+  const saved=await x.db.prepare("SELECT record_json FROM supabase_records WHERE record_key=?").bind(current.id).first();
+  assert.equal(JSON.parse(saved.record_json).granted,false);
  }finally{x.close()}
 });
