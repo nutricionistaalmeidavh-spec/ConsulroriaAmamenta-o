@@ -81,6 +81,8 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
+      - name: Verify isolated browser E2E execution contract
+        run: node --test tests/e2e-runner-isolation.test.mjs
       - name: Run stability contracts
         run: npm run test:stability
       - name: Run P1 resilience contracts
