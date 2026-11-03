@@ -39,14 +39,19 @@ jobs:
           node --check public/signature-public.js
           node --check public/signature-consultant.js
           node --check public/signature-canvas.js
+          node --check public/signature-onboarding.js
+          node --check public/signature-onboarding-core.js
+          node --check scripts/lib/signature-onboarding-materialize.mjs
           node --check public/terms-feature.js
           node --check tests/signature-flow.test.mjs
       - name: Run D1/R2 signing and email regression tests
-        run: node --test tests/signature-foundation.test.mjs tests/signature-flow.test.mjs worker/transactional-email.test.mjs
+        run: node --test tests/signature-foundation.test.mjs tests/signature-flow.test.mjs tests/signature-onboarding-contract.test.mjs worker/transactional-email.test.mjs
       - name: Verify existing clinical documents
         run: node --test tests/phase35-contracts.test.mjs tests/phase68-contracts.test.mjs tests/consultant-consent-documents.test.mjs
       - name: Build app without paid provider
         run: npm run build
+      - name: Verify canonical materialized patient form and email persistence
+        run: SIGNATURE_ONBOARDING_BUILT=1 node --test tests/signature-onboarding-contract.test.mjs
       - name: Verify public signing page is present in dist
         run: |
           test -f dist/signature-public.html
