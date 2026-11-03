@@ -6,6 +6,7 @@ const DOC=window.DeboraDocuments;
 const form=document.querySelector('[data-patient-form]');
 const panel=form?.querySelector('[data-consent-panel]');
 let pendingSelection=[];
+let pendingReviewed=false;
 const selected=()=>getSignatureSelections([...panel?.querySelectorAll('[data-signature-select]:checked')||[]].map(x=>x.dataset.signatureSelect));
 const emailField=()=>form?.elements.namedItem('motherEmail');
 const statusNode=()=>panel?.querySelector('[data-signature-onboarding-status]');
@@ -19,6 +20,11 @@ function refreshCount(){
   if(target)target.textContent=count?count+' documento(s) selecionado(s) para solicitar assinatura após salvar.':'Nenhum documento selecionado para envio.';
   const field=emailField();
   if(field){field.required=count>0;field.setCustomValidity('')}
+  const reviewed=Boolean(panel?.querySelector('[data-signature-reviewed]')?.checked);
+  for(const button of form.querySelectorAll('[type=submit]')){
+    if(!button.dataset.signatureInitialText)button.dataset.signatureInitialText=button.textContent;
+    button.textContent=count?(reviewed?'Salvar paciente e enviar termos':'Salvar paciente e preparar termos'):button.dataset.signatureInitialText;
+  }
 }
 async function request(path,method='GET',body=null,raw=false){
   const token=DOC.accessToken();
@@ -54,8 +60,9 @@ function showTerms(type){
   layer.addEventListener('keydown',e=>{if(e.key==='Escape')dismiss()});
   layer.append(sheet);document.body.append(layer);close.focus();
 }
-async function prepareOne(mother,type){
+async function prepareOne(mother,type,reviewed){
   const existing=await request('', 'POST',{mother_id:mother.id,consent_type:type});
+  if(!reviewed)return {type,state:'draft',note:'Aguardando conferência do termo pela consultora'};
   if(!existing.document_frozen){
     const model=getConsultantConsentDocument(type);
     if(!model?.sections?.length)throw Error('O texto integral desse documento não está disponível.');
@@ -77,7 +84,7 @@ async function prepareOne(mother,type){
     throw error;
   }
 }
-async function prepareSavedMother(motherId,types){
+async function prepareSavedMother(motherId,types,reviewed){
   if(!types.length)return;
   let mother;
   try{
@@ -87,7 +94,7 @@ async function prepareSavedMother(motherId,types){
   }catch(e){DOC.toast('Paciente salvo, mas a preparação das assinaturas falhou: '+e.message,'error');return}
   const results=[];
   for(const type of types){
-    try{results.push(await prepareOne(mother,type))}
+    try{results.push(await prepareOne(mother,type,reviewed))}
     catch(e){results.push({type,state:'error',note:e.message})}
   }
   const delivered=results.filter(x=>x.state==='sent').length;
@@ -115,7 +122,7 @@ async function updatePatientStatuses(motherId){
   }
 }
 if(panel&&form){
-  panel.addEventListener('change',event=>{if(event.target.matches('[data-signature-select]'))refreshCount()});
+  panel.addEventListener('change',event=>{if(event.target.matches('[data-signature-select],[data-signature-reviewed]'))refreshCount()});
   panel.addEventListener('click',event=>{const button=event.target.closest('[data-signature-read]');if(button)showTerms(button.dataset.signatureRead)});
   form.addEventListener('submit',event=>{
     // Runs before the canonical form submit handler. Does not alter its consent payload.
@@ -127,18 +134,20 @@ if(panel&&form){
       emailField()?.focus();return;
     }
     pendingSelection=chosen;
+    pendingReviewed=Boolean(panel.querySelector('[data-signature-reviewed]')?.checked);
   },true);
   window.addEventListener('debora:patient-form-open',event=>{
-    pendingSelection=[];
-    panel.querySelectorAll('[data-signature-select]').forEach(input=>{input.checked=false});
+    pendingSelection=[];pendingReviewed=false;
+    panel.querySelectorAll('[data-signature-select],[data-signature-reviewed]').forEach(input=>{input.checked=false});
     const legacy=panel.querySelector('[data-legacy-consents]');
     if(legacy)legacy.hidden=!event.detail?.motherId;
     status('');refreshCount();
     if(event.detail?.motherId)updatePatientStatuses(event.detail.motherId);
   });
   window.addEventListener('debora:patient-saved',event=>{
-    const toSend=pendingSelection;pendingSelection=[];
-    if(toSend.length&&event.detail?.motherId)void prepareSavedMother(event.detail.motherId,toSend);
+    const toSend=pendingSelection,reviewed=pendingReviewed;
+    pendingSelection=[];pendingReviewed=false;
+    if(toSend.length&&event.detail?.motherId)void prepareSavedMother(event.detail.motherId,toSend,reviewed);
   });
   window.addEventListener('debora:terms-mounted',event=>{if(event.detail?.motherId)void updatePatientStatuses(event.detail.motherId)});
   refreshCount();
