@@ -21,7 +21,7 @@ async function fixture(){
     async head(key){const bytes=objects.get(key);return bytes?{size:bytes.length}:null},
   };
   const env={CLINICAL_DB:db,CLINICAL_FILES:r2,CLINICAL_AUTH_SECRET:'fixed-local-test-secret',
-    SIGNATURE_DELIVERY_ENABLED:'true',SIGNATURE_PUBLIC_FLOW_READY:'true'};
+    SIGNATURE_DELIVERY_ENABLED:'true',SIGNATURE_PUBLIC_FLOW_READY:'true',SIGNATURE_PUBLIC_ORIGIN:'https://assinaturas.example.test'};
   let link='';
   async function call(method,path,body,{token='',as=consultant,raw=false,reviewed=false}={}){
     const req=new Request('https://app.deboralactacao.com'+path,{
@@ -48,7 +48,7 @@ test('complete sequential maternal + consultant signature, preserves source PDF,
     const first=await x.call('POST','/api/clinical/signatures/requests',{mother_id:'mae-1',consent_type:'whatsapp'});
     assert.equal(first.status,201);const item=await first.json();
     const base='/api/clinical/signatures/requests/'+item.id;
-    const frozen=await x.call('POST',base+'/document',x.pdfBytes,{raw:true,reviewed:true});
+    const frozen=await x.call('POST',base+'/document',{reviewed:true});
     assert.equal(frozen.status,201);assert.equal((await frozen.json()).version,1);
     assert.equal((await x.call('GET',base+'/document')).status,200);
     const sent=await x.call('POST',base+'/send',{});
@@ -59,7 +59,10 @@ test('complete sequential maternal + consultant signature, preserves source PDF,
     assert.equal(meta.status,200);assert.equal((await meta.json()).full_name,'Maria Teste');
     const view=await x.call('GET',recipient+'/document',undefined,{token});
     assert.equal(view.status,200);
-    assert.equal(await digestHex(new Uint8Array(await view.arrayBuffer())),await digestHex(x.pdfBytes));
+    const originalHash=(await x.db.prepare('SELECT sha256 FROM signature_documents WHERE request_id=? AND version=1').bind(item.id).first()).sha256;
+    const originalPdf=await view.arrayBuffer();
+    assert.equal(await digestHex(new Uint8Array(originalPdf)),originalHash);
+    const originalPages=(await PDFDocument.load(originalPdf)).getPageCount();
     assert.equal((await x.signed(item.id,'Alguém',token)).status,422);
     const maternal=await x.signed(item.id,'Maria Teste',token);
     assert.equal(maternal.status,200);assert.equal((await maternal.json()).status,'mother_signed');
@@ -72,7 +75,7 @@ test('complete sequential maternal + consultant signature, preserves source PDF,
     const latest=await x.call('GET',base+'/document');
     assert.equal(latest.status,200);
     const completedPdf=await PDFDocument.load(await latest.arrayBuffer());
-    assert.equal(completedPdf.getPageCount(),3);
+    assert.equal(completedPdf.getPageCount(),originalPages+2);
     const events=await x.db.prepare("SELECT actor_role,event_hash FROM signature_events WHERE request_id=? AND event_type='signed' ORDER BY event_at").bind(item.id).all();
     assert.equal(events.results.length,2);
     assert.ok(events.results.every(e=>/^[a-f0-9]{64}$/.test(e.event_hash)));
@@ -87,11 +90,11 @@ test('no document upload without consultant review and no cross-tenant access',a
   const x=await fixture();try{
     const created=await (await x.call('POST','/api/clinical/signatures/requests',{mother_id:'mae-1',consent_type:'public_media'})).json();
     const base='/api/clinical/signatures/requests/'+created.id;
-    assert.equal((await x.call('POST',base+'/document',x.pdfBytes,{raw:true})).status,400);
+    assert.equal((await x.call('POST',base+'/document',{reviewed:false})).status,400);
     assert.equal((await x.call('POST',base+'/document',x.pdfBytes,{raw:true,reviewed:true,as:{id:'consultora-b'}})).status,404);
-    const result=await x.call('POST',base+'/document',x.pdfBytes,{raw:true,reviewed:true});
+    const result=await x.call('POST',base+'/document',{reviewed:true});
     assert.equal(result.status,201);
-    assert.equal((await x.call('POST',base+'/document',x.pdfBytes,{raw:true,reviewed:true})).status,409);
+    assert.equal((await x.call('POST',base+'/document',{reviewed:true})).status,409);
     assert.equal((await x.call('GET',base+'/document',undefined,{as:{id:'consultora-b'}})).status,404);
   }finally{x.close()}
 });
@@ -99,7 +102,7 @@ test('content-hash mismatch prevents recipient from seeing a corrupted PDF',asyn
   const x=await fixture();try{
     const item=await (await x.call('POST','/api/clinical/signatures/requests',{mother_id:'mae-1',consent_type:'teleconsultation'})).json();
     const base='/api/clinical/signatures/requests/'+item.id;
-    await x.call('POST',base+'/document',x.pdfBytes,{raw:true,reviewed:true});
+    await x.call('POST',base+'/document',{reviewed:true});
     await x.call('POST',base+'/send',{});
     const doc=await x.db.prepare('SELECT r2_key FROM signature_documents WHERE request_id=? AND version=1').bind(item.id).first();
     x.objects.get(doc.r2_key)[5]^=1;
