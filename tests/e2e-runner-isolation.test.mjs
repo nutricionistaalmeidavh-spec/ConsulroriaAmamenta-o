@@ -22,3 +22,20 @@ test('E2E still builds the app and never skips/flattens or silently masks test f
   assert.doesNotMatch(script,/--grep-invert|--last-failed|\s--only-changed|\s--pass-with-no-tests|\s--retries|\s--max-failures|\|\|\s*true|;\s*exit\s+0/);
   assert.equal(segments.length,6,'Every suite must be connected with fail-fast &&');
 });
+
+test('final materialized gate runs every desktop shard independently without rebuilding the artifact',()=>{
+  const source=readFileSync(new URL('../.github/workflows/validate-final-materialized-gate.yml',import.meta.url),'utf8');
+  const desktop=source.match(/- name: Run functional desktop E2E on the final artifact([\s\S]*?)(?=\n\s*- name:)/)?.[1]||'';
+  assert.ok(desktop,'Final build gate must retain its complete desktop browser step');
+  const expected=[
+    'npx playwright test --project=chromium --shard=1/3',
+    'npx playwright test --project=chromium --shard=2/3',
+    'npx playwright test --project=chromium --shard=3/3',
+  ];
+  for(const command of expected) assert.ok(desktop.includes(command),'Missing independent desktop shard: '+command);
+  assert.doesNotMatch(desktop,/npx playwright test --project=chromium\s*(?:$|\n)/m,
+    'Unsharded browser workers reintroduce the intermittent localhost crash');
+  assert.match(source,/- name: Build final materialized artifact once/);
+  assert.match(source,/npx playwright test --project=chromium-upgrade/);
+  assert.match(source,/npx playwright test --project=chromium-service-worker/);
+});
