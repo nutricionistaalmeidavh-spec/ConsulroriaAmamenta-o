@@ -49,19 +49,16 @@ async function render(motherId,type,title){
   if(item.status==='draft'||item.status==='delivery_failed'){
     if(!item.document_frozen){
       const wrap=document.createElement('div');wrap.className='ds-upload';
-      wrap.innerHTML='<p>O termo utiliza o modelo integral e o layout PDF já usados no sistema.</p><label>PDF alternativo (opcional) <input type="file" accept="application/pdf,.pdf"></label><label><input type="checkbox" data-ds-reviewed> Conferi o texto integral e os dados deste documento antes do envio.</label>';
+      wrap.innerHTML='<p>O documento integral é gerado pelo sistema, preservando o texto jurídico e o layout canônico. Não são aceitos PDFs externos.</p><label><input type="checkbox" data-ds-reviewed> Conferi o texto integral e os dados deste documento antes do envio.</label>';
       body.append(wrap);
       let generated=null;
       const makePdf=async()=>{
         const context=await DOC.patientContext(motherId);
         const doc=getConsultantConsentDocument(type);
         if(!context?.mother||!doc?.sections?.length)throw Error('Não foi possível carregar o termo integral.');
-        const consents=await DOC.consents(motherId);
-        const consent=consents.find(x=>x.consent_type===type)||{};
         return createConsentPdf({motherName:context.mother.name,consentLabel:doc.title,
-          statusLabel:consent.granted&&!consent.revoked_at?'Autorizado':'Não autorizado',
-          acceptedAt:consent.accepted_at||'',revokedAt:consent.revoked_at||'',
-          version:consent.version||'',evidence:consent.evidence||'',
+          statusLabel:'Aguardando assinatura da mãe',acceptedAt:'',revokedAt:'',
+          version:doc.modelVersion,evidence:'',
           documentSections:doc.sections,modelVersion:doc.modelVersion});
       };
       btn('Visualizar termo integral',async()=>{
@@ -76,11 +73,7 @@ async function render(motherId,type,title){
       });
       btn('Preparar documento revisado',async()=>{
         if(!wrap.querySelector('[data-ds-reviewed]').checked)throw Error('Confirme que conferiu o PDF integral.');
-        const file=wrap.querySelector('input[type=file]').files[0];
-        const bytes=file||generated||await makePdf();
-        if(bytes.size>4*1024*1024||bytes.size<64||(file&&!/\\.pdf$/i.test(file.name)&&file.type!=='application/pdf'))throw Error('Selecione um PDF válido até 4 MB.');
-        const response=await fetch('/api/clinical/signatures/requests/'+item.id+'/document',{method:'POST',headers:{...auth(),'content-type':'application/pdf','x-document-reviewed':'true'},body:bytes,cache:'no-store'});
-        if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error||'Falha ao salvar PDF');}
+        await api('/'+item.id+'/document',{method:'POST',json:{reviewed:true}});
         notice('PDF integral congelado para assinatura.');
       });
     }else{
