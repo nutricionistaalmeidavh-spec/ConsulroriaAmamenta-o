@@ -15,7 +15,8 @@ export const SIGNABLE_CONSENTS=Object.freeze({
 });
 const str=v=>String(v??'').trim();
 const email=v=>str(v).toLowerCase();
-const validEmail=v=>v.length<=254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const validEmail=v=>typeof v==='string'&&v.length<=254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const canonicalName=v=>str(v).replace(/\s+/g,' ').toLocaleLowerCase('pt-BR');
 const iso=()=>new Date().toISOString();
 const id=()=>crypto.randomUUID();
 function response(status,data){
@@ -46,7 +47,19 @@ async function createDraft(env,user,input,now,uuid){
   const address=email(mother.record.email);
   if(!validEmail(address)) return response(422,{error:'mother_email_required',message:'Cadastre um e-mail válido para a mãe antes de solicitar assinatura.'});
   const existing=await openRequest(db,user.id,motherId,type);
-  if(existing)return response(200,publicRequest(existing));
+  if(existing){
+    const initial=JSON.parse(existing.source_snapshot_json||'{}');
+    if(existing.recipient_email===address&&canonicalName(initial.mother_name)===canonicalName(mother.record.name)){
+      return response(200,publicRequest(existing));
+    }
+    // A changed email or patient identity invalidates the old frozen document and link.
+    await db.batch([
+      db.prepare("UPDATE signature_requests SET status='cancelled',updated_at=? WHERE id=? AND owner_id=? AND status IN ('draft','sending','sent','delivery_failed')")
+        .bind(iso(),existing.id,user.id),
+      db.prepare('UPDATE signature_tokens SET revoked_at=? WHERE request_id=? AND owner_id=? AND revoked_at IS NULL')
+        .bind(iso(),existing.id,user.id),
+    ]);
+  }
   // This is a consent RECORD snapshot, not yet the legal text of a signed PDF.
   // The document bytes will be frozen in signature_documents in a later phase.
   const consent=await db.prepare(`SELECT record_json FROM supabase_records WHERE table_name='consents'
@@ -54,7 +67,7 @@ async function createDraft(env,user,input,now,uuid){
     AND json_extract(record_json,'$.consent_type')=?
     ORDER BY source_updated_at DESC LIMIT 1`).bind(user.id,motherId,type).first();
   let c=null;try{c=consent?.record_json?JSON.parse(consent.record_json):null}catch{}
-  const snapshot={mother_id:motherId,consent_type:type,source_consent_id:c?.id||null,
+  const snapshot={mother_id:motherId,mother_name:mother.record.name,consent_type:type,source_consent_id:c?.id||null,
     consent_granted:c?.granted===true,accepted_at:c?.accepted_at||null,
     revoked_at:c?.revoked_at||null,version:c?.version||null};
   const timestamp=now(),rid=uuid(),hash=await sha256(JSON.stringify(snapshot));
@@ -94,7 +107,8 @@ async function listDrafts(env,user,url){
   return response(200,{requests:(rows.results||[]).map(publicRequest)});
 }
 function signingOrigin(env){
-  const candidate=str(env.SIGNATURE_PUBLIC_ORIGIN)||'https://app.deboralactacao.com';
+  const candidate=str(env.SIGNATURE_PUBLIC_ORIGIN);
+  if(!candidate)throw new Error('signature_origin_not_configured');
   const url=new URL(candidate);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/')
     throw new Error('invalid_signature_public_origin');
@@ -113,6 +127,21 @@ async function sendRequest(env,user,requestId,deps){
     .bind(user.id,requestId).first();
   if(!current)return response(404,{error:'signature_request_not_found'});
   if(!['draft','delivery_failed'].includes(current.status))return response(409,{error:'signature_request_already_dispatched'});
+  // Determine the live destination before claiming a token or sending any mail.
+  const mother=await recordByIdForOwner(db,'mothers',current.mother_id,user.id);
+  const snapshot=JSON.parse(current.source_snapshot_json||'{}');
+  if(!mother||email(mother.record.email)!==current.recipient_email||
+    canonicalName(mother.record.name)!==canonicalName(snapshot.mother_name)){
+    await db.batch([
+      db.prepare("UPDATE signature_requests SET status='cancelled',updated_at=? WHERE id=? AND owner_id=? AND status IN ('draft','sending','sent','delivery_failed')").bind(iso(),requestId,user.id),
+      db.prepare('UPDATE signature_tokens SET revoked_at=? WHERE request_id=? AND owner_id=? AND revoked_at IS NULL').bind(iso(),requestId,user.id),
+    ]);
+    return response(409,{error:'signature_recipient_changed'});
+  }
+  let origin;
+  try{origin=signingOrigin(env)}
+  catch(error){return response(409,{error:error?.message==='signature_origin_not_configured'?'signature_origin_not_configured':'signature_origin_invalid'})}
+
   const document=await db.prepare(`SELECT * FROM signature_documents
     WHERE request_id=? AND owner_id=? ORDER BY version DESC LIMIT 1`)
     .bind(current.id,user.id).first();
@@ -133,7 +162,7 @@ async function sendRequest(env,user,requestId,deps){
       token_sha256=excluded.token_sha256,created_at=excluded.created_at,
       expires_at=excluded.expires_at,revoked_at=NULL`)
       .bind(requestId,user.id,hash,timestamp,expires).run();
-    const url=new URL('/assinar',signingOrigin(env));url.searchParams.set('token',raw);
+    const url=new URL('/assinar',origin);url.searchParams.set('token',raw);
     const transport=deps.sendEmail||sendTransactionalEmail;
     const consultantName=str(user.user_metadata?.full_name||user.user_metadata?.name||'Consultora responsável')
       .replace(/[\r\n]/g,' ').slice(0,130);
@@ -141,11 +170,16 @@ async function sendRequest(env,user,requestId,deps){
     await transport(env,{kind:'signature_request',to:current.recipient_email,
       ...(confirmedEmail?{replyTo:confirmedEmail}:{}),
       data:{documentTitle:current.document_title,consultantName,signingUrl:url.toString(),expiresInHours:72}});
+    // If the patient editor cancelled the request during delivery, the CHECK
+    // constraint aborts the whole commit instead of silently declaring it sent.
     await db.batch([
+      db.prepare(`INSERT INTO signature_events (id,request_id,owner_id,event_type,actor_role,event_at)
+        VALUES(?,?,?,'sent',CASE WHEN EXISTS(
+          SELECT 1 FROM signature_requests WHERE id=? AND owner_id=? AND status='sending'
+        ) THEN 'system' ELSE 'stale' END,?)`)
+        .bind((deps.uuid||id)(),requestId,user.id,requestId,user.id,timestamp),
       db.prepare(`UPDATE signature_requests SET status='sent',updated_at=?,sent_at=?,expires_at=?
         WHERE id=? AND owner_id=? AND status='sending'`).bind(timestamp,timestamp,expires,requestId,user.id),
-      db.prepare(`INSERT INTO signature_events (id,request_id,owner_id,event_type,actor_role,event_at)
-        VALUES(?,?,?,'sent','system',?)`).bind((deps.uuid||id)(),requestId,user.id,timestamp),
     ]);
     return response(200,{id:requestId,status:'sent',expires_at:expires});
   }catch{
