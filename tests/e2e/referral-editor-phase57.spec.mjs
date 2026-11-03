@@ -10,6 +10,7 @@ test('fases 5–7: prévia fiel, salvamento, finalização livre e API bloqueada
  await page.locator('[data-action="new-patient"]:visible').first().click();
  await page.locator('[name="motherName"]').fill(name);
  await page.locator('[data-baby-field="name"]').first().fill(baby);
+ await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
  await page.locator('[name="consentData"]').check();
  const creation=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
  await page.locator('[data-patient-form] button[type="submit"]:visible').first().click();
