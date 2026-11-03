@@ -15,6 +15,25 @@ export async function hmacHex(secret,message) {
   const result=await crypto.subtle.sign('HMAC',k,enc.encode(message));
   return Array.from(new Uint8Array(result),x=>x.toString(16).padStart(2,'0')).join('');
 }
+// The signing secret is NEVER changed here. A stable identifier lets validators
+// select a historical key when an operator deliberately rotates authentication.
+export async function evidenceKeyId(secret){
+  if(!text(secret))throw new Error('signature_seal_secret_missing');
+  return (await hmacHex(secret,'evidence-key-identity-v1')).slice(0,24);
+}
+export function evidenceVerificationKeys(env){
+  const current=text(env?.CLINICAL_AUTH_SECRET);
+  let old=[];
+  // Optional future rotation support only. No new binding, key or secret is
+  // created or configured by this feature and no paid service is required.
+  if(env?.SIGNATURE_EVIDENCE_HISTORICAL_KEYS){
+    try{
+      const parsed=JSON.parse(env.SIGNATURE_EVIDENCE_HISTORICAL_KEYS);
+      if(Array.isArray(parsed)&&parsed.length<=12)old=parsed.filter(v=>typeof v==='string'&&v.length>=16);
+    }catch{}
+  }
+  return [...new Set([current,...old].filter(Boolean))];
+}
 export async function checkPdf(bytes) {
   const data=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
   if(data.length<64||data.length>MAX_SIGNATURE_PDF_BYTES || new TextDecoder().decode(data.slice(0,5))!=='%PDF-')
