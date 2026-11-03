@@ -33,7 +33,7 @@ function publicRequest(row){
     status:row.status,document_frozen:Boolean(row.document_frozen),created_at:row.created_at,expires_at:row.expires_at,sent_at:row.sent_at};
 }
 async function openRequest(db,ownerId,motherId,type){
-  return db.prepare(`SELECT * FROM signature_requests WHERE owner_id=? AND mother_id=? AND consent_type=?
+  return db.prepare(`SELECT r.*, EXISTS(SELECT 1 FROM signature_documents d WHERE d.request_id=r.id AND d.owner_id=r.owner_id AND d.version=1) AS document_frozen FROM signature_requests r WHERE r.owner_id=? AND r.mother_id=? AND r.consent_type=?
     AND status IN ('draft','sending','sent','delivery_failed') ORDER BY created_at DESC LIMIT 1`)
     .bind(ownerId,motherId,type).first();
 }
