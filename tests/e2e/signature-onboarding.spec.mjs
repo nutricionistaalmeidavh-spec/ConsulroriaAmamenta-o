@@ -65,3 +65,37 @@ test('reviewed maternal request freezes server-generated legal PDF without a pre
   const consents=await consent.json();
   expect(consents.find(x=>x.consent_type==='whatsapp')?.granted).toBe(false);
 });
+
+test('editing a patient without opening legacy consent editor preserves previously granted consent',async({page})=>{
+  await login(page);
+  await page.locator('[data-action="new-patient"]:visible').first().click();
+  await page.locator('[name=motherName]').fill(uniqueLabel('Preservar aceite'));
+  await page.locator('[data-baby-field="name"]').first().fill(uniqueLabel('Bebê'));
+  const created=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  const response=await created;expect(response.status()).toBe(201);
+  const motherId=(await response.json()).mother.id;
+  await page.locator('[data-action="edit-patient"]:visible').first().click();
+  await page.locator('[data-legacy-consents]').evaluate(el=>{el.open=true});
+  await page.locator('[name=consentWhatsapp]').check();
+  const accepted=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='PATCH');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  expect((await accepted).status()).toBe(200);
+  const headers=await authHeaders(page);
+  async function readConsent(){
+    const response=await page.request.get('/api/clinical/records/consents?mother_id=eq.'+motherId,{headers});
+    return (await response.json()).find(x=>x.consent_type==='whatsapp');
+  }
+  const before=await readConsent();
+  expect(before.granted).toBe(true);
+  await page.locator('[data-action="edit-patient"]:visible').first().click();
+  await expect(page.locator('[data-legacy-consents]')).not.toHaveAttribute('open');
+  await page.locator('[name=motherPhone]').fill('(16) 98888-7777');
+  const patched=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='PATCH');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  expect((await patched).status()).toBe(200);
+  const after=await readConsent();
+  expect(after.granted).toBe(true);
+  expect(after.accepted_at).toBe(before.accepted_at);
+  expect(after.revoked_at).toBe(before.revoked_at);
+});
