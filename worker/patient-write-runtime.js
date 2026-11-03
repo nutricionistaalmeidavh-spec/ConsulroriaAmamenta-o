@@ -226,7 +226,7 @@ export async function persistPatientEdit(env, user, input, {
     // separately; never rewrite an existing clinical record or secret as a fallback.
     const schema=await db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='signature_requests' LIMIT 1").first();
     if(schema?.present){
-      const open="('draft','sending','sent','delivery_failed')";
+      const open="('draft','sending','sent','delivery_failed','signing_mother')";
       statements.push(db.prepare(`UPDATE signature_tokens SET revoked_at=? WHERE owner_id=?
         AND revoked_at IS NULL AND request_id IN
         (SELECT id FROM signature_requests WHERE owner_id=? AND mother_id=? AND status IN ${open})`)
