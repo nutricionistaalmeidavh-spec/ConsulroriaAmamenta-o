@@ -9,6 +9,7 @@ import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs
 import { applyFinancialEntryCancellation } from './lib/financial-entry-cancel-materialize.mjs';
 import { applyClinicalPdfBranding } from './lib/clinical-pdf-branding-materialize.mjs';
 import { applyMotherOnlyPatientMaterialization } from './lib/mother-only-patient-materialize.mjs';
+import { applySignatureOnboardingMaterialization } from './lib/signature-onboarding-materialize.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -521,6 +522,10 @@ replaceText('core/app-shell.js',
   'prenatal-followup-is-explicit');
 
 applyMotherOnlyPatientMaterialization(replaceText);
+// Maternal email persistence is materialized after patient-address hardening;
+// preserve historic consent booleans, never use request selection as grant.
+applySignatureOnboardingMaterialization(replaceText); // signature-onboarding-persist-email below in address hardener
+
 
 /*
  * Prenatal UI is an explicit projection of canonical wizard state.
