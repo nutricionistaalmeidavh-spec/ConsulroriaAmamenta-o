@@ -3,7 +3,7 @@ import { recordByIdForOwner } from './d1-record-store.js';
 import { createConsentPdf } from '../public/document-pdf-service.js';
 import { getConsultantConsentDocument } from '../public/consultant-consent-content.js';
 import { canonicalConsentStatements, ConsentSupersededError } from './signature-consent-sync.js';
-import { checkPdf,parseSignature,digestHex,hmacHex,appendSignatureAnnex,MAX_SIGNATURE_PDF_BYTES } from './signature-pdf.js';
+import { checkPdf,parseSignature,digestHex,hmacHex,evidenceKeyId,evidenceVerificationKeys,appendSignatureAnnex,MAX_SIGNATURE_PDF_BYTES } from './signature-pdf.js';
 
 const enc=new TextEncoder(), str=v=>String(v??'').trim(), now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID();
 const headers={'cache-control':'private, no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-robots-tag':'noindex, nofollow'};
@@ -26,9 +26,9 @@ async function readPdf(env,entry){
   await checkPdf(bytes);
   return bytes;
 }
-async function eventSeal(env,entry,role,when,hash){
+async function eventSeal(env,entry,role,when,hash,secret=env.CLINICAL_AUTH_SECRET){
   const proof=[entry.id,entry.owner_id,entry.mother_id,role,when,hash].join('|');
-  return hmacHex(env.CLINICAL_AUTH_SECRET,proof);
+  return hmacHex(secret,proof);
 }
 async function filePut(env,key,bytes){
   if(!env.CLINICAL_FILES?.put)throw new Error('signature_r2_required');
@@ -133,7 +133,9 @@ async function confirmSignature(env,entry,role,input){
     outputKey=`signatures/${entry.owner_id}/${entry.mother_id}/${entry.id}/v${newVersion}-${resultHash}.pdf`;
     await filePut(env,outputKey,output);
     const seal=await eventSeal(env,entry,role,when,resultHash);
+    const sealKeyId=await evidenceKeyId(env.CLINICAL_AUTH_SECRET);
     const eventData={source_sha256:source.sha256,final_sha256:resultHash,mode:signature.mode,
+      seal_version:1,seal_key_id:sealKeyId,
       email:role==='mother'?entry.recipient_email:input.actorEmail,full_name:signature.legalName};
     const steps=[
       ...consentEffects,
@@ -177,19 +179,42 @@ export async function handleSignatureFlowRuntime(request,env,url=new URL(request
   if(verifyPath&&request.method==='GET'){
     const requestId=verifyPath[1],expectedHash=str(url.searchParams.get('sha256'));
     if(!/^[a-f0-9]{64}$/.test(expectedHash))return json(400,{error:'sha256_required'});
-    const entry=await env.CLINICAL_DB.prepare("SELECT id,owner_id,mother_id,status FROM signature_requests WHERE id=? AND status='completed'").bind(requestId).first();
+    const entry=await env.CLINICAL_DB.prepare(
+      "SELECT id,owner_id,mother_id,status FROM signature_requests WHERE id=? AND status='completed'"
+    ).bind(requestId).first();
     if(!entry)return json(404,{valid:false});
-    const pdf=await getDocument(env.CLINICAL_DB,entry.id,entry.owner_id,3);
-    if(!pdf||pdf.sha256!==expectedHash)return json(200,{valid:false});
-    const evidence=await env.CLINICAL_DB.prepare(`SELECT event_hash,event_at FROM signature_events
-      WHERE request_id=? AND owner_id=? AND event_type='signed' AND actor_role='consultant'
-      ORDER BY event_at DESC LIMIT 1`).bind(entry.id,entry.owner_id).first();
-    if(!evidence?.event_hash)return json(200,{valid:false});
     try{
-      const expected=await eventSeal(env,entry,'consultant',evidence.event_at,pdf.sha256);
-      if(expected!==evidence.event_hash)return json(200,{valid:false});
-      const actual=await readPdf(env,pdf);
-      return json(200,{valid:actual.length>0,request_id:entry.id,sha256:pdf.sha256,seal_type:'platform_hmac_not_icp_brasil'});
+      const docs=[];
+      for(let version=1;version<=3;version++){
+        const pdf=await getDocument(env.CLINICAL_DB,entry.id,entry.owner_id,version);
+        if(!pdf)return json(200,{valid:false});
+        await readPdf(env,pdf); // actual private bytes must match each immutable SHA-256
+        docs.push(pdf);
+      }
+      if(docs[2].sha256!==expectedHash)return json(200,{valid:false});
+      const signed=await env.CLINICAL_DB.prepare(`SELECT actor_role,event_hash,event_at,metadata_json
+        FROM signature_events WHERE request_id=? AND owner_id=? AND event_type='signed'`)
+        .bind(entry.id,entry.owner_id).all();
+      const keys=evidenceVerificationKeys(env);
+      for(const [index,role] of ['mother','consultant'].entries()){
+        const matches=(signed.results||[]).filter(item=>item.actor_role===role);
+        if(matches.length!==1)return json(200,{valid:false});
+        const event=matches[0],details=JSON.parse(event.metadata_json||'{}');
+        if(details.final_sha256!==docs[index+1].sha256||details.source_sha256!==docs[index].sha256)
+          return json(200,{valid:false});
+        let authenticated=false;
+        for(const key of keys){
+          if(details.seal_key_id && await evidenceKeyId(key)!==details.seal_key_id)continue;
+          if(await eventSeal(env,entry,role,event.event_at,docs[index+1].sha256,key)===event.event_hash){
+            authenticated=true;break;
+          }
+        }
+        // Do not pretend a rotated/missing key is a verified signature.
+        if(!authenticated)return json(200,{valid:false,integrity_verified:true,
+          error:'signature_evidence_key_unavailable_or_invalid'});
+      }
+      return json(200,{valid:true,request_id:entry.id,sha256:docs[2].sha256,
+        seal_type:'platform_hmac_not_icp_brasil'});
     }catch{return json(200,{valid:false})}
   }
   if(publicPath){
