@@ -67,6 +67,7 @@ async function mount(motherId){
     const target=screen.querySelector('[data-pf-prontuario]')||screen.querySelector('.patient-detail-grid')||screen.lastElementChild;target?.after?target.after(card):screen.appendChild(card);
     card.querySelectorAll('[data-df-term]').forEach(btn=>btn.addEventListener('click',()=>openConsent(motherId,btn.dataset.dfTerm,btn).catch(e=>DOC.toast(e.message||'Não foi possível abrir o termo.','error'))));
     window.dispatchEvent(new CustomEvent('debora:terms-mounted',{detail:{motherId}}));
+    window.dispatchEvent(new CustomEvent('debora:terms-mounted',{detail:{motherId}}));
   }catch(error){if(!/Sessão não encontrada/.test(error.message||''))DOC.toast(error.message||'Não foi possível carregar os termos.','error')}
 }
 refreshClinicalMediaConsentCopy();
