@@ -7,6 +7,12 @@ export function applySignatureOnboardingMaterialization(replaceText){
   replaceText('index.html',PHONE,PHONE+EMAIL,'signature-onboarding-email-field');
   replaceText('index.html',PREVIOUS,NEXT,'signature-onboarding-selection-ui');
   // Email persistence is applied after canonical address hardening, keeping its patch anchors stable.
+  // An unrelated patient edit must never silently revoke a consent signed later.
+  // Legacy manual edits are deliberate only while their own section is expanded.
+  replaceText('core/app-shell.js',
+    "function patientConsentPayload() {\n  const checked = (name) => Boolean(patientForm.elements.namedItem(name)?.checked);\n  return { data_processing: checked('consentData'), whatsapp: checked('consentWhatsapp'), clinical_media: checked('consentClinicalMedia'), public_media: checked('consentPublicMedia') };\n}",
+    "function patientConsentPayload() {\n  const checked = (name) => Boolean(patientForm.elements.namedItem(name)?.checked);\n  if (editingPatientId && !patientForm.querySelector('[data-legacy-consents]')?.open) return {};\n  return { data_processing: checked('consentData'), whatsapp: checked('consentWhatsapp'), clinical_media: checked('consentClinicalMedia'), public_media: checked('consentPublicMedia') };\n}",
+    'signature-onboarding-safe-legacy-consent-edit');
   replaceText('core/app-shell.js',
     "    editingPatientId = saved.mother.id;\n    patientSaveAttempt = null;",
     "    editingPatientId = saved.mother.id;\n    patientSaveAttempt = null;\n    window.dispatchEvent(new CustomEvent('debora:patient-saved', { detail: { motherId: saved.mother.id } }));",
