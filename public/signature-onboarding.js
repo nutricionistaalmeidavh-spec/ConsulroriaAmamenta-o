@@ -1,4 +1,3 @@
-import { createConsentPdf } from './document-pdf-service.js';
 import { getConsultantConsentDocument } from './consultant-consent-content.js';
 import { getSignatureSelections, SIGNATURE_REQUEST_STATUSES, validMotherEmail } from './signature-onboarding-core.js';
 
@@ -66,13 +65,7 @@ async function prepareOne(mother,type,reviewed){
   if(!existing.document_frozen){
     const model=getConsultantConsentDocument(type);
     if(!model?.sections?.length)throw Error('O texto integral desse documento não está disponível.');
-    const pdf=await createConsentPdf({
-      motherName:mother.name,consentLabel:model.title,statusLabel:'Aguardando assinatura da mãe',
-      acceptedAt:'',revokedAt:'',version:model.modelVersion,evidence:'',
-      documentSections:model.sections,modelVersion:model.modelVersion,
-    });
-    const response=await request('/'+existing.id+'/document','POST',pdf,true);
-    if(response.status!=='frozen'&&response.version!==1)throw Error('Não foi possível preparar o PDF.');
+    // Server renders the approved full document from the canonical legal model.\n    const response=await request('/'+existing.id+'/document','POST',{reviewed:true});\n    if(response.status!=='frozen'&&response.version!==1)throw Error('Não foi possível preparar o PDF.');
   }
   try{
     const sent=await request('/'+existing.id+'/send','POST',{});
