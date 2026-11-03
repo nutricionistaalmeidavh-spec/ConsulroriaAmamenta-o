@@ -185,3 +185,22 @@ test('D1 consent CAS aborts on concurrent record changes instead of overwriting 
   assert.equal(JSON.parse(saved.record_json).granted,false);
  }finally{x.close()}
 });
+
+test('patient identity changed during maternal PDF write cannot complete an old signed request',async()=>{
+ const x=await setup();try{
+  const d=await x.create('whatsapp');await x.freeze(d.id);await x.send(d.id);
+  const originalPut=x.env.CLINICAL_FILES.put;
+  x.env.CLINICAL_FILES.put=async(key,data)=>{
+    await originalPut(key,data);
+    if(key.includes('/v2-')){
+      await persistPatientEdit(x.env,owner,{mother:{id:'mae-1',email:'changed-while-signing@example.com'},consents:{}});
+    }
+  };
+  const response=await x.signMother();
+  assert.notEqual(response.status,200);
+  assert.equal((await x.db.prepare('SELECT status FROM signature_requests WHERE id=?').bind(d.id).first()).status,'cancelled');
+  assert.equal((await x.db.prepare('SELECT COUNT(*) AS n FROM signature_documents WHERE request_id=? AND version=2').bind(d.id).first()).n,0);
+  const consents=await x.db.prepare("SELECT record_json FROM supabase_records WHERE table_name='consents'").all();
+  assert.equal(consents.results.some(row=>JSON.parse(row.record_json).signature_request_id===d.id),false);
+ }finally{x.close()}
+});
