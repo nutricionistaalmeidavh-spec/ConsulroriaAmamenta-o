@@ -6,14 +6,7 @@ const NEXT="                    <article class=\"detail-card patient-form-card\"
 export function applySignatureOnboardingMaterialization(replaceText){
   replaceText('index.html',PHONE,PHONE+EMAIL,'signature-onboarding-email-field');
   replaceText('index.html',PREVIOUS,NEXT,'signature-onboarding-selection-ui');
-  replaceText('core/app-shell.js',
-    "val('motherName', patient?.mother?.name); val('motherPhone'",
-    "val('motherName', patient?.mother?.name); val('motherEmail', patient?.mother?.email); val('motherPhone'",
-    'signature-onboarding-load-email');
-  replaceText('core/app-shell.js',
-    "name: get('motherName').trim(), phone: get('motherPhone').trim()",
-    "name: get('motherName').trim(), email: get('motherEmail').trim().toLowerCase(), phone: get('motherPhone').trim()",
-    'signature-onboarding-persist-email');
+  // Email persistence is applied after canonical address hardening, keeping its patch anchors stable.
   replaceText('core/app-shell.js',
     "    editingPatientId = saved.mother.id;\n    patientSaveAttempt = null;",
     "    editingPatientId = saved.mother.id;\n    patientSaveAttempt = null;\n    window.dispatchEvent(new CustomEvent('debora:patient-saved', { detail: { motherId: saved.mother.id } }));",
