@@ -19,6 +19,7 @@ test('patient address is saved once, inherited by a new visit and can be overrid
   await page.locator('[name=motherName]').fill(motherName);
   await page.locator('[name=motherAddress]').fill(initialAddress);
   await page.locator('[data-baby-field="name"]').first().fill(babyName);
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
 
   const created = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'POST');
