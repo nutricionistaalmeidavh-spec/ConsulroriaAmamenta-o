@@ -69,14 +69,18 @@ test('reviewed maternal request freezes server-generated legal PDF without a pre
 test('editing a patient without opening legacy consent editor preserves previously granted consent',async({page})=>{
   await login(page);
   await page.locator('[data-action="new-patient"]:visible').first().click();
-  await page.locator('[name=motherName]').fill(uniqueLabel('Preservar aceite'));
+  const motherName=uniqueLabel('Preservar aceite');
+  await page.locator('[name=motherName]').fill(motherName);
   await page.locator('[data-baby-field="name"]').first().fill(uniqueLabel('Bebê'));
   const created=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   const response=await created;expect(response.status()).toBe(201);
   const motherId=(await response.json()).mother.id;
   await page.locator('[data-action="edit-patient"]:visible').first().click();
-  await page.locator('[data-legacy-consents]').evaluate(el=>{el.open=true});
+  await expect(page.locator('[data-patient-form]')).toBeVisible();
+  await expect(page.locator('[name=motherName]')).toHaveValue(motherName);
+  await page.locator('[data-legacy-consents] summary').click();
+  await expect(page.locator('[name=consentWhatsapp]')).toBeVisible();
   await page.locator('[name=consentWhatsapp]').check();
   const accepted=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='PATCH');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
@@ -89,6 +93,8 @@ test('editing a patient without opening legacy consent editor preserves previous
   const before=await readConsent();
   expect(before.granted).toBe(true);
   await page.locator('[data-action="edit-patient"]:visible').first().click();
+  await expect(page.locator('[data-patient-form]')).toBeVisible();
+  await expect(page.locator('[name=motherName]')).toHaveValue(motherName);
   await expect(page.locator('[data-legacy-consents]')).not.toHaveAttribute('open');
   await page.locator('[name=motherPhone]').fill('(16) 98888-7777');
   const patched=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='PATCH');
