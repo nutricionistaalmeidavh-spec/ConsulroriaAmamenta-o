@@ -17,10 +17,11 @@ test('unrecognized term selection cannot create requests',()=>{
 test('clinical materializer owns the email field, save hook and selection UI across rebuild',()=>{
   const materializer=readFileSync(new URL('../scripts/materialize-clinical-source.mjs',import.meta.url),'utf8');
   const helper=readFileSync(new URL('../scripts/lib/signature-onboarding-materialize.mjs',import.meta.url),'utf8');
+  const addressHardener=readFileSync(new URL('../scripts/lib/patient-address-hardening.mjs',import.meta.url),'utf8');
   assert.match(materializer,/applySignatureOnboardingMaterialization/);
   assert.match(helper,/signature-onboarding-email-field/);
   assert.match(helper,/signature-onboarding-saved-event/);
-  assert.match(helper,/signature-onboarding-persist-email/);
+  assert.match(addressHardener,/signature-onboarding-persist-email/);
   assert.match(helper,/signature-onboarding-selection-ui/);
   if(process.env.SIGNATURE_ONBOARDING_BUILT!=='1')return;
   const runtime=readFileSync(new URL('../public/clinical-source/core/app-shell.js',import.meta.url),'utf8');
