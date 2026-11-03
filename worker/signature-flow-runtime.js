@@ -245,6 +245,8 @@ export async function handleSignatureFlowRuntime(request,env,url=new URL(request
   }
   if(request.method!=='POST')return json(405,{error:'method_not_allowed'});
   if(entry.status!=='mother_signed')return json(409,{error:'signature_mother_must_sign_first'});
+  if(!str(user.user_metadata?.full_name||user.user_metadata?.name))
+    return json(422,{error:'signature_consultant_identity_unavailable'});
   if(Number(request.headers.get('content-length')||0)>230000)return json(413,{error:'signature_payload_too_large'});
   const body=await request.json().catch(()=>null);
   return confirmSignature(env,entry,'consultant',{...body,expectedName:user.user_metadata?.full_name||user.user_metadata?.name||'',actorEmail:user.email});
