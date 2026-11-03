@@ -11,7 +11,7 @@ function setup() {
     await db.prepare("INSERT INTO supabase_records (table_name,record_key,owner_id,record_json) VALUES ('mothers',?,?,?)")
       .bind(id,owner,JSON.stringify({id,owner_id:owner,name:'Maria',email})).run();
   }
-  const env={CLINICAL_DB:db};
+  const env={CLINICAL_DB:db,SIGNATURE_PUBLIC_ORIGIN:'https://assinaturas.example.test'};
   const run=(method,path,body,user={id:'consultora-a',email:'consultora@example.com'},extra={})=>
     handleSignatureRequestRuntime(new Request('https://app.deboralactacao.com'+path,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,undefined,{authenticate:async()=>user,...extra});
   return {db,env,mother,run};
@@ -84,7 +84,7 @@ test('delivery uses frozen R2 document and token hash, never persists raw link t
     assert.equal((await sent.json()).status,'sent');
     assert.equal(message.to,'maria@example.com');
     const link=new URL(message.data.signingUrl);
-    assert.equal(link.origin,'https://app.deboralactacao.com');
+    assert.equal(link.origin,'https://assinaturas.example.test');
     const raw=link.searchParams.get('token');
     assert.match(raw,/^[a-f0-9]{64}$/);
     const token=await s.db.prepare('SELECT token_sha256 FROM signature_tokens WHERE request_id=?').bind(created.id).first();
