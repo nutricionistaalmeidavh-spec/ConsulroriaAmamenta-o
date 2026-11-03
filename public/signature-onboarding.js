@@ -140,7 +140,7 @@ if(panel&&form){
     pendingSelection=[];pendingReviewed=false;
     panel.querySelectorAll('[data-signature-select],[data-signature-reviewed]').forEach(input=>{input.checked=false});
     const legacy=panel.querySelector('[data-legacy-consents]');
-    if(legacy)legacy.hidden=!event.detail?.motherId;
+    if(legacy)legacy.hidden=false; // Existing manual-consent controls remain accessible for legacy clinical records.
     status('');refreshCount();
     if(event.detail?.motherId)updatePatientStatuses(event.detail.motherId);
   });
