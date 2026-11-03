@@ -1,5 +1,7 @@
 import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { recordByIdForOwner } from './d1-record-store.js';
+import { createConsentPdf } from '../public/document-pdf-service.js';
+import { getConsultantConsentDocument } from '../public/consultant-consent-content.js';
 import { checkPdf,parseSignature,digestHex,hmacHex,appendSignatureAnnex,MAX_SIGNATURE_PDF_BYTES } from './signature-pdf.js';
 
 const enc=new TextEncoder(), str=v=>String(v??'').trim(), now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID();
@@ -34,12 +36,26 @@ async function filePut(env,key,bytes){
 }
 async function freeze(request,env,entry){
   if(entry.status!=='draft')return json(409,{error:'signature_request_not_draft'});
-  if(request.headers.get('x-document-reviewed')!=='true')return json(400,{error:'signature_document_review_required'});
-  const size=Number(request.headers.get('content-length')||0);
-  if(size>MAX_SIGNATURE_PDF_BYTES)return json(413,{error:'signature_document_too_large'});
-  const bytes=new Uint8Array(await request.arrayBuffer());
-  try{await checkPdf(bytes)}catch{return json(422,{error:'signature_pdf_invalid'})}
+  if(!/^application\/json(?:;|$)/i.test(request.headers.get('content-type')||'')){
+    return json(415,{error:'signature_pdf_upload_not_allowed'});
+  }
+  if(Number(request.headers.get('content-length')||0)>4096)return json(413,{error:'signature_payload_too_large'});
+  const payload=await request.json().catch(()=>null);
+  if(payload?.reviewed!==true)return json(400,{error:'signature_document_review_required'});
+  const model=getConsultantConsentDocument(entry.consent_type);
+  const mother=await recordByIdForOwner(env.CLINICAL_DB,'mothers',entry.mother_id,entry.owner_id);
+  if(!model?.sections?.length||!mother?.record?.name)return json(422,{error:'signature_model_not_ready'});
   if(await getDocument(env.CLINICAL_DB,entry.id,entry.owner_id,1))return json(409,{error:'signature_document_already_frozen'});
+  // Generate the only eligible document server-side from the canonical legal template.
+  // Never trust a client-supplied PDF, arbitrary legal wording or a forged document hash.
+  const doc=createConsentPdf({
+    motherName:mother.record.name,consentLabel:model.title,
+    statusLabel:'Aguardando assinatura da mãe',acceptedAt:'',revokedAt:'',
+    version:model.modelVersion,evidence:'',documentSections:model.sections,
+    modelVersion:model.modelVersion,
+  });
+  const bytes=new Uint8Array(await doc.arrayBuffer());
+  try{await checkPdf(bytes)}catch{return json(422,{error:'signature_generated_pdf_invalid'})}
   const hash=await digestHex(bytes);
   const key=`signatures/${entry.owner_id}/${entry.mother_id}/${entry.id}/source-${hash}.pdf`;
   await filePut(env,key,bytes);
@@ -52,14 +68,14 @@ async function freeze(request,env,entry){
       env.CLINICAL_DB.prepare(`INSERT INTO signature_evidence (id,request_id,owner_id,evidence_type,evidence_sha256,r2_key,created_at)
         VALUES(?,?,?,'source_pdf_sha256',?,?,?)`).bind(uid(),entry.id,entry.owner_id,hash,key,timestamp),
       env.CLINICAL_DB.prepare(`INSERT INTO signature_events (id,request_id,owner_id,event_type,actor_role,event_at,metadata_json)
-        VALUES(?,?,?,'document_frozen','consultant',?,?)`).bind(uid(),entry.id,entry.owner_id,timestamp,JSON.stringify({sha256:hash,bytes:bytes.length})),
+        VALUES(?,?,?,'document_frozen','consultant',?,?)`).bind(uid(),entry.id,entry.owner_id,timestamp,JSON.stringify({sha256:hash,bytes:bytes.length,source:'canonical_model',model_version:model.modelVersion})),
     ]);
   }catch{
-    // Unique(request_id,version) blocks any concurrent or repeat source replacement.
     return json(409,{error:'signature_document_already_frozen'});
   }
   return json(201,{id:entry.id,version:1,sha256:hash,status:'frozen'});
 }
+
 async function lookupToken(env,request) {
   const token=str(request.headers.get('x-signature-token'));
   if(!/^[a-f0-9]{64}$/.test(token))return null;
@@ -194,5 +210,5 @@ export async function handleSignatureFlowRuntime(request,env,url=new URL(request
   if(entry.status!=='mother_signed')return json(409,{error:'signature_mother_must_sign_first'});
   if(Number(request.headers.get('content-length')||0)>230000)return json(413,{error:'signature_payload_too_large'});
   const body=await request.json().catch(()=>null);
-  return confirmSignature(env,entry,'consultant',{...body,expectedName:user.user_metadata?.full_name||user.user_metadata?.name||body?.full_name,actorEmail:user.email});
+  return confirmSignature(env,entry,'consultant',{...body,expectedName:user.user_metadata?.full_name||user.user_metadata?.name||'',actorEmail:user.email});
 }
