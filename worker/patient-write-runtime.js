@@ -216,6 +216,32 @@ export async function persistPatientEdit(env, user, input, {
   }
   const records = { mother, babies, consents };
   const statements = [recordStatement(db, 'mothers', mother, existing.key, user.id, now), ...babyWrites, ...consentWrites];
+  // E-mail and legal-name edits must atomically revoke all outstanding signing
+  // links; a mother must never receive or use the prior identity's bearer token.
+  const priorEmail=String(existing.record.email||'').trim().toLowerCase();
+  const nextEmail=String(mother.email||'').trim().toLowerCase();
+  const normalName=value=>String(value||'').trim().replace(/\\s+/g,' ').toLocaleLowerCase('pt-BR');
+  if(priorEmail!==nextEmail||normalName(existing.record.name)!==normalName(mother.name)){
+    // Remain compatible with installations migrating the additive signature schema
+    // separately; never rewrite an existing clinical record or secret as a fallback.
+    const schema=await db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='signature_requests' LIMIT 1").first();
+    if(schema?.present){
+      const open="('draft','sending','sent','delivery_failed','signing_mother')";
+      statements.push(db.prepare(`UPDATE signature_tokens SET revoked_at=? WHERE owner_id=?
+        AND revoked_at IS NULL AND request_id IN
+        (SELECT id FROM signature_requests WHERE owner_id=? AND mother_id=? AND status IN ${open})`)
+        .bind(now,user.id,user.id,mother.id));
+      statements.push(db.prepare(`INSERT INTO signature_events
+        (id,request_id,owner_id,event_type,actor_role,event_at,metadata_json)
+        SELECT lower(hex(randomblob(16))),id,owner_id,'cancelled','system',?,
+        '{"reason":"patient_identity_changed"}'
+        FROM signature_requests WHERE owner_id=? AND mother_id=? AND status IN ${open}`)
+        .bind(now,user.id,mother.id));
+      statements.push(db.prepare(`UPDATE signature_requests SET status='cancelled',updated_at=?
+        WHERE owner_id=? AND mother_id=? AND status IN ${open}`)
+        .bind(now,user.id,mother.id));
+    }
+  }
   if (idempotencyKey) statements.push(idempotencyInsertStatement(db, user.id, 'update_patient', idempotencyKey, records, now));
   try {
     await db.batch(statements);

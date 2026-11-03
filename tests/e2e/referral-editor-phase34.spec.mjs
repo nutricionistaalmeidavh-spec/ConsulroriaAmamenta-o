@@ -9,6 +9,7 @@ test('modelo original: títulos fixos, pré-preenchimento opcional e PDF com car
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name="motherName"]').fill(mother);
   await page.locator('[data-baby-field="name"]').first().fill(uniqueLabel('Bebê'));
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name="consentData"]').check();
   const saved=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
   await page.locator('[data-patient-form] button[type="submit"]:visible').first().click();
