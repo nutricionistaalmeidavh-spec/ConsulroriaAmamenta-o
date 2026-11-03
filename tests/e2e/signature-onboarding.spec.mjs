@@ -36,3 +36,32 @@ test('selecting terms in patient registration never grants consent before matern
   await page.locator('[data-action="edit-patient"]:visible').first().click();
   await expect(page.locator('[name=motherEmail]')).toHaveValue('mae-assinatura@example.test');
 });
+
+test('reviewed maternal request freezes server-generated legal PDF without a premature email',async({page})=>{
+  await login(page);
+  await page.locator('[data-action="new-patient"]:visible').first().click();
+  await page.locator('[name=motherName]').fill(uniqueLabel('Termo a assinar'));
+  await page.locator('[name=motherEmail]').fill('mae-termo@example.test');
+  await page.locator('[data-baby-field="name"]').first().fill(uniqueLabel('Bebê'));
+  await page.locator('[data-signature-select="whatsapp"]').check();
+  await page.locator('[data-signature-reviewed]').check();
+  const created=page.waitForResponse(r=>r.url().endsWith('/api/clinical/patients')&&r.request().method()==='POST');
+  await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
+  const response=await created;expect(response.status()).toBe(201);
+  const motherId=(await response.json()).mother.id,headers=await authHeaders(page);
+  await expect.poll(async()=>{
+    const r=await page.request.get('/api/clinical/signatures/requests?mother_id='+motherId,{headers});
+    const rows=(await r.json()).requests||[];
+    const match=rows.find(x=>x.consent_type==='whatsapp');
+    return match?.document_frozen===true&&match?.status==='draft';
+  },{timeout:20000}).toBe(true);
+  const requests=(await (await page.request.get('/api/clinical/signatures/requests?mother_id='+motherId,{headers})).json()).requests;
+  const draft=requests.find(x=>x.consent_type==='whatsapp');
+  const pdf=await page.request.get('/api/clinical/signatures/requests/'+draft.id+'/document',{headers});
+  expect(pdf.status()).toBe(200);
+  expect(pdf.headers()['content-type']).toContain('application/pdf');
+  expect((await pdf.body()).subarray(0,5).toString()).toBe('%PDF-');
+  const consent=await page.request.get('/api/clinical/records/consents?mother_id=eq.'+motherId,{headers});
+  const consents=await consent.json();
+  expect(consents.find(x=>x.consent_type==='whatsapp')?.granted).toBe(false);
+});
