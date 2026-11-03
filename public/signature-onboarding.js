@@ -76,6 +76,7 @@ async function prepareOne(mother,type,reviewed){
     // A missing rollout flag must never be reported as a sent email.
     if(error.code==='signature_signing_not_ready')return {type,state:'draft',note:'Envio aguardando homologação'};
     if(error.code==='signature_sender_not_configured')return {type,state:'draft',note:'Remetente institucional não configurado'};
+    if(error.code==='signature_origin_not_configured'||error.code==='signature_origin_invalid')return {type,state:'draft',note:'Domínio de assinatura aguardando homologação'};
     throw error;
   }
 }
