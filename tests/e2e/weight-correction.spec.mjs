@@ -8,6 +8,7 @@ test('pesagem retroativa, correção e invalidação usam a timeline V5 e um ún
   await page.locator('[data-baby-field="name"]').first().fill(uniqueLabel('Bebê pesagem'));
   await page.locator('[data-baby-field="birth_date"]').first().fill('2026-08-20');
   await page.locator('[data-baby-field="birth_weight_g"]').first().fill('3300');
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   await expect(page.locator('[data-patient-title]')).toBeVisible();
