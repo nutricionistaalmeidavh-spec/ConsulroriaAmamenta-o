@@ -119,3 +119,36 @@ test('new explicit revocation supersedes an old pending request and cannot be si
   assert.equal((await x.db.prepare('SELECT status FROM signature_requests WHERE id=?').bind(d.id).first()).status,'sent');
  }finally{x.close()}
 });
+
+test('rotating an authentication secret never silently asserts historic HMAC authenticity',async()=>{
+ const x=await setup();try{
+  const d=await x.create('whatsapp');await x.freeze(d.id);await x.send(d.id);
+  assert.equal((await x.signMother()).status,200);
+  const professional=await x.signConsultant(d.id);
+  assert.equal(professional.status,200);
+  const final=(await professional.json()).sha256;
+  const verification='/api/signatures/verify/'+d.id+'?sha256='+final;
+  assert.equal((await (await x.call('GET',verification)).json()).valid,true);
+  const previous=x.env.CLINICAL_AUTH_SECRET;
+  x.env.CLINICAL_AUTH_SECRET='rotated-local-test-secret';
+  const blocked=await (await x.call('GET',verification)).json();
+  assert.equal(blocked.valid,false);
+  assert.equal(blocked.integrity_verified,true);
+  assert.equal(blocked.error,'signature_evidence_key_unavailable_or_invalid');
+  // Optional historical verification code path; no real secrets or configs touched.
+  x.env.SIGNATURE_EVIDENCE_HISTORICAL_KEYS=JSON.stringify([previous]);
+  assert.equal((await (await x.call('GET',verification)).json()).valid,true);
+ }finally{x.close()}
+});
+test('document version chain rejects a forged earlier signed PDF even with valid final bytes',async()=>{
+ const x=await setup();try{
+  const d=await x.create('whatsapp');await x.freeze(d.id);await x.send(d.id);
+  await x.signMother();const professional=await x.signConsultant(d.id);
+  const final=(await professional.json()).sha256;
+  const verification='/api/signatures/verify/'+d.id+'?sha256='+final;
+  assert.equal((await (await x.call('GET',verification)).json()).valid,true);
+  const middle=await x.db.prepare('SELECT r2_key FROM signature_documents WHERE request_id=? AND version=2').bind(d.id).first();
+  x.objects.get(middle.r2_key)[12]^=1;
+  assert.equal((await (await x.call('GET',verification)).json()).valid,false);
+ }finally{x.close()}
+});
