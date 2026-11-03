@@ -21,6 +21,7 @@ export function hardenPatientAddressHtml(source) {
 }
 
 export function hardenPatientAddressApp(source) {
+  if (!source.includes("val('motherEmail'")) {
   source = replaceOnce(
     source,
     "  val('motherName', patient?.mother?.name); val('motherPhone', patient?.mother?.phone); val('motherBirthDate', patient?.mother?.birth_date);",
@@ -28,6 +29,8 @@ export function hardenPatientAddressApp(source) {
     'edit-form-prefill'
   );
 
+  }
+  if (!source.includes("email: get('motherEmail')")) {
   source = replaceOnce(
     source,
     "      name: get('motherName').trim(), phone: get('motherPhone').trim(), birth_date: get('motherBirthDate') || null,",
@@ -35,6 +38,7 @@ export function hardenPatientAddressApp(source) {
     'patient-payload'
   );
 
+  }
   // Signature onboarding email is a real canonical mother field, not a transient UI destination.
   source = replaceOnce(
     source,
