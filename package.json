@@ -26,7 +26,7 @@
     "test:block8": "node --test tests/block-8-owned-api.test.mjs",
     "test:block9": "node --test tests/block-9-d1-hardening.test.mjs",
     "test:block10": "node --test tests/block-10-zero-supabase-runtime.test.mjs",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && playwright test --project=chromium --shard=1/3 && playwright test --project=chromium --shard=2/3 && playwright test --project=chromium --shard=3/3 && playwright test --project=chromium-upgrade && playwright test --project=chromium-service-worker",
     "test:e2e:cache-upgrade": "npm run build && playwright test tests/e2e/deploy-version-upgrade.spec.mjs",
     "test:e2e:mobile": "npm run build && playwright test --config=playwright.mobile.config.mjs",
     "test:e2e:smoke": "playwright test --config=playwright.smoke.config.mjs",
