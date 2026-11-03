@@ -102,7 +102,11 @@ jobs:
       # Running these tests in separate Playwright invocations keeps the functional
       # browser session independent without skipping any checks.
       - name: Run functional desktop E2E on the final artifact
-        run: npx playwright test --project=chromium
+        run: |
+          set -euo pipefail
+          npx playwright test --project=chromium --shard=1/3
+          npx playwright test --project=chromium --shard=2/3
+          npx playwright test --project=chromium --shard=3/3
 
       - name: Verify version upgrade with isolated Chromium browser
         run: npx playwright test --project=chromium-upgrade
