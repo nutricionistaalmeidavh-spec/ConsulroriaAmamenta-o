@@ -13,8 +13,8 @@ async function setup(){
  db.exec(readFileSync(new URL('../cloudflare/migrations/0019-signature-foundation.sql',import.meta.url),'utf8'));
  const time=new Date('2026-10-01T00:00:00Z').toISOString();
  const mother={id:'mae-1',owner_id:owner.id,name:'Maria Teste',email:'maria@example.com',created_at:time,updated_at:time};
- await db.prepare("INSERT INTO supabase_records (table_name,record_key,owner_id,record_json,created_at,updated_at,source_updated_at) VALUES('mothers',?,?,?,?,?,?)")
-  .bind(mother.id,owner.id,JSON.stringify(mother),time,time,time).run();
+ await db.prepare("INSERT INTO supabase_records (table_name,record_key,owner_id,record_json,source_updated_at) VALUES('mothers',?,?,?,?)")
+  .bind(mother.id,owner.id,JSON.stringify(mother),time).run();
  const objects=new Map(),message=[];
  const env={CLINICAL_DB:db,CLINICAL_AUTH_SECRET:'dummy-nonproduction-key',SIGNATURE_DELIVERY_ENABLED:'true',SIGNATURE_PUBLIC_FLOW_READY:'true',SIGNATURE_PUBLIC_ORIGIN:'https://assinaturas.example.test',
   CLINICAL_FILES:{async put(key,data){objects.set(key,new Uint8Array(data));},async head(key){return objects.has(key)?{size:objects.get(key).length}:null;},async get(key){const data=objects.get(key);return data?{arrayBuffer:async()=>data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}:null;}}};
