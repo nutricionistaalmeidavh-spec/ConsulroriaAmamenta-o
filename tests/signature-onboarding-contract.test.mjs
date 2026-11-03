@@ -26,10 +26,10 @@ test('clinical materializer owns the email field, save hook and selection UI acr
   if(process.env.SIGNATURE_ONBOARDING_BUILT!=='1')return;
   const runtime=readFileSync(new URL('../public/clinical-source/core/app-shell.js',import.meta.url),'utf8');
   const html=readFileSync(new URL('../public/clinical-source/index.html',import.meta.url),'utf8');
-  assert.match(materializer,/signature-onboarding-email-field/);
-  assert.match(materializer,/signature-onboarding-saved-event/);
-  assert.match(materializer,/signature-onboarding-persist-email/);
-  assert.match(materializer,/signature-onboarding-selection-ui/);
+  assert.match(helper,/signature-onboarding-email-field/);
+  assert.match(helper,/signature-onboarding-saved-event/);
+  assert.match(addressHardener,/signature-onboarding-persist-email/);
+  assert.match(helper,/signature-onboarding-selection-ui/);
   assert.match(runtime,/debora:patient-saved/);
   assert.match(runtime,/email: get\('motherEmail'\)/);
   assert.match(html,/name="motherEmail"/);
