@@ -2,6 +2,7 @@ import { authenticateClinicalRequest } from './cloudflare-auth-runtime.js';
 import { recordByIdForOwner } from './d1-record-store.js';
 import { createConsentPdf } from '../public/document-pdf-service.js';
 import { getConsultantConsentDocument } from '../public/consultant-consent-content.js';
+import { canonicalConsentStatements, ConsentSupersededError } from './signature-consent-sync.js';
 import { checkPdf,parseSignature,digestHex,hmacHex,appendSignatureAnnex,MAX_SIGNATURE_PDF_BYTES } from './signature-pdf.js';
 
 const enc=new TextEncoder(), str=v=>String(v??'').trim(), now=()=>new Date().toISOString(), uid=()=>crypto.randomUUID();
@@ -84,7 +85,13 @@ async function lookupToken(env,request) {
     FROM signature_tokens st JOIN signature_requests sr ON sr.id=st.request_id AND sr.owner_id=st.owner_id
     WHERE st.token_sha256=? AND st.revoked_at IS NULL AND st.expires_at>?
     AND sr.status='sent' AND sr.expires_at>? LIMIT 1`).bind(hash,now(),now()).first();
-  return result||null;
+  if(!result)return null;
+  const mother=await recordByIdForOwner(env.CLINICAL_DB,'mothers',result.mother_id,result.owner_id);
+  const snapshot=JSON.parse(result.source_snapshot_json||'{}');
+  const sameEmail=String(mother?.record?.email||'').trim().toLowerCase()===result.recipient_email;
+  const normalize=v=>String(v||'').trim().replace(/\\s+/g,' ').toLocaleLowerCase('pt-BR');
+  if(!sameEmail||normalize(mother?.record?.name)!==normalize(snapshot.mother_name))return null;
+  return result;
 }
 async function viewPublic(request,env,mode){
   const entry=await lookupToken(env,request);
@@ -122,12 +129,14 @@ async function confirmSignature(env,entry,role,input){
       role,isoTime:when,signature,sourceHash:source.sha256,
     });
     const resultHash=await digestHex(output);
+    const consentEffects=role==='mother'?await canonicalConsentStatements(db,entry,when,resultHash):[];
     outputKey=`signatures/${entry.owner_id}/${entry.mother_id}/${entry.id}/v${newVersion}-${resultHash}.pdf`;
     await filePut(env,outputKey,output);
     const seal=await eventSeal(env,entry,role,when,resultHash);
     const eventData={source_sha256:source.sha256,final_sha256:resultHash,mode:signature.mode,
       email:role==='mother'?entry.recipient_email:input.actorEmail,full_name:signature.legalName};
     const steps=[
+      ...consentEffects,
       db.prepare(`INSERT INTO signature_documents
         (id,request_id,owner_id,version,r2_key,sha256,frozen_at,created_at)
         VALUES(?,?,?,?,?,?,?,?)`).bind(uid(),entry.id,entry.owner_id,newVersion,outputKey,resultHash,when,when),
@@ -152,6 +161,9 @@ async function confirmSignature(env,entry,role,input){
     // R2 objects are harmless and never become a signed document without the D1 commit.
     await db.prepare('UPDATE signature_requests SET status=?,updated_at=? WHERE id=? AND owner_id=? AND status=?')
       .bind(prior,now(),entry.id,entry.owner_id,locked).run().catch(()=>{});
+    if(err instanceof ConsentSupersededError)return json(409,{error:err.code});
+    if(/CHECK constraint failed.*(actor_role|signature_events)|signature_consent_concurrent_change/.test(String(err?.message||'')))
+      return json(409,{error:'signature_consent_concurrent_change'});
     console.error('signature_finalize_failed',String(err?.message||err));
     return json(503,{error:'signature_finalize_failed'});
   }
