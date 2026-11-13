@@ -1,0 +1,21 @@
+/* P0/P1 clinical monthly finance: compact, mobile-first, accessible. */
+.finance-period-controls{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin:18px 0}
+.finance-period-controls>.field,.finance-custom-range>.field{display:grid;gap:6px;min-width:170px;flex:1}
+.finance-period-controls input,.finance-period-controls select{width:100%;max-width:100%;min-height:44px;border:1px solid var(--ui-border,#d5d5d5);border-radius:10px;background:#fff;color:inherit;padding:9px 10px}
+.finance-period-controls [hidden],.finance-custom-range[hidden]{display:none!important}
+.finance-custom-range{display:flex;gap:10px;flex:2;min-width:260px;align-items:end}
+.finance-period-label{display:flex;flex-wrap:wrap;gap:8px;font-size:13px;margin:8px 0 16px}
+.finance-period-label [role=alert]{color:#a42138}
+.finance-report-heading{margin:22px 0 12px}
+.finance-clinical-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.finance-audit-notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 20px}
+.finance-audit-notes>div{border:1px solid var(--ui-border,#d5d5d5);border-radius:14px;padding:13px}
+.finance-audit-notes strong{font-size:13px}
+.finance-audit-notes p{margin:6px 0 0;font-size:12px;opacity:.75}
+.finance-list-heading{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:12px;margin:20px 0 12px}
+.finance-list-heading h2{font-size:18px;margin:0}
+.finance-export-actions{display:flex;flex-wrap:wrap;gap:8px}
+.finance-export-actions .ui-button{min-height:44px}
+.finance-card .agenda-main small{display:block;margin-top:4px}
+@media(max-width:760px){.finance-period-controls,.finance-custom-range{display:grid;grid-template-columns:1fr 1fr;gap:10px}.finance-period-controls>.field{min-width:0}.finance-period-controls>.finance-custom-range{grid-column:1/-1;min-width:0}.finance-clinical-kpis,.finance-audit-notes{grid-template-columns:1fr 1fr}.finance-list-heading{align-items:stretch}.finance-export-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.finance-export-actions button{white-space:normal}}
+@media(max-width:440px){.finance-period-controls,.finance-custom-range,.finance-clinical-kpis,.finance-audit-notes{grid-template-columns:1fr}.finance-export-actions{grid-template-columns:1fr}}
