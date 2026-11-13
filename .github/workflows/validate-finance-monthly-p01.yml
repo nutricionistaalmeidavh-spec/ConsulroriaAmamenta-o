@@ -1,0 +1,42 @@
+name: Validate monthly finance P0/P1
+
+on:
+  pull_request:
+    paths:
+      - 'public/finance-monthly-report.mjs'
+      - 'public/finance-report-controller.mjs'
+      - 'public/finance-report.css'
+      - 'public/clinical-source/**'
+      - 'worker/cloudflare-data-runtime.js'
+      - 'scripts/lib/finance-monthly-materialize.mjs'
+      - 'scripts/materialize-clinical-source.mjs'
+      - 'tests/finance-monthly-*.test.mjs'
+      - '.github/workflows/validate-finance-monthly-p01.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  finance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: |
+          node --check public/finance-monthly-report.mjs
+          node --check public/finance-report-controller.mjs
+          node --check worker/cloudflare-data-runtime.js
+          node --check scripts/lib/finance-monthly-materialize.mjs
+      - name: Materialize clinical source and validate finance tests
+        run: |
+          node scripts/materialize-clinical-source.mjs --write
+          node --check public/clinical-source/core/app-shell.js
+          node --test tests/finance-monthly-report.test.mjs tests/finance-monthly-runtime.test.mjs
+      - name: Verify durable source
+        run: node scripts/materialize-clinical-source.mjs
