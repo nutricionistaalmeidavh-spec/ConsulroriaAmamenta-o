@@ -40,6 +40,9 @@ jobs:
       - name: Test XLSX export, full data separation and backup restore preflight
         run: node --test tests/backup-portability-*.test.mjs tests/clinical-source-delivery8-backup*.test.mjs
 
+      - name: Verify monthly finance, historical receipts and XLSX export (P0/P1)
+        run: node --test tests/finance-monthly-report.test.mjs tests/finance-monthly-runtime.test.mjs
+
       - name: Verify plan billing idempotency and finance safety (P0)
         run: node --test tests/package-billing-reconciliation-p0.test.mjs
 
