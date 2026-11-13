@@ -569,6 +569,14 @@ async function handleRpc(request, env, url) {
     if (current.record?.status === 'Cancelado') {
       return runtimeJson(409, { message: 'Lançamento excluído não pode receber alterações de pagamento.' });
     }
+    const paidDay = String(p.p_paid_date || '').trim();
+    if (p.p_paid && paidDay) {
+      const parsed = new Date(paidDay + 'T12:00:00-03:00');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDay) || Number.isNaN(parsed.getTime())
+        || parsed.toISOString().slice(0, 10) !== paidDay || paidDay > new Date().toISOString().slice(0, 10)) {
+        return runtimeJson(400, { message: 'Data de recebimento inválida ou futura.' });
+      }
+    }
     const row = await updateOwnedById(env, 'financial_entries', p.p_entry_id, {
       paid: Boolean(p.p_paid), status: p.p_paid ? 'Pago' : 'Pendente',
       payment_method: p.p_paid ? (p.p_payment_method || 'Pix') : '',
