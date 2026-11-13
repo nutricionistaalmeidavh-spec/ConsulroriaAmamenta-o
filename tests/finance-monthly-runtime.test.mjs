@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createLocalRuntime,credentials,userId} from './helpers/cloudflare-local.mjs';
 import {unzipSync,strFromU8} from 'fflate';
 import {createFinanceWorkbook} from '../public/clinical-source/core/lib/backup-service.js';
-import {resolvePeriod,createPeriodReport,filterPeriodFinanceRows} from '../public/finance-monthly-report.mjs';
+import {resolvePeriod,createPeriodReport,filterPeriodFinanceRows} from '../public/finance-monthly-report.js';
 
 async function seed(db,id,entry={},owner=userId){
   const now='2026-10-12T12:00:00.000Z';
