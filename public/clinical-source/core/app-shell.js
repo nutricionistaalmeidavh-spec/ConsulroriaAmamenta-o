@@ -4,8 +4,8 @@ import { createRepositories } from './lib/repositories.js';
 import { createAppData } from './lib/app-data.js';
 import { buildEncounterPayload, collectEncounterDraft, applyEncounterDraft } from './lib/encounter-form.js';
 import { createMediaService } from './lib/media-service.js';
-import { createFinanceReportController } from '../../finance-report-controller.mjs';
-import { validDay, reportingDay } from '../../finance-monthly-report.mjs';
+import { createFinanceReportController } from '../../finance-report-controller.js';
+import { validDay, reportingDay } from '../../finance-monthly-report.js';
 import { createBackupService, encryptBackup, decryptBackup } from './lib/backup-service.js';
 import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';
 
