@@ -169,21 +169,41 @@
       </section>
 
       <section class="lactation-screen" data-screen="finance" data-route="/finance" hidden>
-        <div class="page-heading"><div><span class="section-kicker">GESTÃO SIMPLES</span><h1>Financeiro</h1><p>Somente o necessário para controlar seus atendimentos.</p></div><button class="ui-button ui-button-primary" data-action="new-finance">+ Lançamento</button></div>
-        <div class="finance-period-controls" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:16px 0">
-          <label class="field"><span>Período</span><input type="month" data-finance-month aria-label="Mês do relatório"></label>
-          <label class="field"><span>Status</span><select data-finance-status><option>Todos</option><option>Pago</option><option>Pendente</option></select></label>
-          <button type="button" class="ui-button ui-button-ghost" data-action="finance-export-csv">Exportar CSV do período</button>
+        <div class="page-heading"><div><span class="section-kicker">GESTÃO FINANCEIRA E CLÍNICA</span><h1>Relatório financeiro</h1><p>Consulte seus recebimentos, pendências e atendimentos por período.</p></div><button class="ui-button ui-button-primary" data-action="new-finance">+ Lançamento</button></div>
+        <div class="finance-period-controls">
+          <label class="field"><span>Período</span><select data-finance-period-mode><option value="month">Mês completo</option><option value="custom">Intervalo personalizado</option></select></label>
+          <label class="field" data-finance-month-wrap><span>Selecione o mês</span><input type="month" data-finance-month aria-label="Mês do relatório"></label>
+          <div class="finance-custom-range" data-finance-custom hidden>
+            <label class="field"><span>De</span><input type="date" data-finance-from aria-label="Data inicial do relatório"></label>
+            <label class="field"><span>Até</span><input type="date" data-finance-to aria-label="Data final do relatório"></label>
+          </div>
+          <label class="field"><span>Lançamentos</span><select data-finance-status><option>Todos</option><option>Pago</option><option>Pendente</option><option value="Sem data">Sem data de pagamento</option></select></label>
         </div>
-        <section class="lactation-kpis"><article class="lactation-kpi"><span>Recebido no período</span><strong data-finance-received>R$ 0</strong><small data-finance-received-meta>0 pagamentos</small></article><article class="lactation-kpi attention"><span>A receber</span><strong data-finance-receivable>R$ 0</strong><small data-finance-receivable-meta>0 pendências</small></article><article class="lactation-kpi"><span>Ticket médio</span><strong data-finance-ticket>R$ 0</strong><small data-finance-ticket-meta>mês atual</small></article></section>
-        <div class="section-heading"><div><span class="section-kicker">RELATÓRIO CLÍNICO</span><h2>Atividade no período</h2></div></div>
+        <p class="finance-period-label"><strong data-finance-period-label></strong><span data-finance-period-feedback aria-live="polite"></span></p>
         <section class="lactation-kpis">
-          <article class="lactation-kpi"><span>Atendimentos finalizados</span><strong data-finance-encounters>—</strong></article>
-          <article class="lactation-kpi"><span>Pacientes atendidas</span><strong data-finance-patients>—</strong></article>
-          <article class="lactation-kpi"><span>Novas pacientes</span><strong data-finance-new-patients>—</strong></article>
-          <article class="lactation-kpi"><span>Atendimentos sem lançamento individual</span><strong data-finance-unlinked>—</strong><small data-finance-unlinked-info></small></article>
+          <article class="lactation-kpi"><span>Recebido no período</span><strong data-finance-received>R$ 0</strong><small data-finance-received-meta>0 pagamentos</small></article>
+          <article class="lactation-kpi attention"><span>A receber no período</span><strong data-finance-receivable>R$ 0</strong><small data-finance-receivable-meta>0 pendências</small></article>
+          <article class="lactation-kpi"><span>Média por pagamento</span><strong data-finance-ticket>R$ 0</strong><small data-finance-ticket-meta>Por recebimento</small></article>
         </section>
-        <div class="agenda-list agenda-full" data-finance-live><div class="empty-live">Nenhum lançamento financeiro.</div></div>
+        <div class="section-heading finance-report-heading"><div><span class="section-kicker">ATIVIDADE CLÍNICA</span><h2>Atendimentos no período</h2></div></div>
+        <section class="lactation-kpis finance-clinical-kpis">
+          <article class="lactation-kpi"><span>Consultas finalizadas</span><strong data-finance-encounters>0</strong></article>
+          <article class="lactation-kpi"><span>Pacientes distintas atendidas</span><strong data-finance-patients>0</strong></article>
+          <article class="lactation-kpi"><span>Novas pacientes cadastradas</span><strong data-finance-new-patients>0</strong></article>
+          <article class="lactation-kpi"><span>Retornos identificados</span><strong data-finance-returns>0</strong></article>
+        </section>
+        <div class="finance-audit-notes">
+          <div><strong><span data-finance-unlinked>0</span> atendimentos sem cobrança individual vinculada</strong><p data-finance-unlinked-info></p></div>
+          <div><strong><span data-finance-missing-date>0</span> pagamentos sem data identificada</strong><p data-finance-missing-date-info></p></div>
+        </div>
+        <div class="finance-list-heading">
+          <h2>Lançamentos do período</h2>
+          <div class="finance-export-actions">
+            <button type="button" class="ui-button ui-button-ghost" data-action="finance-export-csv" data-finance-export-csv>Exportar CSV</button>
+            <button type="button" class="ui-button ui-button-ghost" data-action="finance-export-xlsx" data-finance-export-xlsx>Exportar planilha XLSX</button>
+          </div>
+        </div>
+        <div class="agenda-list agenda-full" data-finance-live><div class="empty-live">Carregando lançamentos…</div></div>
       </section>
 
       <section class="lactation-screen" data-screen="library" data-route="/library" hidden>
