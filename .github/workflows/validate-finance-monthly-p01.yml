@@ -3,8 +3,8 @@ name: Validate monthly finance P0/P1
 on:
   pull_request:
     paths:
-      - 'public/finance-monthly-report.mjs'
-      - 'public/finance-report-controller.mjs'
+      - 'public/finance-monthly-report.js'
+      - 'public/finance-report-controller.js'
       - 'public/finance-report.css'
       - 'public/clinical-source/**'
       - 'worker/cloudflare-data-runtime.js'
@@ -29,8 +29,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Check JavaScript syntax
         run: |
-          node --check public/finance-monthly-report.mjs
-          node --check public/finance-report-controller.mjs
+          node --check public/finance-monthly-report.js
+          node --check public/finance-report-controller.js
           node --check worker/cloudflare-data-runtime.js
           node --check scripts/lib/finance-monthly-materialize.mjs
       - name: Materialize clinical source and validate finance tests
