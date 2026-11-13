@@ -67,6 +67,7 @@ export function createPeriodReport({financial = [], patients = [], encounters = 
   const activeFinance = financial.filter(f=>f.status !== 'Cancelado');
   const received = activeFinance.filter(f=>f.status === 'Pago' && inPeriod(f.paid_at, period));
   const pending = activeFinance.filter(f=>f.status === 'Pendente' && inPeriod(f.due_at || f.created_at, period));
+  const missingPaymentRows = activeFinance.filter(f=>f.status === 'Pago' && !reportingDay(f.paid_at)).map(f=>normalizeRecord(f,mothers));
   const rows = [...received,...pending]
     .map(f=>normalizeRecord(f,mothers))
     .sort((a,b)=>String(b.paid_at || b.due_at || b.created_at || '').localeCompare(String(a.paid_at || a.due_at || a.created_at || '')));
@@ -96,18 +97,19 @@ export function createPeriodReport({financial = [], patients = [], encounters = 
   const receivedCents = received.reduce((total,f)=>total+Number(f.amount_cents || 0),0);
   const pendingCents = pending.reduce((total,f)=>total+Number(f.amount_cents || 0),0);
   return {
-    period, rows, encounterRows, receivedCents, pendingCents,
+    period, rows, encounterRows, missingPaymentRows, receivedCents, pendingCents,
     paymentCount:received.length, pendingCount:pending.length,
     averagePaymentCents:received.length ? Math.round(receivedCents / received.length) : 0,
     finalizedCount:finalized.length, patientCount:attended.size,
     newPatientCount:newPatients.length, returnCount:returns.length,
     unlinkedCount:financialExceptions.length,
-    missingPaymentDateCount:activeFinance.filter(f=>f.status==='Pago' && !reportingDay(f.paid_at)).length
+    missingPaymentDateCount:missingPaymentRows.length
   };
 }
 
 export function filterPeriodFinanceRows(report, status = 'Todos') {
   if (status === 'Todos') return report.rows;
+  if (status === 'Sem data') return report.missingPaymentRows;
   if (status !== 'Pendente' && status !== 'Pago') throw new Error('Status inválido.');
   return report.rows.filter(row=>row.status===status);
 }
