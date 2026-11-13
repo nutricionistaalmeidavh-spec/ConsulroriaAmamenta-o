@@ -5,6 +5,27 @@ const BLOCKS={"core/app-shell.js":[{"begin":"import { createMediaService","end":
 
 function replaceSection(source, section, path) {
   const {begin,end,newText}=section;
+  // The generated legacy shell can have other feature imports injected before
+  // this overlay. Preserve them rather than replacing the entire import block.
+  if(path === 'core/app-shell.js' && begin === 'import { createMediaService') {
+    const anchor="import { createMediaService } from './lib/media-service.js';";
+    const imports=[
+      "import { createFinanceReportController } from '../../finance-report-controller.js';",
+      "import { validDay, reportingDay } from '../../finance-monthly-report.js';"
+    ].join('\n');
+    if(!source.includes(anchor) || source.includes(imports))
+      throw new Error('finance-report import anchor missing or already inserted');
+    return source.replace(anchor,anchor+'\n'+imports);
+  }
+  // The original clinical stylesheet list includes weekly-care-plan styling
+  // added by other materializers. Only add the report stylesheet.
+  if(path === 'index.html' && begin.includes('stylesheet')) {
+    const anchor='<link rel="stylesheet" href="./styles.css">';
+    const stylesheet='<link rel="stylesheet" href="/finance-report.css">';
+    if(!source.includes(anchor) || source.includes(stylesheet))
+      throw new Error('finance-report stylesheet anchor missing or already inserted');
+    return source.replace(anchor,anchor+'\n  '+stylesheet);
+  }
   const start=source.indexOf(begin);
   if(start<0 || source.indexOf(begin,start+1)>=0)throw new Error('finance-report: missing or ambiguous begin marker in '+path+': '+begin);
   const finish=source.indexOf(end,start+begin.length);
