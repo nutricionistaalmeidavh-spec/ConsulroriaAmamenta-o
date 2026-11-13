@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {reportingDay, resolvePeriod, createPeriodReport, serializeFinanceCsv} from '../public/finance-monthly-report.mjs';
+import {reportingDay, resolvePeriod, createPeriodReport, serializeFinanceCsv} from '../public/finance-monthly-report.js';
 
 test('period resolves complete October and arbitrary date ranges in clinic time', () => {
   assert.deepEqual(resolvePeriod({month:'2026-10'}), {from:'2026-10-01',to:'2026-10-31',label:'Outubro de 2026'});
