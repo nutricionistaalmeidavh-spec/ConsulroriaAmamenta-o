@@ -86,6 +86,11 @@ test('materialized runtime contains report UI, canonical RPC wiring and source-o
  const data=readFileSync('public/clinical-source/core/lib/app-data.js','utf8');
  const materializer=readFileSync('scripts/materialize-clinical-source.mjs','utf8');
  assert.match(shell,/createFinanceReportController/);
+ assert.match(shell,/import \{ mountWeeklyPlan, resetWeeklyPlan/,'financial overlay must preserve weekly-care import');
+ assert.match(shell,/mountWeeklyPlan\(appointmentScreen\)/,'financial overlay must preserve clinical weekly-plan mounting');
+ const bootstrap=readFileSync('src/bootstrap.js','utf8');
+ assert.match(bootstrap,/finance-report-controller\.js/);
+ assert.match(bootstrap,/finance-monthly-report\.js/);
  assert.match(shell,/financeReport\.render\(\)/);
  assert.match(shell,/correctFinancialPaidDate/);
  assert.match(data,/p_correct_paid_date: true/);
