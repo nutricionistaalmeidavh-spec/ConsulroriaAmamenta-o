@@ -34,7 +34,7 @@ export function createFinanceReportController({ getState, setText, currency, esc
     const patientAction = f.mother_id ? '<button data-action="open-finance-patient" data-mother-id="'+escapeHTML(f.mother_id)+'">Paciente</button>' : '';
     const actions = f.status === 'Pendente'
       ? patientAction+'<button data-action="finance-whatsapp" data-finance-id="'+escapeHTML(f.id)+'">Cobrar</button><button data-action="mark-paid" data-finance-id="'+escapeHTML(f.id)+'">Marcar pago</button>'
-      : patientAction+(f.status==='Pago' ? '<button data-action="undo-paid" data-finance-id="'+escapeHTML(f.id)+'">Desfazer pagamento</button>' : '');
+      : patientAction+(f.status==='Pago' ? '<button data-action="correct-paid-date" data-finance-id="'+escapeHTML(f.id)+'">Corrigir data</button><button data-action="undo-paid" data-finance-id="'+escapeHTML(f.id)+'">Desfazer pagamento</button>' : '');
     const removeAction = '<button type="button" class="finance-remove-action" data-action="cancel-finance" data-finance-id="'+escapeHTML(f.id)+'">Excluir</button>';
     const due = f.due_at ? '<small>Vencimento: '+escapeHTML(dateLabel(f.due_at))+'</small>' : '';
     const paid = f.paid_at ? '<small>Recebido: '+escapeHTML(dateLabel(f.paid_at))+'</small>'
