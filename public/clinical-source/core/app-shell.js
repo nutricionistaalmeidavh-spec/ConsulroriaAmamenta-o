@@ -1404,6 +1404,20 @@ document.addEventListener('click', async (event) => {
       await refreshData();
       toast('Pagamento confirmado.', 'success');
     }
+    else if (action === 'correct-paid-date') {
+      const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
+      if (!finance || finance.status !== 'Pago') throw new Error('Este pagamento não está confirmado. Atualize o Financeiro.');
+      const previous = reportingDay(finance.paid_at);
+      const paidDay = window.prompt('Data correta do recebimento (AAAA-MM-DD)', previous || reportingDay(new Date()));
+      if (paidDay === null) return;
+      if (!validDay(paidDay) || paidDay > reportingDay(new Date()))
+        throw new Error('Data de recebimento inválida ou futura.');
+      if (paidDay === previous) { toast('A data informada já está registrada.'); return; }
+      if (!window.confirm('Corrigir a data de recebimento deste pagamento? A alteração ficará registrada no histórico.')) return;
+      await appData.correctFinancialPaidDate(finance.id, paidDay, finance.payment_method || 'Pix');
+      await refreshData();
+      toast('Data de recebimento corrigida e registrada no histórico.', 'success');
+    }
     else if (action === 'undo-paid') {
       const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
       if (!finance) throw new Error('Lançamento financeiro não encontrado.');
