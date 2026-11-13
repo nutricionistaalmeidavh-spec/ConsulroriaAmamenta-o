@@ -7,6 +7,7 @@ import { applyWeeklyCarePlan } from './lib/weekly-care-plan-materialize.mjs';
 import { applyWeightCorrection } from './lib/weight-correction-materialize.mjs';
 import { applyPackageBillingSafety } from './lib/package-billing-materialize.mjs';
 import { applyFinancialEntryCancellation } from './lib/financial-entry-cancel-materialize.mjs';
+import { applyFinanceMonthlyMaterialization } from './lib/finance-monthly-materialize.mjs';
 import { applyClinicalPdfBranding } from './lib/clinical-pdf-branding-materialize.mjs';
 import { applyMotherOnlyPatientMaterialization } from './lib/mother-only-patient-materialize.mjs';
 
@@ -533,6 +534,9 @@ replaceText('core/app-shell.js',
   "  globalThis.DeboraPrenatal?.refresh?.();\n  window.scrollTo({ top: 0, behavior: 'smooth' });\n}\nfunction selectedWizardPatient()",
   'prenatal-canonical-wizard-refresh');
 
+
+// Apply the reviewed, source-controlled monthly report after other clinical hardening.
+applyFinanceMonthlyMaterialization(resolved, sourceByPath);
 
 const modules = {};
 for (const [outputPath, bytes] of [...resolved.entries()].sort(([a], [b]) => a.localeCompare(b))) {

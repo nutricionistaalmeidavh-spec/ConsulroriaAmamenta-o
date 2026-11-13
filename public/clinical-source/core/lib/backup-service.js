@@ -294,3 +294,41 @@ export async function createBackupWorkbook(backup) {
   sheets.push({name:'Arquivos',xml:worksheet('Arquivos',files.length?files:[{bucket:'',path:'',size:'',mimeType:'',sourceCreatedAt:'',sourceUpdatedAt:''}],{metadata:true})});
   return storedZip(xlsxEntries(sheets));
 }
+
+// Monthly managerial export reuses the same safe OOXML writer as the backup.
+// It exports only selected reporting fields, never entire clinical records or attachments.
+export async function createFinanceWorkbook(report, financialRows = report.rows) {
+  if(!report?.period?.from || !report?.period?.to) throw new Error('Relatório mensal inválido.');
+  const summary = [
+    {Indicador:'Período',Valor:report.period.label || (report.period.from+' a '+report.period.to)},
+    {Indicador:'Recebido (R$)',Valor:(report.receivedCents/100).toFixed(2).replace('.',',')},
+    {Indicador:'Pagamentos recebidos',Valor:report.paymentCount},
+    {Indicador:'A receber no período (R$)',Valor:(report.pendingCents/100).toFixed(2).replace('.',',')},
+    {Indicador:'Pendências',Valor:report.pendingCount},
+    {Indicador:'Média por pagamento (R$)',Valor:(report.averagePaymentCents/100).toFixed(2).replace('.',',')},
+    {Indicador:'Atendimentos finalizados',Valor:report.finalizedCount},
+    {Indicador:'Pacientes distintas atendidas',Valor:report.patientCount},
+    {Indicador:'Novas pacientes cadastradas',Valor:report.newPatientCount},
+    {Indicador:'Retornos identificados',Valor:report.returnCount},
+    {Indicador:'Atendimentos sem cobrança individual vinculada',Valor:report.unlinkedCount},
+    {Indicador:'Pagamentos sem data para conciliar (todos os períodos)',Valor:report.missingPaymentDateCount},
+    {Indicador:'Nota',Valor:'Atendimentos sem cobrança individual podem fazer parte de pacotes ou atendimentos gratuitos.'},
+    {Indicador:'Segurança',Valor:'Planilha não criptografada. Guarde em local seguro e compartilhe apenas com autorização.'}
+  ];
+  const finances = (financialRows || []).map(f=>({
+    Paciente:f.patient_name || '',Descricao:f.description || '',
+    'Valor (R$)':(Number(f.amount_cents || 0)/100).toFixed(2).replace('.',','),
+    Status:f.status || '',Vencimento:f.due_at || '',Recebimento:f.paid_at || '',
+    Metodo:f.payment_method || '',Atendimento:f.encounter_id || ''
+  }));
+  const clinical = (report.encounterRows || []).map(e=>({
+    Paciente:e.patient_name || '',Data:e.date || '',Tipo:e.type || '',
+    'Financeiro vinculado':e.financial_linked || '',Cobranca:e.billing_mode || ''
+  }));
+  const sheets=[
+    {name:'Resumo',xml:worksheet('Resumo',summary,{metadata:true})},
+    {name:'Financeiro',xml:worksheet('Financeiro',finances.length?finances:[{Paciente:'',Descricao:'','Valor (R$)':'',Status:'',Vencimento:'',Recebimento:'',Metodo:'',Atendimento:''}],{metadata:true})},
+    {name:'Atendimentos',xml:worksheet('Atendimentos',clinical.length?clinical:[{Paciente:'',Data:'',Tipo:'','Financeiro vinculado':'',Cobranca:''}],{metadata:true})}
+  ];
+  return storedZip(xlsxEntries(sheets));
+}

@@ -4,6 +4,8 @@ import { createRepositories } from './lib/repositories.js';
 import { createAppData } from './lib/app-data.js';
 import { buildEncounterPayload, collectEncounterDraft, applyEncounterDraft } from './lib/encounter-form.js';
 import { createMediaService } from './lib/media-service.js';
+import { createFinanceReportController } from '../../finance-report-controller.js';
+import { validDay, reportingDay } from '../../finance-monthly-report.js';
 import { createBackupService, encryptBackup, decryptBackup } from './lib/backup-service.js';
 import { createCarePlanPdf, safePdfFilename, normalizePdfLayout } from './lib/pdf-service.js';
 
@@ -52,6 +54,10 @@ let wizardActionBusy = false;
 let pendingMediaFile = null;
 let appStarted = false;
 const state = { patients: [], appointments: [], encounters: [], followups: [], financial: [] };
+const financeReport = createFinanceReportController({
+  getState: () => state, setText, currency, escapeHTML, dateLabel, patientByMotherId, toast
+});
+financeReport.bind();
 const PDF_LAYOUT_KEY = 'debora-pdf-layout';
 const CLINIC_TIME_ZONE = 'America/Sao_Paulo';
 const CLINIC_OFFSET = '-03:00';
@@ -631,38 +637,7 @@ function renderFollowups() {
   if (homeRoot) homeRoot.innerHTML = pending.length ? pending.slice(0,2).map(followupMarkup).join('') : '<div class="empty-live">Nenhum acompanhamento pendente.</div>';
 }
 function renderFinance() {
-  const root = document.querySelector('[data-finance-live]');
-  const now = new Date();
-  const todayKey = clinicDayKey(now);
-  const visibleFinancial = state.financial.filter((f) => f.status !== 'Cancelado');
-  const pending = visibleFinancial.filter((f) => f.status === 'Pendente');
-  const paidThisMonth = visibleFinancial.filter((f) => f.status === 'Pago' && sameMonth(f.paid_at || f.updated_at || f.created_at, now));
-  const pendingTotal = pending.reduce((sum, f) => sum + Number(f.amount_cents || 0), 0);
-  const receivedTotal = paidThisMonth.reduce((sum, f) => sum + Number(f.amount_cents || 0), 0);
-  const ticket = paidThisMonth.length ? receivedTotal / paidThisMonth.length : 0;
-  setText('[data-kpi-receivable]', currency(pendingTotal));
-  setText('[data-finance-received]', currency(receivedTotal));
-  setText('[data-finance-received-meta]', `${paidThisMonth.length} ${paidThisMonth.length === 1 ? 'pagamento recebido' : 'pagamentos recebidos'} no mês`);
-  setText('[data-finance-receivable]', currency(pendingTotal));
-  setText('[data-finance-receivable-meta]', `${pending.length} ${pending.length === 1 ? 'pendência' : 'pendências'}`);
-  setText('[data-finance-ticket]', currency(ticket));
-  setText('[data-finance-ticket-meta]', paidThisMonth.length ? `${paidThisMonth.length} ${paidThisMonth.length === 1 ? 'pagamento' : 'pagamentos'} no cálculo` : 'sem pagamentos no mês');
-  if (!root) return;
-  root.innerHTML = visibleFinancial.length ? visibleFinancial.map((f) => {
-    const p = patientByMotherId(f.mother_id);
-    const dueKey = f.due_at ? String(f.due_at).slice(0, 10) : '';
-    const overdue = f.status === 'Pendente' && dueKey && dueKey < todayKey;
-    const statusLabel = overdue ? 'Vencido' : f.status;
-    const patientAction = f.mother_id ? `<button data-action="open-finance-patient" data-mother-id="${f.mother_id}">Paciente</button>` : '';
-    const actions = f.status === 'Pendente'
-      ? `${patientAction}<button data-action="finance-whatsapp" data-finance-id="${f.id}">Cobrar</button><button data-action="mark-paid" data-finance-id="${f.id}">Marcar pago</button>`
-      : f.status === 'Pago'
-        ? `${patientAction}<button data-action="undo-paid" data-finance-id="${f.id}">Desfazer pagamento</button>`
-        : patientAction;
-    const removeAction = `<button type="button" class="finance-remove-action" data-action="cancel-finance" data-finance-id="${escapeHTML(f.id)}" aria-label="Excluir lançamento de ${escapeHTML(p?.mother?.name || 'paciente')}, ${escapeHTML(currency(f.amount_cents))}">Excluir</button>`;
-    const due = f.due_at ? `<small>${overdue ? 'Venceu' : 'Vencimento'}: ${escapeHTML(dateLabel(f.due_at))}</small>` : '';
-    return `<article class="agenda-card finance-card"><div class="agenda-main"><strong>${escapeHTML(p?.mother?.name || 'Paciente')}</strong><span>${escapeHTML(f.description || 'Atendimento')}</span>${due}</div><strong class="finance-amount">${escapeHTML(currency(f.amount_cents))}</strong><span class="pill ${f.status === 'Pago' ? 'completed' : 'waiting'}">${escapeHTML(statusLabel)}</span><div class="agenda-actions">${actions}${removeAction}</div></article>`;
-  }).join('') : '<div class="empty-live">Nenhum lançamento financeiro ativo.</div>';
+  financeReport.render();
 }
 
 async function refreshData() {
@@ -1059,7 +1034,10 @@ async function createFinancialEntry() {
   const patient = choosePatientPrompt(); if (!patient) return;
   const amount = Number((prompt('Valor em R$', '180') || '0').replace(',', '.')); if (!(amount >= 0)) return;
   const description = prompt('Descrição', 'Atendimento') || 'Atendimento';
-  await appData.createFinancialEntry({ mother_id: patient.mother.id, description, amount_cents: Math.round(amount * 100), status: 'Pendente', due_at: new Date().toISOString().slice(0,10) });
+  const dueAt = prompt('Data de vencimento (AAAA-MM-DD)', clinicDayKey());
+  if (dueAt === null) return;
+  if (!validDay(dueAt)) throw new Error('Informe uma data de vencimento válida.');
+  await appData.createFinancialEntry({ mother_id: patient.mother.id, description, amount_cents: Math.round(amount * 100), status: 'Pendente', due_at: dueAt });
   await refreshData(); toast('Lançamento criado.', 'success');
 }
 async function ensureConsent(motherId, type) {
@@ -1364,6 +1342,8 @@ document.addEventListener('click', async (event) => {
     else if (action === 'complete-followup') { await appData.completeFollowup(actionEl.dataset.followupId); await refreshData(); }
     else if (action === 'followup-whatsapp') { const f = state.followups.find((x) => x.id === actionEl.dataset.followupId); await openWhatsApp(patientByMotherId(f?.mother_id), f?.notes || 'Olá! Como vocês estão hoje?'); }
     else if (action === 'new-finance') await createFinancialEntry();
+    else if (action === 'finance-export-csv') await financeReport.exportFile('csv');
+    else if (action === 'finance-export-xlsx') await financeReport.exportFile('xlsx');
     else if (action === 'cancel-finance') {
       const id = actionEl.dataset.financeId;
       if (!id || financialCancellationPending.has(id)) return;
@@ -1417,9 +1397,26 @@ document.addEventListener('click', async (event) => {
       const method = allowed.find((item) => item.toLocaleLowerCase('pt-BR') === String(entered).trim().toLocaleLowerCase('pt-BR'));
       if (!method) throw new Error('Forma de pagamento inválida. Use Pix, Dinheiro, Cartão, Transferência ou Outro.');
       if (!window.confirm(`Confirmar o recebimento de ${currency(finance.amount_cents)} via ${method}?`)) return;
-      await appData.markFinancialPaid(finance.id, method);
+      const paidDay = window.prompt('Data real do recebimento (AAAA-MM-DD)', clinicDayKey());
+      if (paidDay === null) return;
+      if (!validDay(paidDay) || paidDay > reportingDay(new Date())) throw new Error('Informe uma data de recebimento válida, não futura.');
+      await appData.markFinancialPaid(finance.id, method, paidDay);
       await refreshData();
       toast('Pagamento confirmado.', 'success');
+    }
+    else if (action === 'correct-paid-date') {
+      const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);
+      if (!finance || finance.status !== 'Pago') throw new Error('Este pagamento não está confirmado. Atualize o Financeiro.');
+      const previous = reportingDay(finance.paid_at);
+      const paidDay = window.prompt('Data correta do recebimento (AAAA-MM-DD)', previous || reportingDay(new Date()));
+      if (paidDay === null) return;
+      if (!validDay(paidDay) || paidDay > reportingDay(new Date()))
+        throw new Error('Data de recebimento inválida ou futura.');
+      if (paidDay === previous) { toast('A data informada já está registrada.'); return; }
+      if (!window.confirm('Corrigir a data de recebimento deste pagamento? A alteração ficará registrada no histórico.')) return;
+      await appData.correctFinancialPaidDate(finance.id, paidDay, finance.payment_method || 'Pix');
+      await refreshData();
+      toast('Data de recebimento corrigida e registrada no histórico.', 'success');
     }
     else if (action === 'undo-paid') {
       const finance = state.financial.find((item) => item.id === actionEl.dataset.financeId);

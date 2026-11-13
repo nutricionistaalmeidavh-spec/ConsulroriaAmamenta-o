@@ -274,7 +274,8 @@ export function createAppData(repos) {
     },
     listFinancialEntries: () => repos.financial.list({ query: 'select=*&order=created_at.desc' }),
     cancelFinancialEntry: (id) => repos.client.rpc('cancel_financial_entry', { p_entry_id: id, p_confirmation: 'EXCLUIR' }),
-    markFinancialPaid: (id, paymentMethod = 'Pix') => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: true, p_payment_method: paymentMethod || 'Pix' }),
+    markFinancialPaid: (id, paymentMethod = 'Pix', paidDate = '') => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: true, p_payment_method: paymentMethod || 'Pix', p_paid_date: paidDate }),
+    correctFinancialPaidDate: (id, paidDate, method = 'Pix') => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: true, p_correct_paid_date: true, p_paid_date: paidDate, p_payment_method: method }),
     undoFinancialPaid: (id) => repos.client.rpc('set_financial_payment_state', { p_entry_id: id, p_paid: false, p_payment_method: '' })
   };
 }

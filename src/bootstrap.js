@@ -280,6 +280,13 @@ async function boot() {
     "'../../patient-care-status-core.js'",
     `'${patientCareStatusUrl}'`,
   );
+  // The clinical shell is loaded via blob:, so relative imports have no valid
+  // base URL. Resolve the reporting modules to absolute same-origin .js URLs.
+  for (const moduleName of ['finance-report-controller.js', 'finance-monthly-report.js']) {
+    const absolute = new URL('/' + moduleName, window.location.origin).href;
+    shell = shell.replace(`'../../${moduleName}'`, `'${absolute}'`);
+  }
+
   shell = shell.replace(
     "navigator.serviceWorker.register('./service-worker.js')",
     "navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => registration.update())",

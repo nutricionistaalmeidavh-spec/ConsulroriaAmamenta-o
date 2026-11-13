@@ -569,12 +569,55 @@ async function handleRpc(request, env, url) {
     if (current.record?.status === 'Cancelado') {
       return runtimeJson(409, { message: 'Lançamento excluído não pode receber alterações de pagamento.' });
     }
+    const correcting = p.p_correct_paid_date === true;
+    const wasPaid = current.record?.status === 'Pago';
+    const paid = p.p_paid === true;
+    if (correcting && (!paid || !wasPaid)) {
+      return runtimeJson(409, { message: 'Somente pagamentos já confirmados podem ter a data corrigida.' });
+    }
+    if (!correcting && paid && wasPaid) {
+      return runtimeJson(409, { message: 'Pagamento já confirmado. Utilize Corrigir data, se necessário.' });
+    }
+    if (!paid && !wasPaid) {
+      return runtimeJson(409, { message: 'Este lançamento já está pendente.' });
+    }
+    const day = String(p.p_paid_date || '').trim();
+    const clock = new Date();
+    const todayParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit'
+    }).formatToParts(clock).map(({type,value})=>[type,value]));
+    const today = todayParts.year+'-'+todayParts.month+'-'+todayParts.day;
+    let paidAt = null;
+    if (paid) {
+      if (day) {
+        const parsed = new Date(day+'T12:00:00-03:00');
+        const valid = /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(parsed.getTime())
+          && parsed.toISOString().slice(0, 10)===day && day<=today;
+        if(!valid) return runtimeJson(400,{message:'Data de recebimento inválida ou futura.'});
+        paidAt = day+'T12:00:00-03:00';
+      } else {
+        if (correcting) return runtimeJson(400,{message:'Informe a nova data do recebimento.'});
+        paidAt = clock.toISOString();
+      }
+    }
+    if (correcting && current.record.paid_at === paidAt) {
+      return runtimeJson(200,current.record);
+    }
+    const history = Array.isArray(current.record.payment_history) ? current.record.payment_history : [];
+    const event = {
+      at: clock.toISOString(), actor_id:user.id,
+      before_status:current.record.status, before_paid_at:current.record.paid_at || null,
+      after_status:paid?'Pago':'Pendente', after_paid_at:paidAt,
+      before_method:current.record.payment_method || '',
+      after_method:paid ? (p.p_payment_method || current.record.payment_method || 'Pix') : '',
+      reason:correcting?'correct_payment_date':paid?'mark_paid':'undo_payment'
+    };
     const row = await updateOwnedById(env, 'financial_entries', p.p_entry_id, {
-      paid: Boolean(p.p_paid), status: p.p_paid ? 'Pago' : 'Pendente',
-      payment_method: p.p_paid ? (p.p_payment_method || 'Pix') : '',
-      paid_at: p.p_paid ? new Date().toISOString() : null,
+      paid, status:paid?'Pago':'Pendente',
+      payment_method:event.after_method,
+      paid_at:paidAt, payment_history:[...history,event],
     }, user);
-    return row ? runtimeJson(200, row) : runtimeJson(404, { message: 'Lançamento não encontrado.' });
+    return row ? runtimeJson(200,row) : runtimeJson(404,{message:'Lançamento não encontrado.'});
   }
 
   if (name === 'set_appointment_billing') {
