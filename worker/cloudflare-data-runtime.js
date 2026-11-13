@@ -572,7 +572,12 @@ async function handleRpc(request, env, url) {
     const row = await updateOwnedById(env, 'financial_entries', p.p_entry_id, {
       paid: Boolean(p.p_paid), status: p.p_paid ? 'Pago' : 'Pendente',
       payment_method: p.p_paid ? (p.p_payment_method || 'Pix') : '',
-      paid_at: p.p_paid ? new Date().toISOString() : null,
+      paid_at: p.p_paid ? (() => {
+        const day = String(p.p_paid_date || '').trim();
+        if (!day) return new Date().toISOString();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(day)) || day > new Date().toISOString().slice(0, 10)) throw new Error('Data de pagamento inválida.');
+        return day + 'T12:00:00-03:00';
+      })() : null,
     }, user);
     return row ? runtimeJson(200, row) : runtimeJson(404, { message: 'Lançamento não encontrado.' });
   }
