@@ -83,7 +83,8 @@ test('generated finance shell preserves per-card removal and feedback through bu
   const css=readFileSync('public/improvements-v2.css','utf8');
   const overlay=transformFinancialEntryCancellation(rendered);
   assert.equal(overlay,rendered);
-  assert.match(rendered,/data-action="cancel-finance"/);
+  const reportController=readFileSync('public/finance-report-controller.mjs','utf8');
+  assert.match(reportController,/data-action="cancel-finance"/);
   assert.match(rendered,/financialCancellationPending/);
   assert.match(rendered,/appData\.cancelFinancialEntry\(id\)/);
   assert.match(rendered,/finance\.status === 'Pago'/);
