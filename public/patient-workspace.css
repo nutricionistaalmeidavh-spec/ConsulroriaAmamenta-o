@@ -9,3 +9,23 @@
 
 @media (min-width:720px){.pw-photo-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.pw-content{padding-top:28px}.pw-page{padding-bottom:40px}}
 @media (prefers-reduced-motion:reduce){.pw-layer,.pw-photo-view{scroll-behavior:auto}}
+
+
+.pw-history-dialog{box-sizing:border-box;width:min(42rem,calc(100% - 2rem));max-width:100%;max-height:85dvh;margin:auto;padding:0;border:1px solid var(--ui-border);border-radius:22px;background:var(--ui-surface-elevated,#fff);color:var(--ui-text);box-shadow:0 18px 64px #30212b38;overflow:hidden;font:inherit}
+.pw-history-dialog[open]{display:flex;flex-direction:column}
+.pw-history-dialog::backdrop{background:rgba(36,29,34,.48)}
+.pw-history-dialog>header,.pw-history-dialog>footer{flex:none;padding:18px 22px}
+.pw-history-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid var(--ui-border)}
+.pw-history-dialog h2{margin:0;font:700 clamp(22px,5vw,30px)/1.15 Georgia,serif}
+.pw-history-dialog header p{margin:5px 0 0;color:var(--ui-text-secondary)}
+.pw-history-dialog .pw-back{flex:none;font:normal 25px/1 sans-serif}
+.pw-history-body{padding:0 22px 16px;overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere}
+.pw-history-body dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;padding:16px;margin:16px 0;background:var(--ui-bg);border-radius:12px}
+.pw-history-body dt,.pw-history-field>strong{color:var(--ui-text-secondary);font-size:.85rem;font-weight:600}
+.pw-history-body dd{margin:3px 0 0}
+.pw-history-body details{border-bottom:1px solid var(--ui-border)}
+.pw-history-body summary{padding:15px 2px;cursor:pointer;color:var(--ui-accent);font-weight:700}
+.pw-history-values{padding:0 2px 14px;white-space:pre-wrap;line-height:1.5}
+.pw-history-field+.pw-history-field{margin-top:9px}
+.pw-history-dialog>footer{border-top:1px solid var(--ui-border);text-align:right}
+@media(max-width:600px){.pw-history-dialog{margin:auto 0 0;width:100%;max-height:90dvh;border-radius:20px 20px 0 0}.pw-history-dialog>footer{padding-bottom:max(14px,env(safe-area-inset-bottom))}.pw-history-dialog>footer button{width:100%}}
