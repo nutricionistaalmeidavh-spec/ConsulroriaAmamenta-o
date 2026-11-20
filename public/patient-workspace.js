@@ -1,3 +1,4 @@
+import {renderClinicalHistory} from './clinical-history-format.js';
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
@@ -49,90 +50,53 @@ async function encounterData(motherId){
 }
 function encounterBabyNames(data,row){const ids=new Set([row.baby_id,...data.links.filter(link=>link.encounter_id===row.id).map(link=>link.baby_id)].filter(Boolean));return [...ids].map(id=>babyName(data.ctx,id)).join(', ')||'Somente a mãe'}
 
-const encounterSections = [
-  ['Identificação', 'identification'],
-  ['Queixa principal', 'chief_complaint'],
-  ['Avaliação materna', 'maternal_assessment'],
-  ['Avaliação do bebê', 'baby_assessment'],
-  ['Avaliação da mamada', 'feeding_assessment'],
-  ['Plano de cuidados', 'care_plan'],
-  ['Prontuário', 'clinical_note']
-];
-
-const encounterFieldLabels = {
-  appointmentType: 'Tipo de atendimento', format: 'Modalidade', startsAt: 'Início',
-  durationMin: 'Duração (min)', value: 'Valor', address: 'Endereço', tags: 'Itens registrados',
-  notes: 'Observações', painScore: 'Intensidade da dor', affectedSide: 'Lado afetado',
-  weightG: 'Peso (g)', weightGainG: 'Ganho de peso (g)', wetDiapers: 'Fraldas molhadas',
-  stools: 'Evacuações', observations: 'Observações', position: 'Posição', latch: 'Pega',
-  suckSwallow: 'Sucção e deglutição', objectives: 'Objetivos', instructions: 'Orientações',
-  followup: 'Acompanhamento', priorityGuidance: 'Orientações prioritárias',
-  feedingPositioning: 'Posicionamento', expressionSupplement: 'Ordenha e complemento',
-  routine: 'Rotina', warningSigns: 'Sinais de alerta', byBaby: 'Por bebê'
-};
-
-function recordedValue(value, babies) {
-  if (value == null || value === '') return '';
-  if (Array.isArray(value)) return value.map(item => recordedValue(item, babies)).filter(Boolean).join('<br>');
-  if (typeof value !== 'object') return esc(typeof value === 'boolean' ? (value ? 'Sim' : 'Não') : String(value));
-  return Object.entries(value).map(([key, entry]) => {
-    const body = recordedValue(entry, babies);
-    if (!body) return '';
-    const label = babies.find(baby => baby.id === key)?.name || encounterFieldLabels[key] || key;
-    return `<div><strong>${esc(label)}</strong><div>${body}</div></div>`;
-  }).join('');
-}
-
 function bindEncounterHistory(container, selector, motherId, data) {
-  let generation = 0;
-  let detail;
-  let activeButton;
   for (const button of container.querySelectorAll(selector)) {
+    button.setAttribute('aria-haspopup', 'dialog');
     button.onclick = async () => {
-      if (activeButton === button && detail?.isConnected) return;
-      activeButton?.removeAttribute('aria-expanded');
-      detail?.remove();
-      activeButton = button;
-      const request = ++generation;
+      if (container.querySelector('dialog[open]')) return;
       const id = button.dataset.pwRecord || button.dataset.pwOpenRecord;
-      const panel = document.createElement('section');
-      detail = panel;
-      panel.className = 'pw-history-detail';
-      panel.setAttribute('aria-live', 'polite');
-      panel.textContent = 'Abrindo atendimento…';
-      button.setAttribute('aria-expanded', 'true');
-      button.after(panel);
-      const stillSelected = () => request === generation && panel.isConnected && DOC.currentMotherId() === motherId;
-      try {
-        const rows = await DOC.rest(`clinical_encounters?id=eq.${encodeURIComponent(id)}&mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,occurred_at,updated_at,identification,chief_complaint,maternal_assessment,baby_assessment,feeding_assessment,care_plan,clinical_note&limit=1`);
-        if (!stillSelected()) return;
-        const row = rows?.[0];
-        if (!row || row.id !== id || row.mother_id !== motherId) throw new Error('Atendimento não encontrado.');
-        const sections = encounterSections.map(([label, key]) => {
-          const body = recordedValue(row[key], data.ctx.babies);
-          return `<section><h3>${label}</h3><div style="white-space:pre-wrap;overflow-wrap:anywhere">${body || 'Sem registro.'}</div></section>`;
-        }).join('');
-        panel.innerHTML = `<h2 tabindex="-1">Consulta do atendimento</h2><p>${esc(fmtDate(row.occurred_at || row.updated_at))} · ${esc(encounterBabyNames(data, row))}</p>${sections}<button type="button" data-history-note>Abrir prontuário e adendos</button><button type="button" data-history-back>Voltar à lista</button>`;
-        panel.querySelector('h2').focus();
-        panel.querySelector('[data-history-note]').onclick = async () => {
-          try {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'pw-history-dialog';
+      dialog.setAttribute('aria-labelledby', 'pw-history-title');
+      dialog.innerHTML = `<header><div><h2 id="pw-history-title">Consulta do atendimento</h2><p></p></div><button type="button" class="pw-back" aria-label="Fechar consulta" autofocus>×</button></header><div class="pw-history-body" aria-live="polite">Carregando atendimento…</div>`;
+      container.append(dialog);
+      dialog.querySelector('header button').onclick = () => dialog.close();
+      dialog.addEventListener('keydown', event => event.stopPropagation());
+      dialog.addEventListener('close', () => dialog.remove(), {once:true});
+      dialog.showModal();
+      const body = dialog.querySelector('.pw-history-body');
+      async function loadRecord() {
+        body.textContent = 'Carregando atendimento…';
+        try {
+          const rows = await DOC.rest(`clinical_encounters?id=eq.${encodeURIComponent(id)}&mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,occurred_at,updated_at,identification,chief_complaint,maternal_assessment,baby_assessment,feeding_assessment,care_plan,clinical_note,finalization,status,finalized_at&limit=1`);
+          if (!dialog.open || !dialog.isConnected || DOC.currentMotherId() !== motherId) return;
+          const row = rows?.[0];
+          if (!row || row.id !== id || row.mother_id !== motherId) throw new Error();
+          const info = row.identification || {};
+          dialog.querySelector('header p').textContent = [fmtDate(row.occurred_at || row.updated_at), encounterBabyNames(data,row)].join(' · ');
+          const {identification,sections} = renderClinicalHistory(row,data.ctx.babies,{escapeHTML:esc,formatDate:fmtDate});
+          body.innerHTML = identification.length ? `<h3>Identificação</h3><dl>${identification.map(([label, html]) =>
+            `<div><dt>${esc(label)}</dt><dd>${html}</dd></div>`).join('')}</dl>` : '';
+          body.insertAdjacentHTML('beforeend', sections.map(([label, html], index) =>
+            `<details ${index === sections.findIndex(([, content]) => content) ? 'open' : ''}><summary>${label}</summary><div class="pw-history-values">${html || 'Sem registro neste atendimento.'}</div></details>`).join(''));
+          const footer = document.createElement('footer');
+          footer.innerHTML = '<button type="button" class="pw-primary">Abrir prontuário e adendos</button>';
+          dialog.append(footer);
+          footer.firstElementChild.onclick = async () => {
             const editor = window.DeboraClinicalNote;
-            if (!editor?.openEncounter) throw new Error('Editor ainda indisponível. Tente novamente.');
-            await editor.openEncounter(id, {direction:'history'});
-          } catch (error) { DOC.toast(error.message, 'error'); }
-        };
-        panel.querySelector('[data-history-back]').onclick = () => {
-          activeButton = null;
-          panel.remove();
-          button.removeAttribute('aria-expanded');
-          button.focus();
-        };
-      } catch (error) {
-        if (!stillSelected()) return;
-        activeButton = null;
-        button.removeAttribute('aria-expanded');
-        panel.textContent = (error.message || 'Não foi possível carregar o atendimento.') + ' Selecione o atendimento para tentar novamente.';
+            if (!editor?.openEncounter) return DOC.toast('Editor ainda indisponível. Tente novamente.', 'error');
+            dialog.close();
+            try { await editor.openEncounter(id, {direction:'history'}); }
+            catch { DOC.toast('Não foi possível abrir o prontuário. Tente novamente.', 'error'); }
+          };
+        } catch {
+          if (!dialog.open || !dialog.isConnected) return;
+          body.innerHTML = '<p>Não foi possível carregar o atendimento.</p><button type="button" class="pw-primary">Tentar novamente</button>';
+          body.querySelector('button').onclick = loadRecord;
+        }
       }
+      await loadRecord();
     };
   }
 }
@@ -142,7 +106,7 @@ async function renderRecords(motherId,content){
 }
 
 async function open(kind,motherId=DOC.currentMotherId(),trigger=document.activeElement){
-  if(!motherId)return DOC.toast('Paciente não identificada.','error');lastTrigger=trigger||document.activeElement;current={kind,motherId};const meta={album:['REGISTROS','Álbum clínico','Fotos organizadas por paciente, bebê, categoria e data.'],referrals:['DOCUMENTOS','Encaminhamentos','Crie, revise e consulte encaminhamentos profissionais.'],terms:['DOCUMENTOS','Termos e autorizações','Consulte consentimentos e gere PDFs quando necessário.'],records:['REGISTRO CLÍNICO','Prontuários','Histórico de atendimentos vinculado aos identificadores persistidos.']}[kind];if(!meta)return;const content=shell(...meta);try{if(kind==='album')await renderAlbum(motherId,content);if(kind==='referrals')await renderReferrals(motherId,content);if(kind==='terms')await renderTerms(motherId,content);if(kind==='records')await renderRecords(motherId,content)}catch(error){content.innerHTML=`<div class="pw-empty"><strong>Não foi possível carregar</strong><span>${esc(error.message||'Tente novamente.')}</span></div>`}
+  if(!motherId)return DOC.toast('Paciente não identificada.','error');lastTrigger=trigger||document.activeElement;current={kind,motherId};const meta={album:['REGISTROS','Álbum clínico','Fotos organizadas por paciente, bebê, categoria e data.'],referrals:['DOCUMENTOS','Encaminhamentos','Crie, revise e consulte encaminhamentos profissionais.'],terms:['DOCUMENTOS','Termos e autorizações','Consulte consentimentos e gere PDFs quando necessário.'],records:['REGISTRO CLÍNICO','Prontuários','Selecione um atendimento para consultar.']}[kind];if(!meta)return;const content=shell(...meta);try{if(kind==='album')await renderAlbum(motherId,content);if(kind==='referrals')await renderReferrals(motherId,content);if(kind==='terms')await renderTerms(motherId,content);if(kind==='records')await renderRecords(motherId,content)}catch(error){content.innerHTML=`<div class="pw-empty"><strong>Não foi possível carregar</strong><span>${esc(error.message||'Tente novamente.')}</span></div>`}
 }
 
 async function openSecondaryActions(motherId,trigger){
