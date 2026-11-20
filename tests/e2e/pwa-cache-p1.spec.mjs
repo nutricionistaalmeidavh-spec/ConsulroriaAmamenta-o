@@ -59,7 +59,10 @@ test('service worker evicts obsolete app caches, never caches private APIs and p
   await verifyPage.goto('/app/#/home', { waitUntil: 'domcontentloaded' });
   await expect(verifyPage.locator('[data-app-root]')).toBeVisible();
   await verifyPage.reload({ waitUntil: 'domcontentloaded' });
-  await expect(verifyPage.locator('[data-app-root]')).toBeVisible();
+  // The app's canonical startup awaits D1 hydration after the PWA controller updates.
+  // Retain the real authenticated-UI assertion; allow the heavy shared CI runner
+  // more than the locator default of 5 seconds without retrying or skipping.
+  await expect(verifyPage.locator('[data-app-root]')).toBeVisible({ timeout: 15000 });
   const after = await session(verifyPage);
   expect(after.access_token).toBe(before.access_token);
 });

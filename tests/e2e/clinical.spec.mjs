@@ -12,6 +12,7 @@ test('login migrado, cadastro e edição sobrevivem ao reload no D1 local', asyn
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name=motherName]').fill('Paciente E2E');
   await page.locator('[data-baby-field="name"]').fill('Bebê E2E');
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
   await expect(page.locator('[data-patient-title]')).toHaveText('Paciente E2E + Bebê E2E');

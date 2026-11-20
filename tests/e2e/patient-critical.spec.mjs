@@ -5,6 +5,7 @@ async function createPatient(page, motherName, babyName) {
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name=motherName]').fill(motherName);
   await page.locator('[data-baby-field="name"]').first().fill(babyName);
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
   const created = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'POST');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
@@ -34,6 +35,7 @@ test('successful aggregate edit persists mother and baby across reload', async (
   const changedBaby = `${babyName}-edited`;
   await page.locator('[name=motherName]').fill(changedMother);
   await page.locator('[data-baby-field="name"]').first().fill(changedBaby);
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentWhatsapp]').check();
   const saved = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'PATCH');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();
@@ -62,6 +64,7 @@ test('late consent failure rolls back mother and baby edits as one aggregate', a
     await page.locator('[data-action=edit-patient]:visible').first().click();
     await page.locator('[name=motherName]').fill(`${motherName}-must-not-stick`);
     await page.locator('[data-baby-field="name"]').first().fill(`${babyName}-must-not-stick`);
+    await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
     await page.locator('[name=consentData]').uncheck();
     const failed = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'PATCH');
     await page.locator('[data-patient-form] button[type=submit]:visible').first().click();

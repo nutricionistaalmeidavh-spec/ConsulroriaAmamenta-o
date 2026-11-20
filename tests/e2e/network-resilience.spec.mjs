@@ -7,6 +7,7 @@ async function openSyntheticPatientForm(page, prefix) {
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name=motherName]').fill(motherName);
   await page.locator('[data-baby-field=name]').first().fill(babyName);
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
   return { motherName, babyName };
 }

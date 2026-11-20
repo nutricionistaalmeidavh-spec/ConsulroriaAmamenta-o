@@ -28,6 +28,7 @@ test('double submit and lost create response reuse one key and create one patien
   await page.locator('[data-action=new-patient]:visible').first().click();
   await page.locator('[name=motherName]').fill('Retry synthetic patient');
   await page.locator('[data-baby-field=name]').fill('Retry synthetic baby');
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name=consentData]').check();
   const attempts=[];
   let savedId;

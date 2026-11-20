@@ -6,6 +6,7 @@ test('pré-natal mantém prontuário como última etapa, salva evolução no D1 
   const mother = uniqueLabel('Gestante prontuario final');
   await page.locator('[data-action="new-patient"]:visible').first().click();
   await page.locator('[name="motherName"]').fill(mother);
+  await page.locator('[data-legacy-consents]').evaluate(el => { el.open = true; });
   await page.locator('[name="consentData"]').check();
   const created = page.waitForResponse(r => r.url().endsWith('/api/clinical/patients') && r.request().method() === 'POST');
   await page.locator('[data-patient-form] button[type=submit]:visible').first().click();

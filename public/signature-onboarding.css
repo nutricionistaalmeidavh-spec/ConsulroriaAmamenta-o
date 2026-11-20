@@ -1,0 +1,22 @@
+/* Uses the app's canonical lilac/plum semantic colors. */
+[data-consent-panel] .signature-panel-explainer{font-size:13px;line-height:1.55;color:var(--ui-text-secondary,var(--p8-ink-soft,#544b55));margin:11px 0 14px}
+[data-consent-panel] .signature-send-row{display:flex;align-items:center;gap:12px;padding:5px 0 8px;border-bottom:1px solid var(--ui-border,#e9e0e5)}
+[data-consent-panel] .signature-send-row .consent-row{min-width:0;flex:1;border:0;margin:0;padding:11px 0;cursor:pointer}
+[data-consent-panel] .signature-send-row .consent-row input{accent-color:var(--ui-accent,#382d3b)}
+[data-consent-panel] .signature-read-button{font:inherit;font-size:12px;color:var(--ui-accent,#382d3b);border:1px solid var(--ui-border,#e9e0e5);border-radius:10px;background:var(--ui-surface-elevated,#fffdfb);min-height:42px;padding:8px;cursor:pointer;white-space:nowrap}
+[data-consent-panel] .signature-panel-summary{font-size:13px;font-weight:600;color:var(--ui-text,#332b34);margin-top:16px}
+[data-consent-panel] .signature-panel-status{font-size:13px;line-height:1.5;margin:8px 0}
+[data-consent-panel] .signature-panel-status[data-error=true]{color:var(--p8-danger,#9b4d52)}
+[data-consent-panel] [data-legacy-consents]{margin-top:17px;border-top:1px solid var(--ui-border,#e9e0e5);padding-top:14px}
+[data-consent-panel] [data-legacy-consents] summary{font-size:13px;cursor:pointer;color:var(--ui-accent,#382d3b)}
+[data-consent-panel] [data-legacy-consents] p{font-size:12px;line-height:1.45;color:var(--ui-text-secondary,#544b55)}
+.signature-preview-layer{position:fixed;inset:0;z-index:10050;background:rgba(28,22,25,.58);display:flex;justify-content:center;align-items:center;padding:12px}
+.signature-preview-sheet{width:min(780px,100%);max-height:90vh;overflow:auto;background:var(--ui-surface-elevated,#fffdfb);border-radius:18px;padding:22px;color:var(--ui-text,#332b34)}
+.signature-preview-sheet h2{font-size:20px;line-height:1.3;margin:16px 0}
+.signature-preview-sheet h3{font-size:15px;margin:20px 0 7px}
+.signature-preview-sheet p{font-size:14px;line-height:1.65;white-space:pre-wrap}
+.signature-preview-sheet button{min-height:44px}
+@media(max-width:520px){[data-consent-panel] .signature-send-row{gap:6px}[data-consent-panel] .signature-read-button{font-size:11px;padding:6px}.signature-preview-layer{padding:0;align-items:flex-end}.signature-preview-sheet{border-radius:20px 20px 0 0;max-height:94vh}}
+
+[data-consent-panel] .signature-confirm-row{display:flex;align-items:start;gap:10px;margin:15px 0;color:var(--ui-text,#332b34);font-size:13px;line-height:1.5}
+[data-consent-panel] .signature-confirm-row input{flex:0 0 auto;width:20px;height:20px;margin:0;accent-color:var(--ui-accent,#382d3b)}

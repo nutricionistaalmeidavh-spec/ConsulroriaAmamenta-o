@@ -60,3 +60,45 @@ test('Cloudflare native EMAIL binding keeps the default sender unchanged', async
   assert.equal(payload.subject, 'Pagamento confirmado — Gestão Amamentação');
   assert.match(payload.html, /Gestão Amamentação/);
 });
+
+test('signature request email escapes title and never requires a paid email service',()=>{
+  const template=transactionalTemplate('signature_request',{
+    documentTitle:'Consentimento <script>alert(1)</script>',
+    signingUrl:'https://app.deboralactacao.com/assinar?token=test',
+    expiresInHours:72,
+  });
+  assert.equal(template.subject,'Documento para assinatura — Gestão Amamentação');
+  assert.match(template.text,/72 horas/);
+  assert.match(template.html,/&lt;script&gt;/);
+  assert.doesNotMatch(template.html,/<script>/);
+  assert.match(template.html,/Ler e assinar documento/);
+  assert.throws(()=>transactionalTemplate('signature_request',{
+    documentTitle:'Termo',signingUrl:'javascript:alert(1)',expiresInHours:72,
+  }),/invalid_signature_email/);
+});
+
+test('signature request names the authenticated consultant and uses verified Reply-To with institutional sender',async()=>{
+  const original=globalThis.fetch;let body;
+  globalThis.fetch=async (_url,opt)=>{body=JSON.parse(opt.body);return Response.json({id:'test'})};
+  try{
+    const env={RESEND_API_KEY:'local-test',TRANSACTIONAL_EMAIL_FROM:'Gestão Amamentação <assinaturas@exemplo.org>'};
+    await sendTransactionalEmail(env,{kind:'signature_request',to:'mae@example.org',replyTo:'profissional@example.org',
+      data:{consultantName:'Dra. Ana <Equipe>',documentTitle:'Tratamento de dados',signingUrl:'https://app.example.org/assinar?token=abc',expiresInHours:72}});
+    assert.equal(body.from,'Gestão Amamentação <assinaturas@exemplo.org>');
+    assert.equal(body.reply_to,'profissional@example.org');
+    assert.match(body.text,/Dra. Ana/);
+    assert.match(body.html,/Dra. Ana &lt;Equipe&gt;/);
+    assert.doesNotMatch(body.html,/<Equipe>/);
+  }finally{globalThis.fetch=original}
+});
+test('signature email cannot use legacy fallback sender and ignores untrusted invalid Reply-To',async()=>{
+  await assert.rejects(()=>sendTransactionalEmail({EMAIL:{send:()=>assert.fail('should not send')}},{
+    kind:'signature_request',to:'mae@example.org',replyTo:'inject\r\nBcc: bad@evil.org',
+    data:{consultantName:'Consultora',documentTitle:'Termo',signingUrl:'https://app.example.org/assinar?token=x',expiresInHours:72}
+  }),/signature_sender_not_configured/);
+  let message;
+  const env={EMAIL:{send:async data=>{message=data}},TRANSACTIONAL_EMAIL_FROM:'Gestão Amamentação <assinaturas@example.org>'};
+  await sendTransactionalEmail(env,{kind:'signature_request',to:'mae@example.org',replyTo:'inject\r\nBcc: bad@evil.org',
+    data:{consultantName:'Consultora',documentTitle:'Termo',signingUrl:'https://app.example.org/assinar?token=x',expiresInHours:72}});
+  assert.ok(!message.replyTo);
+});

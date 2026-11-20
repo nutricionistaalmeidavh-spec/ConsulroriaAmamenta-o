@@ -16,6 +16,19 @@ function layout(title, content, action = null) {
 }
 
 export function transactionalTemplate(kind, data = {}) {
+  if (kind === 'signature_request') {
+    const title=text(data.documentTitle), url=text(data.signingUrl), hours=Number(data.expiresInHours||72);
+    const consultantName=text(data.consultantName).replace(/[\r\n]/g,' ').slice(0,130)||'Consultora responsável';
+    if(!title||title.length>160||!/^https:\/\//.test(url)||!Number.isInteger(hours)||hours<1||hours>168)
+      throw new TypeError('invalid_signature_email');
+    return {
+      subject:'Documento para assinatura — Gestão Amamentação',
+      text:consultantName+' enviou um documento para leitura e assinatura: '+title+'. Acesse '+url+'. O link expira em '+hours+' horas. Se não solicitou este documento, ignore esta mensagem.',
+      html:layout('Documento para assinatura',
+        '<p><strong>'+escapeHtml(consultantName)+'</strong> enviou um documento para leitura e assinatura.</p><p><strong>'+escapeHtml(title)+'</strong></p><p>Você poderá acessar pelo celular, sem criar uma conta. O link expira em '+hours+' horas.</p>',
+        {label:'Ler e assinar documento',url}),
+    };
+  }
   if (kind === 'password_recovery') {
     const minutes = Math.max(1, Math.round(Number(data.expiresInSeconds || 1800) / 60));
     return {
@@ -62,9 +75,13 @@ export async function sendTransactionalEmail(env, message) {
   const to = text(message?.to).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || to.length > 254) throw new TypeError('invalid_email_recipient');
   const template = transactionalTemplate(message.kind, message.data);
+  // Signature requests require an explicitly verified institutional sender, never a legacy fallback.
+  if(message.kind==='signature_request'&&!text(env.TRANSACTIONAL_EMAIL_FROM))throw new Error('signature_sender_not_configured');
+  const candidate=text(message.replyTo).toLowerCase();
+  const replyTo=candidate.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)?candidate:'';
   if (env.EMAIL?.send) {
     const from = text(env.TRANSACTIONAL_EMAIL_FROM) || 'Débora Lactação <welcome@deboralactacao.com>';
-    await env.EMAIL.send({ to, from, subject: template.subject, html: template.html, text: template.text });
+    await env.EMAIL.send({ to, from, subject: template.subject, html: template.html, text: template.text, ...(replyTo?{replyTo}:{}) });
     return { provider: 'cloudflare' };
   }
   const delivery = env.TRANSACTIONAL_EMAIL_DELIVERY || (message.kind === 'password_recovery' ? env.AUTH_RECOVERY_DELIVERY : null);
@@ -72,7 +89,7 @@ export async function sendTransactionalEmail(env, message) {
     const legacyRecovery = message.kind === 'password_recovery' && !env.TRANSACTIONAL_EMAIL_DELIVERY;
     const body = legacyRecovery
       ? { to, recoveryUrl: message.data.recoveryUrl, expiresInSeconds: message.data.expiresInSeconds }
-      : { to, kind: message.kind, ...template };
+      : { to, kind: message.kind, ...template, ...(replyTo?{replyTo}:{}) };
     const response = await delivery.fetch(new Request('https://transactional-email.internal/send', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     }));
@@ -86,7 +103,7 @@ export async function sendTransactionalEmail(env, message) {
   const response = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from, to: [to], subject: template.subject, text: template.text, html: template.html }),
+    body: JSON.stringify({ from, to: [to], subject: template.subject, text: template.text, html: template.html, ...(replyTo?{reply_to:replyTo}:{}) }),
   });
   if (!response.ok) throw new Error(`transactional_email_provider_${response.status}`);
   return { provider: 'resend' };
