@@ -1,4 +1,4 @@
-import {PRENATAL_QUESTIONS, parsePrenatalAnswers, isPrenatal} from './prenatal-questionnaire-feature.js';
+import {renderClinicalHistory} from './clinical-history-format.js';
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
@@ -50,105 +50,6 @@ async function encounterData(motherId){
 }
 function encounterBabyNames(data,row){const ids=new Set([row.baby_id,...data.links.filter(link=>link.encounter_id===row.id).map(link=>link.baby_id)].filter(Boolean));return [...ids].map(id=>babyName(data.ctx,id)).join(', ')||'Somente a mãe'}
 
-const encounterSections = [
-  ['Identificação', 'identification'],
-  ['Queixa principal', 'chief_complaint'],
-  ['Avaliação materna', 'maternal_assessment'],
-  ['Avaliação do bebê', 'baby_assessment'],
-  ['Avaliação da mamada', 'feeding_assessment'],
-  ['Plano de cuidados', 'care_plan'],
-  ['Prontuário', 'clinical_note']
-];
-
-const encounterFieldLabels = {
-  assistedReproduction: 'Esta gestação foi por reprodução assistida / FIV?',
-  assistedReproductionNotes: 'Observações',
-  chronicConditionsHistory: 'Doença crônica preexistente?',
-  chronicConditionsDetails: 'Qual(is)?',
-  medicationUse: 'Faz uso atual de medicamentos?',
-  supplementsUse: 'Faz uso de suplementos?',
-  supplements: 'Quais?',
-  allergiesKnown: 'Alergias conhecidas?',
-  allergies: 'Quais?',
-  pregnancyComplications: 'Houve intercorrências durante a gestação?',
-  pregnancyComplicationsDetails: 'Quais?',
-  breastSurgeryHistory: 'Cirurgias mamárias anteriores?',
-  breastSurgeryDetails: 'Detalhes',
-  previousBreastfeedingHistory: 'Histórico de amamentação anterior?',
-  previousBreastfeedingDetails: 'Como foi?',
-  medications: 'Medicamentos',
-  appointmentType: 'Tipo de atendimento', format: 'Modalidade', startsAt: 'Início',
-  durationMin: 'Duração', value: 'Valor', address: 'Endereço', tags: 'Itens registrados',
-  notes: 'Observações', painScore: 'Intensidade da dor', affectedSide: 'Lado afetado',
-  weightG: 'Peso (g)', weightGainG: 'Ganho de peso (g)', wetDiapers: 'Fraldas molhadas',
-  stools: 'Evacuações', observations: 'Observações', position: 'Posição', latch: 'Pega',
-  suckSwallow: 'Sucção e deglutição', objectives: 'Objetivos', instructions: 'Orientações',
-  followup: 'Acompanhamento', priorityGuidance: 'Orientações prioritárias',
-  feedingPositioning: 'Posicionamento', expressionSupplement: 'Ordenha e complemento',
-  routine: 'Rotina', warningSigns: 'Sinais de alerta', byBaby: 'Por bebê', symptoms: 'Sintomas', beforeFeed: 'Antes da mamada', afterFeed: 'Após a mamada',
-  weekly_plan: 'Plano por semana', weeks: 'Semanas', week: 'Semana', orientation_mode: 'Orientações',
-  libraryItems: 'Orientações selecionadas', prenatalAnswers: 'Anamnese pré-natal', declaration: 'Declaração'
-};
-
-const historyUuid = /\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi;
-const historyCurrency = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});
-
-function clinicalFieldValue(value, babies, key = '') {
-  if (value == null || value === '') return '';
-  if (typeof value === 'string' && /^[\[{]/.test(value.trim())) {
-    try { value = JSON.parse(value); } catch { /* Clinical prose can start with a bracket. */ }
-  }
-  if (Array.isArray(value)) return value.map(item => clinicalFieldValue(item, babies, key)).filter(Boolean).join('<br>');
-  if (typeof value !== 'object') {
-    let text = typeof value === 'boolean' ? (value ? 'Sim' : 'Não') : String(value);
-    if (key === 'value' && /^\d+(?:[.,]\d+)?$/.test(text)) text = historyCurrency.format(Number(text.replace(',', '.')));
-    if (key === 'startsAt' && Number.isFinite(Date.parse(text))) text = fmtDate(text);
-    if (key === 'durationMin' && /^\d+$/.test(text)) text += ' min';
-    if (key === 'orientation_mode') text = ({weekly:'Por semana',single:'Única'})[text] || text;
-    return esc(text.replace(historyUuid, '').trim());
-  }
-  return Object.entries(value).map(([field, entry]) => {
-    if (/(?:^id$|Ids?$|_ids?$|^uuid$|^babyTarget$|^version$)/.test(field)) return '';
-    const body = clinicalFieldValue(entry, babies, field);
-    if (!body) return '';
-    const label = key === 'byBaby'
-      ? babies.find(baby => baby.id === field)?.name || 'Bebê'
-      : encounterFieldLabels[field] || (field.includes(' ') ? field.replace(historyUuid, '') : 'Registro complementar');
-    return `<div class="pw-history-field"><strong>${esc(label)}</strong><div>${body}</div></div>`;
-  }).join('');
-}
-
-function historySections(row, babies) {
-  const prenatal = isPrenatal(row.identification?.appointmentType);
-  const sections = [];
-  const maternal = row.maternal_assessment && typeof row.maternal_assessment === 'object'
-    ? {...row.maternal_assessment} : row.maternal_assessment;
-  if (prenatal) {
-    const answers = parsePrenatalAnswers(maternal?.prenatalAnswers);
-    const titles = ['Informações iniciais', 'Histórico e saúde', 'Gestação e expectativas', 'Origem do atendimento', 'Declarações e autorização'];
-    titles.forEach((title, index) => {
-      const fields = PRENATAL_QUESTIONS.filter(question => question.step === index + 2).map(question => {
-        const html = clinicalFieldValue(answers[question.key], babies, question.key);
-        return html ? `<div class="pw-history-field"><strong>${esc(question.title)}</strong><div>${html}</div></div>` : '';
-      });
-      sections.push([title, fields.join('')]);
-    });
-    if (maternal && typeof maternal === 'object') delete maternal.prenatalAnswers;
-  }
-  for (const [title, key] of encounterSections.slice(1)) {
-    if (key === 'clinical_note') continue;
-    const value = prenatal && key === 'maternal_assessment' ? maternal : row[key];
-    const html = clinicalFieldValue(value, babies, key);
-    if (!prenatal || html) sections.push([title, html]);
-  }
-  const status = row.status === 'finalized' ? 'Finalizado' : 'Em andamento';
-  const finished = row.finalized_at ? ' · ' + esc(fmtDate(row.finalized_at)) : '';
-  const finalFields = clinicalFieldValue(row.finalization, babies);
-  const end = ['Finalização', status + finished + finalFields];
-  const note = ['Prontuário', clinicalFieldValue(row.clinical_note, babies)];
-  return prenatal ? [...sections, end, note] : [...sections, note, end];
-}
-
 function bindEncounterHistory(container, selector, motherId, data) {
   for (const button of container.querySelectorAll(selector)) {
     button.setAttribute('aria-haspopup', 'dialog');
@@ -174,14 +75,7 @@ function bindEncounterHistory(container, selector, motherId, data) {
           if (!row || row.id !== id || row.mother_id !== motherId) throw new Error();
           const info = row.identification || {};
           dialog.querySelector('header p').textContent = [fmtDate(row.occurred_at || row.updated_at), encounterBabyNames(data,row)].join(' · ');
-          const sections = historySections(row, data.ctx.babies);
-          const summaryKeys = ['appointmentType','format','durationMin','startsAt','value','address'];
-          const remainingInfo = Object.fromEntries(Object.entries(info).filter(([key]) => !summaryKeys.includes(key)));
-          const otherInfo = clinicalFieldValue(remainingInfo, data.ctx.babies);
-          if (otherInfo) sections.unshift(['Outros dados da identificação', otherInfo]);
-          const identification = summaryKeys
-            .map(key => [encounterFieldLabels[key], clinicalFieldValue(info[key], data.ctx.babies, key)])
-            .filter(([, html]) => html);
+          const {identification,sections} = renderClinicalHistory(row,data.ctx.babies,{escapeHTML:esc,formatDate:fmtDate});
           body.innerHTML = identification.length ? `<h3>Identificação</h3><dl>${identification.map(([label, html]) =>
             `<div><dt>${esc(label)}</dt><dd>${html}</dd></div>`).join('')}</dl>` : '';
           body.insertAdjacentHTML('beforeend', sections.map(([label, html], index) =>
