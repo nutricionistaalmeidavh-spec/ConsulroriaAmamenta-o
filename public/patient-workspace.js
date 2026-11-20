@@ -1,3 +1,4 @@
+import {PRENATAL_QUESTIONS, parsePrenatalAnswers, isPrenatal} from './prenatal-questionnaire-feature.js';
 import {createSingleFlight} from './runtime-guards.js';
 
 const DOC=window.DeboraDocuments;
@@ -60,6 +61,22 @@ const encounterSections = [
 ];
 
 const encounterFieldLabels = {
+  assistedReproduction: 'Esta gestação foi por reprodução assistida / FIV?',
+  assistedReproductionNotes: 'Observações',
+  chronicConditionsHistory: 'Doença crônica preexistente?',
+  chronicConditionsDetails: 'Qual(is)?',
+  medicationUse: 'Faz uso atual de medicamentos?',
+  supplementsUse: 'Faz uso de suplementos?',
+  supplements: 'Quais?',
+  allergiesKnown: 'Alergias conhecidas?',
+  allergies: 'Quais?',
+  pregnancyComplications: 'Houve intercorrências durante a gestação?',
+  pregnancyComplicationsDetails: 'Quais?',
+  breastSurgeryHistory: 'Cirurgias mamárias anteriores?',
+  breastSurgeryDetails: 'Detalhes',
+  previousBreastfeedingHistory: 'Histórico de amamentação anterior?',
+  previousBreastfeedingDetails: 'Como foi?',
+  medications: 'Medicamentos',
   appointmentType: 'Tipo de atendimento', format: 'Modalidade', startsAt: 'Início',
   durationMin: 'Duração', value: 'Valor', address: 'Endereço', tags: 'Itens registrados',
   notes: 'Observações', painScore: 'Intensidade da dor', affectedSide: 'Lado afetado',
@@ -101,6 +118,37 @@ function clinicalFieldValue(value, babies, key = '') {
   }).join('');
 }
 
+function historySections(row, babies) {
+  const prenatal = isPrenatal(row.identification?.appointmentType);
+  const sections = [];
+  const maternal = row.maternal_assessment && typeof row.maternal_assessment === 'object'
+    ? {...row.maternal_assessment} : row.maternal_assessment;
+  if (prenatal) {
+    const answers = parsePrenatalAnswers(maternal?.prenatalAnswers);
+    const titles = ['Informações iniciais', 'Histórico e saúde', 'Gestação e expectativas', 'Origem do atendimento', 'Declarações e autorização'];
+    titles.forEach((title, index) => {
+      const fields = PRENATAL_QUESTIONS.filter(question => question.step === index + 2).map(question => {
+        const html = clinicalFieldValue(answers[question.key], babies, question.key);
+        return html ? `<div class="pw-history-field"><strong>${esc(question.title)}</strong><div>${html}</div></div>` : '';
+      });
+      sections.push([title, fields.join('')]);
+    });
+    if (maternal && typeof maternal === 'object') delete maternal.prenatalAnswers;
+  }
+  for (const [title, key] of encounterSections.slice(1)) {
+    if (key === 'clinical_note') continue;
+    const value = prenatal && key === 'maternal_assessment' ? maternal : row[key];
+    const html = clinicalFieldValue(value, babies, key);
+    if (!prenatal || html) sections.push([title, html]);
+  }
+  const status = row.status === 'finalized' ? 'Finalizado' : 'Em andamento';
+  const finished = row.finalized_at ? ' · ' + esc(fmtDate(row.finalized_at)) : '';
+  const finalFields = clinicalFieldValue(row.finalization, babies);
+  const end = ['Finalização', status + finished + finalFields];
+  const note = ['Prontuário', clinicalFieldValue(row.clinical_note, babies)];
+  return prenatal ? [...sections, end, note] : [...sections, note, end];
+}
+
 function bindEncounterHistory(container, selector, motherId, data) {
   for (const button of container.querySelectorAll(selector)) {
     button.setAttribute('aria-haspopup', 'dialog');
@@ -120,25 +168,24 @@ function bindEncounterHistory(container, selector, motherId, data) {
       async function loadRecord() {
         body.textContent = 'Carregando atendimento…';
         try {
-          const rows = await DOC.rest(`clinical_encounters?id=eq.${encodeURIComponent(id)}&mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,occurred_at,updated_at,identification,chief_complaint,maternal_assessment,baby_assessment,feeding_assessment,care_plan,clinical_note&limit=1`);
+          const rows = await DOC.rest(`clinical_encounters?id=eq.${encodeURIComponent(id)}&mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,occurred_at,updated_at,identification,chief_complaint,maternal_assessment,baby_assessment,feeding_assessment,care_plan,clinical_note,finalization,status,finalized_at&limit=1`);
           if (!dialog.open || !dialog.isConnected || DOC.currentMotherId() !== motherId) return;
           const row = rows?.[0];
           if (!row || row.id !== id || row.mother_id !== motherId) throw new Error();
           const info = row.identification || {};
           dialog.querySelector('header p').textContent = [fmtDate(row.occurred_at || row.updated_at), encounterBabyNames(data,row)].join(' · ');
-          const sections = encounterSections.slice(1).map(([label, key]) =>
-            [label, clinicalFieldValue(row[key], data.ctx.babies)]).filter(([, html]) => html);
+          const sections = historySections(row, data.ctx.babies);
           const summaryKeys = ['appointmentType','format','durationMin','startsAt','value','address'];
           const remainingInfo = Object.fromEntries(Object.entries(info).filter(([key]) => !summaryKeys.includes(key)));
           const otherInfo = clinicalFieldValue(remainingInfo, data.ctx.babies);
-          if (otherInfo) sections.push(['Outros dados do atendimento', otherInfo]);
+          if (otherInfo) sections.unshift(['Outros dados da identificação', otherInfo]);
           const identification = summaryKeys
             .map(key => [encounterFieldLabels[key], clinicalFieldValue(info[key], data.ctx.babies, key)])
             .filter(([, html]) => html);
-          body.innerHTML = identification.length ? `<dl>${identification.map(([label, html]) =>
+          body.innerHTML = identification.length ? `<h3>Identificação</h3><dl>${identification.map(([label, html]) =>
             `<div><dt>${esc(label)}</dt><dd>${html}</dd></div>`).join('')}</dl>` : '';
-          body.insertAdjacentHTML('beforeend', sections.length ? sections.map(([label, html], index) =>
-            `<details ${index === 0 ? 'open' : ''}><summary>${label}</summary><div class="pw-history-values">${html}</div></details>`).join('') : '<p>Nenhuma anotação clínica registrada neste atendimento.</p>');
+          body.insertAdjacentHTML('beforeend', sections.map(([label, html], index) =>
+            `<details ${index === sections.findIndex(([, content]) => content) ? 'open' : ''}><summary>${label}</summary><div class="pw-history-values">${html || 'Sem registro neste atendimento.'}</div></details>`).join(''));
           const footer = document.createElement('footer');
           footer.innerHTML = '<button type="button" class="pw-primary">Abrir prontuário e adendos</button>';
           dialog.append(footer);
