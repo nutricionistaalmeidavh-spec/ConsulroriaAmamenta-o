@@ -48,8 +48,97 @@ async function encounterData(motherId){
   const ctx=await context(motherId),rows=await DOC.rest(`clinical_encounters?mother_id=eq.${encodeURIComponent(motherId)}&select=id,status,mother_id,baby_id,appointment_id,occurred_at,updated_at&order=occurred_at.desc&limit=100`).catch(()=>[]),links=ctx.babies.length?await DOC.rest(`clinical_encounter_babies?baby_id=in.(${ctx.babies.map(b=>encodeURIComponent(b.id)).join(',')})&select=encounter_id,baby_id`).catch(()=>[]):[];return{ctx,rows,links};
 }
 function encounterBabyNames(data,row){const ids=new Set([row.baby_id,...data.links.filter(link=>link.encounter_id===row.id).map(link=>link.baby_id)].filter(Boolean));return [...ids].map(id=>babyName(data.ctx,id)).join(', ')||'Somente a mãe'}
+
+const encounterSections = [
+  ['Identificação', 'identification'],
+  ['Queixa principal', 'chief_complaint'],
+  ['Avaliação materna', 'maternal_assessment'],
+  ['Avaliação do bebê', 'baby_assessment'],
+  ['Avaliação da mamada', 'feeding_assessment'],
+  ['Plano de cuidados', 'care_plan'],
+  ['Prontuário', 'clinical_note']
+];
+
+const encounterFieldLabels = {
+  appointmentType: 'Tipo de atendimento', format: 'Modalidade', startsAt: 'Início',
+  durationMin: 'Duração (min)', value: 'Valor', address: 'Endereço', tags: 'Itens registrados',
+  notes: 'Observações', painScore: 'Intensidade da dor', affectedSide: 'Lado afetado',
+  weightG: 'Peso (g)', weightGainG: 'Ganho de peso (g)', wetDiapers: 'Fraldas molhadas',
+  stools: 'Evacuações', observations: 'Observações', position: 'Posição', latch: 'Pega',
+  suckSwallow: 'Sucção e deglutição', objectives: 'Objetivos', instructions: 'Orientações',
+  followup: 'Acompanhamento', priorityGuidance: 'Orientações prioritárias',
+  feedingPositioning: 'Posicionamento', expressionSupplement: 'Ordenha e complemento',
+  routine: 'Rotina', warningSigns: 'Sinais de alerta', byBaby: 'Por bebê'
+};
+
+function recordedValue(value, babies) {
+  if (value == null || value === '') return '';
+  if (Array.isArray(value)) return value.map(item => recordedValue(item, babies)).filter(Boolean).join('<br>');
+  if (typeof value !== 'object') return esc(typeof value === 'boolean' ? (value ? 'Sim' : 'Não') : String(value));
+  return Object.entries(value).map(([key, entry]) => {
+    const body = recordedValue(entry, babies);
+    if (!body) return '';
+    const label = babies.find(baby => baby.id === key)?.name || encounterFieldLabels[key] || key;
+    return `<div><strong>${esc(label)}</strong><div>${body}</div></div>`;
+  }).join('');
+}
+
+function bindEncounterHistory(container, selector, motherId, data) {
+  let generation = 0;
+  let detail;
+  let activeButton;
+  for (const button of container.querySelectorAll(selector)) {
+    button.onclick = async () => {
+      if (activeButton === button && detail?.isConnected) return;
+      activeButton?.removeAttribute('aria-expanded');
+      detail?.remove();
+      activeButton = button;
+      const request = ++generation;
+      const id = button.dataset.pwRecord || button.dataset.pwOpenRecord;
+      const panel = document.createElement('section');
+      detail = panel;
+      panel.className = 'pw-history-detail';
+      panel.setAttribute('aria-live', 'polite');
+      panel.textContent = 'Abrindo atendimento…';
+      button.setAttribute('aria-expanded', 'true');
+      button.after(panel);
+      const stillSelected = () => request === generation && panel.isConnected && DOC.currentMotherId() === motherId;
+      try {
+        const rows = await DOC.rest(`clinical_encounters?id=eq.${encodeURIComponent(id)}&mother_id=eq.${encodeURIComponent(motherId)}&select=id,mother_id,baby_id,occurred_at,updated_at,identification,chief_complaint,maternal_assessment,baby_assessment,feeding_assessment,care_plan,clinical_note&limit=1`);
+        if (!stillSelected()) return;
+        const row = rows?.[0];
+        if (!row || row.id !== id || row.mother_id !== motherId) throw new Error('Atendimento não encontrado.');
+        const sections = encounterSections.map(([label, key]) => {
+          const body = recordedValue(row[key], data.ctx.babies);
+          return `<section><h3>${label}</h3><div style="white-space:pre-wrap;overflow-wrap:anywhere">${body || 'Sem registro.'}</div></section>`;
+        }).join('');
+        panel.innerHTML = `<h2 tabindex="-1">Consulta do atendimento</h2><p>${esc(fmtDate(row.occurred_at || row.updated_at))} · ${esc(encounterBabyNames(data, row))}</p>${sections}<button type="button" data-history-note>Abrir prontuário e adendos</button><button type="button" data-history-back>Voltar à lista</button>`;
+        panel.querySelector('h2').focus();
+        panel.querySelector('[data-history-note]').onclick = async () => {
+          try {
+            const editor = window.DeboraClinicalNote;
+            if (!editor?.openEncounter) throw new Error('Editor ainda indisponível. Tente novamente.');
+            await editor.openEncounter(id, {direction:'history'});
+          } catch (error) { DOC.toast(error.message, 'error'); }
+        };
+        panel.querySelector('[data-history-back]').onclick = () => {
+          activeButton = null;
+          panel.remove();
+          button.removeAttribute('aria-expanded');
+          button.focus();
+        };
+      } catch (error) {
+        if (!stillSelected()) return;
+        activeButton = null;
+        button.removeAttribute('aria-expanded');
+        panel.textContent = (error.message || 'Não foi possível carregar o atendimento.') + ' Selecione o atendimento para tentar novamente.';
+      }
+    };
+  }
+}
+
 async function renderRecords(motherId,content){
-  const data=await encounterData(motherId);content.innerHTML=`<div class="pw-toolbar"><div><strong>Prontuários</strong><span>${data.rows.length} ${data.rows.length===1?'atendimento':'atendimentos'}</span></div></div><div class="pw-filters"><label>Bebê<select data-pw-record-baby><option value="">Todos</option>${data.ctx.babies.map(b=>`<option value="${b.id}" ${b.id===data.ctx.activeBabyId?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div><div class="pw-document-list" data-pw-record-list></div>`;const select=content.querySelector('[data-pw-record-baby]'),list=content.querySelector('[data-pw-record-list]');function matches(row,id){if(!id)return true;return row.baby_id===id||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===id)}function draw(){const filtered=data.rows.filter(row=>matches(row,select.value));list.innerHTML=filtered.length?filtered.map(row=>`<button type="button" data-pw-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join(''):'<div class="pw-empty"><strong>Nenhum prontuário</strong><span>Não há atendimento para este recorte.</span></div>';list.querySelectorAll('[data-pw-record]').forEach(btn=>btn.onclick=async()=>{try{close();await window.DeboraClinicalNote?.openEncounter(btn.dataset.pwRecord,{direction:'history'})}catch(e){DOC.toast(e.message||'Não foi possível abrir o prontuário.','error')}})}select.onchange=draw;draw();
+  const data=await encounterData(motherId);content.innerHTML=`<div class="pw-toolbar"><div><strong>Prontuários</strong><span>${data.rows.length} ${data.rows.length===1?'atendimento':'atendimentos'}</span></div></div><div class="pw-filters"><label>Bebê<select data-pw-record-baby><option value="">Todos</option>${data.ctx.babies.map(b=>`<option value="${b.id}" ${b.id===data.ctx.activeBabyId?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div><div class="pw-document-list" data-pw-record-list></div>`;const select=content.querySelector('[data-pw-record-baby]'),list=content.querySelector('[data-pw-record-list]');function matches(row,id){if(!id)return true;return row.baby_id===id||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===id)}function draw(){const filtered=data.rows.filter(row=>matches(row,select.value));list.innerHTML=filtered.length?filtered.map(row=>`<button type="button" data-pw-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join(''):'<div class="pw-empty"><strong>Nenhum prontuário</strong><span>Não há atendimento para este recorte.</span></div>';bindEncounterHistory(list,'[data-pw-record]',motherId,data)}select.onchange=draw;draw();
 }
 
 async function open(kind,motherId=DOC.currentMotherId(),trigger=document.activeElement){
@@ -78,7 +167,7 @@ async function mountRecent(motherId){
     const currentScreen=document.querySelector('[data-screen="patient"]');
     if(expectedSummaryKey!==key||DOC.currentMotherId()!==motherId||(DOC.currentBabyId()||'')!==active||currentScreen!==screen||!screen.isConnected)return;
     const afterAwait=screen.querySelector('[data-pw-recent]');if(afterAwait?.dataset.pwKey===key)return;afterAwait?.remove();
-    const rows=data.rows.filter(row=>!active||row.baby_id===active||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===active)).slice(0,3),card=document.createElement('section');card.className='pw-recent';card.dataset.pwRecent='1';card.dataset.pwKey=key;card.innerHTML=`<div class="pw-recent-head"><div><small>REGISTRO CLÍNICO</small><h2>Prontuários recentes</h2></div><button type="button" data-pw-all-records>Ver todos</button></div>${rows.length?`<div class="pw-recent-list">${rows.map(row=>`<button type="button" data-pw-open-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join('')}</div>`:'<div class="pw-empty compact"><span>Nenhum prontuário neste recorte.</span></div>'}`;card.querySelector('[data-pw-all-records]').onclick=event=>open('records',motherId,event.currentTarget);card.querySelectorAll('[data-pw-open-record]').forEach(btn=>btn.onclick=async()=>{try{await window.DeboraClinicalNote?.openEncounter(btn.dataset.pwOpenRecord,{direction:'history'})}catch(e){DOC.toast(e.message||'Não foi possível abrir o prontuário.','error')}});const hub=screen.querySelector('[data-prh-card]'),hiddenRecords=screen.querySelector('[data-pf-prontuario]');if(hub)hub.after(card);else if(hiddenRecords)hiddenRecords.before(card);else screen.appendChild(card)
+    const rows=data.rows.filter(row=>!active||row.baby_id===active||data.links.some(link=>link.encounter_id===row.id&&link.baby_id===active)).slice(0,3),card=document.createElement('section');card.className='pw-recent';card.dataset.pwRecent='1';card.dataset.pwKey=key;card.innerHTML=`<div class="pw-recent-head"><div><small>REGISTRO CLÍNICO</small><h2>Prontuários recentes</h2></div><button type="button" data-pw-all-records>Ver todos</button></div>${rows.length?`<div class="pw-recent-list">${rows.map(row=>`<button type="button" data-pw-open-record="${row.id}"><div><strong>${row.status==='finalized'?'Atendimento finalizado':'Atendimento em andamento'}</strong><small>${esc(fmtDate(row.occurred_at||row.updated_at))} · ${esc(encounterBabyNames(data,row))}</small></div><b>›</b></button>`).join('')}</div>`:'<div class="pw-empty compact"><span>Nenhum prontuário neste recorte.</span></div>'}`;card.querySelector('[data-pw-all-records]').onclick=event=>open('records',motherId,event.currentTarget);bindEncounterHistory(card,'[data-pw-open-record]',motherId,data);const hub=screen.querySelector('[data-prh-card]'),hiddenRecords=screen.querySelector('[data-pf-prontuario]');if(hub)hub.after(card);else if(hiddenRecords)hiddenRecords.before(card);else screen.appendChild(card)
   });
 }
 function scheduleSummary(){clearTimeout(summaryTimer);summaryTimer=setTimeout(()=>{const motherId=DOC.currentMotherId();if(!motherId){expectedSummaryKey='';return}mountRecent(motherId).catch(()=>{})},120)}
