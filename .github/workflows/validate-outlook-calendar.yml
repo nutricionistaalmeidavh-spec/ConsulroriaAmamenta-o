@@ -42,7 +42,7 @@ jobs:
           if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
       - name: Prove Outlook subscription isolation, privacy and Apple regression
         run: |
-          node --test tests/outlook-calendar-integration.test.mjs tests/apple-calendar-integration.test.mjs
+          node --test tests/outlook-calendar-integration.test.mjs tests/apple-calendar-integration.test.mjs tests/calendar-paid-partner-access.test.mjs
       - name: Build canonical production UI
         run: npm run build
       - name: Ensure Outlook feature is materialized

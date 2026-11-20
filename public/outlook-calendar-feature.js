@@ -39,6 +39,8 @@ if (container && !container.querySelector('[data-outlook-calendar-integration]')
   const card = document.createElement('article');
   card.className = 'detail-card outlook-calendar-card';
   card.dataset.outlookCalendarIntegration = 'true';
+  // Keep the integration invisible until the backend confirms Pro/partner access.
+  card.style.display = 'none';
   card.setAttribute('data-outlook-calendar-integration', 'true');
   card.innerHTML = [
     '<div class="outlook-calendar-main">',
@@ -145,9 +147,13 @@ if (container && !container.querySelector('[data-outlook-calendar-integration]')
       headers: { Authorization: 'Bearer ' + bearer },
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(res.status === 401
-      ? 'Sessão expirada. Entre novamente.'
-      : 'Não foi possível acessar o Outlook Calendário. Tente novamente.');
+    if (!res.ok) {
+      const error = new Error(res.status === 401 ? 'Sessão expirada. Entre novamente.'
+        : res.status === 403 ? 'Disponível somente no plano Pro ou para parceiras autorizadas.'
+        : 'Não foi possível acessar o Outlook Calendário. Tente novamente.');
+      error.status = res.status;
+      throw error;
+    }
     return data;
   }
 
@@ -173,11 +179,19 @@ if (container && !container.querySelector('[data-outlook-calendar-integration]')
     try {
       const status = await api('/api/calendar/outlook/status');
       if (typeof status.active !== 'boolean') throw new Error('Resposta inválida do calendário.');
+      card.style.display = '';
       active = status.active;
       failed = false;
       if (!active) { expanded = false; clearFreshLink(); }
       notice('');
     } catch (error) {
+      if (error.status === 403) {
+        card.style.display = 'none';
+        active = null;
+        expanded = false;
+        clearFreshLink();
+        return;
+      }
       failed = true;
       expanded = false;
       notice(error.message || 'Não foi possível verificar a assinatura.', true);
